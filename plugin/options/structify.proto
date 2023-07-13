@@ -1,0 +1,34 @@
+syntax = "proto3";
+package structify;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/cjp2600/structify/plugin/options;structify";
+
+extend google.protobuf.MessageOptions {
+  StructifyMessageOptions opts = 99432;
+}
+
+message StructifyMessageOptions {
+  string table = 1;
+}
+
+extend google.protobuf.FieldOptions {
+  StructifyFieldOptions field = 99432;
+}
+
+message StructifyFieldOptions {
+  StructifyTag tag = 1;
+}
+
+message StructifyTag {
+  bool skip = 1;
+}
+
+extend google.protobuf.MethodOptions {
+  MethodOptions method = 99432;
+}
+
+message MethodOptions {
+  string object_type = 1;
+}
