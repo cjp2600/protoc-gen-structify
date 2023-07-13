@@ -12,6 +12,17 @@ PROTOC := $(GOBIN)/bin/protoc
 $(GOBIN):
 	mkdir -p $@
 
+.PHONY: build-example
+build-example: build-options build ## Build example: make build-example f=example/blog.proto
+ifndef f
+f = example/blog.proto
+endif
+	@$(PROTOC) -I/usr/local/include -I.  \
+	-I$(GOPATH)/src   \
+	--plugin=protoc-gen-structify=$(GOBIN)/structify \
+	--structify_out=. --structify_opt=paths=source_relative \
+	$(f)
+
 .PHONY: install-protoc
 install-protoc: $(GOBIN) ## Install protocol buffer compiler
 	@if [ ! -f $(PROTOC) ]; then \
@@ -55,7 +66,6 @@ clean: ## Clean up
 
 .PHONY: build
 build: ## Build the binary file
-	$(info $(M) building...)
 	@$(GO) build -o bin/structify
 
 help:                   ##Show this help.

@@ -11,7 +11,7 @@ func main() {
 	// Run the command from gogo/protobuf/vanity/command
 	command.Write(command.GeneratePlugin(
 		command.Read(),
-		plugin.NewStructifyPlugin(),
+		&plugin.StructifyPlugin{},
 		generatedFilePostfix,
 	))
 }
