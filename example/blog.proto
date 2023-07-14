@@ -13,3 +13,14 @@ message User {
   int32 age = 2;
   string email = 3;
 }
+
+message Address {
+  option (structify.opts) = {
+    table: "addresses"
+  };
+
+  string street = 1;
+  string city = 2;
+  int32 state = 3;
+  int64 zip = 4;
+}

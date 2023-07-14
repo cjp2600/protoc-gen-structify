@@ -1,54 +1,62 @@
 package plugin
 
 import (
-	"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
-	"github.com/gogo/protobuf/protoc-gen-gogo/generator"
+	"io"
+	"os"
+	"strings"
+
+	"github.com/golang/protobuf/proto"
+
+	plugingo "github.com/golang/protobuf/protoc-gen-go/plugin"
 )
 
-// StructifyPlugin implements the protoc-gen-gogo plugin interface
-// and generates structify code for the given file.
-type StructifyPlugin struct {
-	*generator.Generator
-	generator.PluginImports
-	EmptyFiles     []string
-	currentPackage string
-	currentFile    *generator.FileDescriptor
-	generateCrud   bool
-
-	PrivateEntities map[string]PrivateEntity
-	Fields          map[string][]*descriptor.FieldDescriptorProto
+type Plugin struct {
+	req *plugingo.CodeGeneratorRequest
+	res *plugingo.CodeGeneratorResponse
 }
 
-func newStructifyPlugin(gen *generator.Generator) *StructifyPlugin {
-	return &StructifyPlugin{Generator: gen}
+func NewPlugin() *Plugin {
+	return &Plugin{
+		req: &plugingo.CodeGeneratorRequest{},
+		res: &plugingo.CodeGeneratorResponse{},
+	}
 }
 
-// Name identifies the plugin
-func (s *StructifyPlugin) Name() string {
-	return pluginName
+func (p *Plugin) Run() error {
+	data, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return err
+	}
+
+	if err := proto.Unmarshal(data, p.req); err != nil {
+		return err
+	}
+
+	tables, err := p.ParseProto()
+	if err != nil {
+		return err
+	}
+
+	content := &strings.Builder{}
+	content.WriteString("package main\n\n")
+
+	for _, t := range tables {
+		content.WriteString(t.String())
+		content.WriteString("\n")
+	}
+
+	p.res.File = append(p.res.File, &plugingo.CodeGeneratorResponse_File{
+		Name:    proto.String("pro" + generatedFilePostfix),
+		Content: proto.String(content.String()),
+	})
+
+	data, err = proto.Marshal(p.res)
+	if err != nil {
+		return err
+	}
+
+	_, err = os.Stdout.Write(data)
+	return err
 }
 
-// Init initializes the plugin
-func (s *StructifyPlugin) Init(g *generator.Generator) {
-	// register the plugin with the generator
-	generator.RegisterPlugin(newStructifyPlugin(g))
-
-	// set the generator so we can use it later
-	s.Generator = g
-}
-
-func (s *StructifyPlugin) Generate(file *generator.FileDescriptor) {
-	s.P(`var a string = "hello"`)
-}
-
-func (s *StructifyPlugin) GenerateImports(file *generator.FileDescriptor) {
-	//s.P(`var b string = "world"`)
-}
-
-const pluginName = "structify"
-
-type PrivateEntity struct {
-	name    string
-	items   []*descriptor.FieldDescriptorProto
-	message *generator.Descriptor
-}
+const generatedFilePostfix = ".db.go"

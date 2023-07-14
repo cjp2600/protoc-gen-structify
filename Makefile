@@ -13,7 +13,7 @@ $(GOBIN):
 	mkdir -p $@
 
 .PHONY: build-example
-build-example: build-options build ## Build example: make build-example f=example/blog.proto
+build-example: build ## Build example: make build-example f=example/blog.proto
 ifndef f
 f = example/blog.proto
 endif
