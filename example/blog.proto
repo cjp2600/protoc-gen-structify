@@ -4,6 +4,7 @@ import "github.com/cjp2600/structify/plugin/options/structify.proto";
 
 package main;
 
+// This is a comment of User
 message User {
   option (structify.opts) = {
     table: "users"
@@ -12,8 +13,11 @@ message User {
   string name = 1;
   int32 age = 2;
   string email = 3;
+  string last_name = 5;
+  repeated int64 addresses = 4;
 }
 
+// This is a comment of Address
 message Address {
   option (structify.opts) = {
     table: "addresses"
