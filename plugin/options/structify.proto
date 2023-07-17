@@ -5,12 +5,24 @@ import "google/protobuf/descriptor.proto";
 
 option go_package = "github.com/cjp2600/structify/plugin/options;structify";
 
+// Defines a custom option for file-level settings.
+extend google.protobuf.FileOptions {
+  StructifyDBOptions db = 50000;
+}
+
 extend google.protobuf.MessageOptions {
   StructifyMessageOptions opts = 99432;
 }
 
+message StructifyDBOptions {
+    string provider = 1;
+    string url = 2;
+    string url_env = 3;
+}
+
 message StructifyMessageOptions {
   string table = 1;
+  string comment = 2;
 }
 
 extend google.protobuf.FieldOptions {

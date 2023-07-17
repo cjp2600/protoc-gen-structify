@@ -2,19 +2,18 @@ package plugin
 
 import (
 	"bytes"
-	"html/template"
+	"text/template"
 )
 
 const createSQLTemplate = `
 CREATE TABLE IF NOT EXISTS {{.TableName}} (
 {{range $index, $element := .Fields}}	{{$element.SourceName}} {{goTypeToPostgresType $element.Type}}{{if not (isLast $index (len $.Fields))}},{{end}}
-{{end}});
-{{if .Comment}}; COMMENT ON TABLE {{.TableName}} IS '{{.Comment}}'{{end}}
+{{end}});{{if .Comment}}COMMENT ON TABLE {{.TableName}} IS '{{.Comment }}';{{end}}
 `
 
 // GenerateCreateSQL generates the SQL statement to create the table.
 // This is used in the CreateTableSQL method. It is also used in the template
-func (t *Table) GenerateCreateSQL() string {
+func (t *PostgresTable) GenerateCreateSQL() string {
 	var output bytes.Buffer
 
 	funcs := template.FuncMap{

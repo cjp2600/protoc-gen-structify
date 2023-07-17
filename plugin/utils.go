@@ -31,6 +31,20 @@ func getMessageOptions(d *descriptorpb.DescriptorProto) *structify.StructifyMess
 	return nil
 }
 
+// getDBOptions returns the custom options for a file.
+func getDBOptions(f *descriptorpb.FileDescriptorProto) *structify.StructifyDBOptions {
+	opts := f.GetOptions()
+	if opts != nil {
+		ext, err := proto.GetExtension(opts, structify.E_Db)
+		if err == nil && ext != nil {
+			if customOpts, ok := ext.(*structify.StructifyDBOptions); ok {
+				return customOpts
+			}
+		}
+	}
+	return nil
+}
+
 // isUserMessage returns true if the message is not a google.protobuf or structify message.
 func isUserMessage(f *descriptorpb.FileDescriptorProto, m *descriptorpb.DescriptorProto) bool {
 	if f.GetPackage() == "google.protobuf" || f.GetPackage() == "structify" {

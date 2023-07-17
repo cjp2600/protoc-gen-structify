@@ -4,27 +4,34 @@ import "github.com/cjp2600/structify/plugin/options/structify.proto";
 
 package main;
 
+// main db options
+option (structify.db) = {
+  provider: "postgres"
+  url_env: "DATABASE_URL"
+};
+
 // This is a comment of User
 message User {
-  option (structify.opts) = {
-    table: "users"
-  };
-
   string name = 1;
   int32 age = 2;
   string email = 3;
   string last_name = 5;
   repeated int64 addresses = 4;
+
+  option (structify.opts) = {
+    table: "users"
+    comment: "This is a comment of User"
+  };
 }
 
 // This is a comment of Address
 message Address {
-  option (structify.opts) = {
-    table: "addresses"
-  };
-
   string street = 1;
   string city = 2;
   int32 state = 3;
   int64 zip = 4;
+
+  option (structify.opts) = {
+    table: "addresses"
+  };
 }
