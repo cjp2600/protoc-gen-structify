@@ -10,7 +10,6 @@ option (structify.db) = {
   url_env: "DATABASE_URL"
 };
 
-// This is a comment of User
 message User {
   string name = 1;
   int32 age = 2;
@@ -24,7 +23,6 @@ message User {
   };
 }
 
-// This is a comment of Address
 message Address {
   string street = 1;
   string city = 2;

@@ -45,6 +45,22 @@ func getDBOptions(f *descriptorpb.FileDescriptorProto) *structify.StructifyDBOpt
 	return nil
 }
 
+// getMessages returns all the messages in the request. It filters out google.protobuf and structify messages.
+func getMessages(req *plugingo.CodeGeneratorRequest) []*descriptorpb.DescriptorProto {
+	var messages []*descriptorpb.DescriptorProto
+
+	for _, f := range req.GetProtoFile() {
+		for _, m := range f.GetMessageType() {
+			if !isUserMessage(f, m) {
+				continue
+			}
+			messages = append(messages, m)
+		}
+	}
+
+	return messages
+}
+
 // isUserMessage returns true if the message is not a google.protobuf or structify message.
 func isUserMessage(f *descriptorpb.FileDescriptorProto, m *descriptorpb.DescriptorProto) bool {
 	if f.GetPackage() == "google.protobuf" || f.GetPackage() == "structify" {

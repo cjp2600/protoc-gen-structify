@@ -2,13 +2,13 @@ package plugin
 
 import (
 	"bytes"
-	"fmt"
-	"google.golang.org/protobuf/types/descriptorpb"
 	"text/template"
+
+	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 // newPostgresTable creates a new PostgresTable from the given descriptor.
-func newPostgresTable(d *descriptorpb.DescriptorProto) fmt.Stringer {
+func newPostgresTable(d *descriptorpb.DescriptorProto) Templater {
 	table := &PostgresTable{
 		Name: d.GetName(),
 	}
@@ -73,7 +73,7 @@ type PostgresTable struct {
 	Comment   string
 }
 
-func (t *PostgresTable) String() string {
+func (t *PostgresTable) BuildTemplate() string {
 	t.CreateSQL = t.GenerateCreateSQL()
 
 	var output bytes.Buffer
