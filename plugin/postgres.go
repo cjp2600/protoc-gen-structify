@@ -73,6 +73,14 @@ type PostgresTable struct {
 	Comment   string
 }
 
+// Imports - returns the imports for the template.
+func (t *PostgresTable) Imports() map[Import]bool {
+	return map[Import]bool{
+		ImportSqlx: false,
+		ImportDb:   false,
+	}
+}
+
 func (t *PostgresTable) BuildTemplate() string {
 	t.CreateSQL = t.GenerateCreateSQL()
 

@@ -17,6 +17,7 @@ var ErrUnsupportedProvider = errors.New("unsupported provider")
 // Templater is an interface for generating templates.
 type Templater interface {
 	BuildTemplate() string
+	Imports() map[Import]bool
 }
 
 // Provider represents the database provider.
@@ -52,6 +53,8 @@ type Plugin struct {
 	Param    map[string]string
 	pathType PathType
 	provider Provider
+
+	imports []Import
 }
 
 // NewPlugin creates a new Plugin.
@@ -113,17 +116,30 @@ func (p *Plugin) generateContent(tables []Templater) string {
 	builder.WriteString(p.provider.String() + "\n")
 	builder.WriteString("package main\n\n")
 
-	// todo: add imports
+	// write tables to builder
+	writeTable := func() {
+		for _, t := range tables {
+			builder.WriteString(t.BuildTemplate())
+			builder.WriteString("\n")
+
+			// add imports
+			for i, v := range t.Imports() {
+				if v {
+					p.imports = append(p.imports, i)
+				}
+			}
+		}
+	}
+
+	// write imports
+	for _, i := range p.imports {
+		builder.WriteString("import " + i.String() + "\n")
+	}
 
 	// todo: add init function
 
-	// add tables
-	for _, t := range tables {
-		builder.WriteString(t.BuildTemplate())
-		builder.WriteString("\n")
-	}
-
-	// todo: add helper functions
+	// write tables
+	writeTable()
 
 	return builder.String()
 }
