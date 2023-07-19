@@ -150,9 +150,14 @@ email TEXT UNIQUE NOT NULL,
 last_name TEXT NOT NULL);COMMENT ON TABLE users IS 'This is a comment of User';`
 }
 
-// FindByID returns a single row by ID.
+// FindById returns a single row by ID.
 func (u *UserStore) FindById(id string) (*User, error) {
-	return u.FindOne(UserIdEq(id))
+	return u.FindOne(WhereUserIdEq(id))
+}
+
+// DeleteById returns a single row by ID.
+func (u *UserStore) DeleteById(id string) (int64, error) {
+	return u.Delete(WhereUserIdEq(id))
 }
 
 // FindOne filters rows by the provided conditions and returns the first matching row.
@@ -557,9 +562,14 @@ zip BIGINT NOT NULL,
 user_id TEXT NOT NULL);`
 }
 
-// FindByID returns a single row by ID.
+// FindById returns a single row by ID.
 func (a *AddressStore) FindById(id string) (*Address, error) {
-	return a.FindOne(AddressIdEq(id))
+	return a.FindOne(WhereAddressIdEq(id))
+}
+
+// DeleteById returns a single row by ID.
+func (a *AddressStore) DeleteById(id string) (int64, error) {
+	return a.Delete(WhereAddressIdEq(id))
 }
 
 // FindOne filters rows by the provided conditions and returns the first matching row.
@@ -1108,63 +1118,63 @@ func (c EqualsCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.Eq{c.Field: c.Value})
 }
 
-// Eq returns a condition that checks if the field equals the value.
-func Eq(field string, value interface{}) Condition {
+// WhereEq returns a condition that checks if the field equals the value.
+func WhereEq(field string, value interface{}) Condition {
 	return EqualsCondition{Field: field, Value: value}
 }
 
-// AddressIdEq returns a condition that checks if the field equals the value.
-func AddressIdEq(value interface{}) Condition {
+// WhereAddressIdEq returns a condition that checks if the field equals the value.
+func WhereAddressIdEq(value interface{}) Condition {
 	return EqualsCondition{Field: "id", Value: value}
 }
 
-// AddressStreetEq returns a condition that checks if the field equals the value.
-func AddressStreetEq(value interface{}) Condition {
+// WhereAddressStreetEq returns a condition that checks if the field equals the value.
+func WhereAddressStreetEq(value interface{}) Condition {
 	return EqualsCondition{Field: "street", Value: value}
 }
 
-// AddressCityEq returns a condition that checks if the field equals the value.
-func AddressCityEq(value interface{}) Condition {
+// WhereAddressCityEq returns a condition that checks if the field equals the value.
+func WhereAddressCityEq(value interface{}) Condition {
 	return EqualsCondition{Field: "city", Value: value}
 }
 
-// AddressStateEq returns a condition that checks if the field equals the value.
-func AddressStateEq(value interface{}) Condition {
+// WhereAddressStateEq returns a condition that checks if the field equals the value.
+func WhereAddressStateEq(value interface{}) Condition {
 	return EqualsCondition{Field: "state", Value: value}
 }
 
-// AddressZipEq returns a condition that checks if the field equals the value.
-func AddressZipEq(value interface{}) Condition {
+// WhereAddressZipEq returns a condition that checks if the field equals the value.
+func WhereAddressZipEq(value interface{}) Condition {
 	return EqualsCondition{Field: "zip", Value: value}
 }
 
-// AddressUserIdEq returns a condition that checks if the field equals the value.
-func AddressUserIdEq(value interface{}) Condition {
+// WhereAddressUserIdEq returns a condition that checks if the field equals the value.
+func WhereAddressUserIdEq(value interface{}) Condition {
 	return EqualsCondition{Field: "user_id", Value: value}
 }
 
-// UserIdEq returns a condition that checks if the field equals the value.
-func UserIdEq(value interface{}) Condition {
+// WhereUserIdEq returns a condition that checks if the field equals the value.
+func WhereUserIdEq(value interface{}) Condition {
 	return EqualsCondition{Field: "id", Value: value}
 }
 
-// UserNameEq returns a condition that checks if the field equals the value.
-func UserNameEq(value interface{}) Condition {
+// WhereUserNameEq returns a condition that checks if the field equals the value.
+func WhereUserNameEq(value interface{}) Condition {
 	return EqualsCondition{Field: "name", Value: value}
 }
 
-// UserAgeEq returns a condition that checks if the field equals the value.
-func UserAgeEq(value interface{}) Condition {
+// WhereUserAgeEq returns a condition that checks if the field equals the value.
+func WhereUserAgeEq(value interface{}) Condition {
 	return EqualsCondition{Field: "age", Value: value}
 }
 
-// UserEmailEq returns a condition that checks if the field equals the value.
-func UserEmailEq(value interface{}) Condition {
+// WhereUserEmailEq returns a condition that checks if the field equals the value.
+func WhereUserEmailEq(value interface{}) Condition {
 	return EqualsCondition{Field: "email", Value: value}
 }
 
-// UserLastNameEq returns a condition that checks if the field equals the value.
-func UserLastNameEq(value interface{}) Condition {
+// WhereUserLastNameEq returns a condition that checks if the field equals the value.
+func WhereUserLastNameEq(value interface{}) Condition {
 	return EqualsCondition{Field: "last_name", Value: value}
 }
 
@@ -1186,63 +1196,63 @@ func (c NotEqualsCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder
 	return query.Where(sq.NotEq{c.Field: c.Value})
 }
 
-// NotEq returns a condition that checks if the field equals the value.
-func NotEq(field string, value interface{}) Condition {
+// WhereNotEq returns a condition that checks if the field equals the value.
+func WhereNotEq(field string, value interface{}) Condition {
 	return NotEqualsCondition{Field: field, Value: value}
 }
 
-// AddressIdNotEq returns a condition that checks if the field equals the value.
-func AddressIdNotEq(value interface{}) Condition {
+// WhereAddressIdNotEq returns a condition that checks if the field equals the value.
+func WhereAddressIdNotEq(value interface{}) Condition {
 	return NotEqualsCondition{Field: "id", Value: value}
 }
 
-// AddressStreetNotEq returns a condition that checks if the field equals the value.
-func AddressStreetNotEq(value interface{}) Condition {
+// WhereAddressStreetNotEq returns a condition that checks if the field equals the value.
+func WhereAddressStreetNotEq(value interface{}) Condition {
 	return NotEqualsCondition{Field: "street", Value: value}
 }
 
-// AddressCityNotEq returns a condition that checks if the field equals the value.
-func AddressCityNotEq(value interface{}) Condition {
+// WhereAddressCityNotEq returns a condition that checks if the field equals the value.
+func WhereAddressCityNotEq(value interface{}) Condition {
 	return NotEqualsCondition{Field: "city", Value: value}
 }
 
-// AddressStateNotEq returns a condition that checks if the field equals the value.
-func AddressStateNotEq(value interface{}) Condition {
+// WhereAddressStateNotEq returns a condition that checks if the field equals the value.
+func WhereAddressStateNotEq(value interface{}) Condition {
 	return NotEqualsCondition{Field: "state", Value: value}
 }
 
-// AddressZipNotEq returns a condition that checks if the field equals the value.
-func AddressZipNotEq(value interface{}) Condition {
+// WhereAddressZipNotEq returns a condition that checks if the field equals the value.
+func WhereAddressZipNotEq(value interface{}) Condition {
 	return NotEqualsCondition{Field: "zip", Value: value}
 }
 
-// AddressUserIdNotEq returns a condition that checks if the field equals the value.
-func AddressUserIdNotEq(value interface{}) Condition {
+// WhereAddressUserIdNotEq returns a condition that checks if the field equals the value.
+func WhereAddressUserIdNotEq(value interface{}) Condition {
 	return NotEqualsCondition{Field: "user_id", Value: value}
 }
 
-// UserIdNotEq returns a condition that checks if the field equals the value.
-func UserIdNotEq(value interface{}) Condition {
+// WhereUserIdNotEq returns a condition that checks if the field equals the value.
+func WhereUserIdNotEq(value interface{}) Condition {
 	return NotEqualsCondition{Field: "id", Value: value}
 }
 
-// UserNameNotEq returns a condition that checks if the field equals the value.
-func UserNameNotEq(value interface{}) Condition {
+// WhereUserNameNotEq returns a condition that checks if the field equals the value.
+func WhereUserNameNotEq(value interface{}) Condition {
 	return NotEqualsCondition{Field: "name", Value: value}
 }
 
-// UserAgeNotEq returns a condition that checks if the field equals the value.
-func UserAgeNotEq(value interface{}) Condition {
+// WhereUserAgeNotEq returns a condition that checks if the field equals the value.
+func WhereUserAgeNotEq(value interface{}) Condition {
 	return NotEqualsCondition{Field: "age", Value: value}
 }
 
-// UserEmailNotEq returns a condition that checks if the field equals the value.
-func UserEmailNotEq(value interface{}) Condition {
+// WhereUserEmailNotEq returns a condition that checks if the field equals the value.
+func WhereUserEmailNotEq(value interface{}) Condition {
 	return NotEqualsCondition{Field: "email", Value: value}
 }
 
-// UserLastNameNotEq returns a condition that checks if the field equals the value.
-func UserLastNameNotEq(value interface{}) Condition {
+// WhereUserLastNameNotEq returns a condition that checks if the field equals the value.
+func WhereUserLastNameNotEq(value interface{}) Condition {
 	return NotEqualsCondition{Field: "last_name", Value: value}
 }
 
@@ -1264,63 +1274,63 @@ func (c GreaterThanCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuild
 	return query.Where(sq.Gt{c.Field: c.Value})
 }
 
-// GreaterThan returns a condition that checks if the field equals the value.
-func GreaterThan(field string, value interface{}) Condition {
+// WhereGreaterThan returns a condition that checks if the field equals the value.
+func WhereGreaterThan(field string, value interface{}) Condition {
 	return GreaterThanCondition{Field: field, Value: value}
 }
 
-// AddressIdGreaterThan returns a condition that checks if the field equals the value.
-func AddressIdGreaterThan(value interface{}) Condition {
+// WhereAddressIdGreaterThan returns a condition that checks if the field equals the value.
+func WhereAddressIdGreaterThan(value interface{}) Condition {
 	return GreaterThanCondition{Field: "id", Value: value}
 }
 
-// AddressStreetGreaterThan returns a condition that checks if the field equals the value.
-func AddressStreetGreaterThan(value interface{}) Condition {
+// WhereAddressStreetGreaterThan returns a condition that checks if the field equals the value.
+func WhereAddressStreetGreaterThan(value interface{}) Condition {
 	return GreaterThanCondition{Field: "street", Value: value}
 }
 
-// AddressCityGreaterThan returns a condition that checks if the field equals the value.
-func AddressCityGreaterThan(value interface{}) Condition {
+// WhereAddressCityGreaterThan returns a condition that checks if the field equals the value.
+func WhereAddressCityGreaterThan(value interface{}) Condition {
 	return GreaterThanCondition{Field: "city", Value: value}
 }
 
-// AddressStateGreaterThan returns a condition that checks if the field equals the value.
-func AddressStateGreaterThan(value interface{}) Condition {
+// WhereAddressStateGreaterThan returns a condition that checks if the field equals the value.
+func WhereAddressStateGreaterThan(value interface{}) Condition {
 	return GreaterThanCondition{Field: "state", Value: value}
 }
 
-// AddressZipGreaterThan returns a condition that checks if the field equals the value.
-func AddressZipGreaterThan(value interface{}) Condition {
+// WhereAddressZipGreaterThan returns a condition that checks if the field equals the value.
+func WhereAddressZipGreaterThan(value interface{}) Condition {
 	return GreaterThanCondition{Field: "zip", Value: value}
 }
 
-// AddressUserIdGreaterThan returns a condition that checks if the field equals the value.
-func AddressUserIdGreaterThan(value interface{}) Condition {
+// WhereAddressUserIdGreaterThan returns a condition that checks if the field equals the value.
+func WhereAddressUserIdGreaterThan(value interface{}) Condition {
 	return GreaterThanCondition{Field: "user_id", Value: value}
 }
 
-// UserIdGreaterThan returns a condition that checks if the field equals the value.
-func UserIdGreaterThan(value interface{}) Condition {
+// WhereUserIdGreaterThan returns a condition that checks if the field equals the value.
+func WhereUserIdGreaterThan(value interface{}) Condition {
 	return GreaterThanCondition{Field: "id", Value: value}
 }
 
-// UserNameGreaterThan returns a condition that checks if the field equals the value.
-func UserNameGreaterThan(value interface{}) Condition {
+// WhereUserNameGreaterThan returns a condition that checks if the field equals the value.
+func WhereUserNameGreaterThan(value interface{}) Condition {
 	return GreaterThanCondition{Field: "name", Value: value}
 }
 
-// UserAgeGreaterThan returns a condition that checks if the field equals the value.
-func UserAgeGreaterThan(value interface{}) Condition {
+// WhereUserAgeGreaterThan returns a condition that checks if the field equals the value.
+func WhereUserAgeGreaterThan(value interface{}) Condition {
 	return GreaterThanCondition{Field: "age", Value: value}
 }
 
-// UserEmailGreaterThan returns a condition that checks if the field equals the value.
-func UserEmailGreaterThan(value interface{}) Condition {
+// WhereUserEmailGreaterThan returns a condition that checks if the field equals the value.
+func WhereUserEmailGreaterThan(value interface{}) Condition {
 	return GreaterThanCondition{Field: "email", Value: value}
 }
 
-// UserLastNameGreaterThan returns a condition that checks if the field equals the value.
-func UserLastNameGreaterThan(value interface{}) Condition {
+// WhereUserLastNameGreaterThan returns a condition that checks if the field equals the value.
+func WhereUserLastNameGreaterThan(value interface{}) Condition {
 	return GreaterThanCondition{Field: "last_name", Value: value}
 }
 
@@ -1342,63 +1352,63 @@ func (c LessThanCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder 
 	return query.Where(sq.Lt{c.Field: c.Value})
 }
 
-// LessThan returns a condition that checks if the field equals the value.
-func LessThan(field string, value interface{}) Condition {
+// WhereLessThan returns a condition that checks if the field equals the value.
+func WhereLessThan(field string, value interface{}) Condition {
 	return LessThanCondition{Field: field, Value: value}
 }
 
-// AddressIdLessThan returns a condition that checks if the field equals the value.
-func AddressIdLessThan(value interface{}) Condition {
+// WhereAddressIdLessThan returns a condition that checks if the field equals the value.
+func WhereAddressIdLessThan(value interface{}) Condition {
 	return LessThanCondition{Field: "id", Value: value}
 }
 
-// AddressStreetLessThan returns a condition that checks if the field equals the value.
-func AddressStreetLessThan(value interface{}) Condition {
+// WhereAddressStreetLessThan returns a condition that checks if the field equals the value.
+func WhereAddressStreetLessThan(value interface{}) Condition {
 	return LessThanCondition{Field: "street", Value: value}
 }
 
-// AddressCityLessThan returns a condition that checks if the field equals the value.
-func AddressCityLessThan(value interface{}) Condition {
+// WhereAddressCityLessThan returns a condition that checks if the field equals the value.
+func WhereAddressCityLessThan(value interface{}) Condition {
 	return LessThanCondition{Field: "city", Value: value}
 }
 
-// AddressStateLessThan returns a condition that checks if the field equals the value.
-func AddressStateLessThan(value interface{}) Condition {
+// WhereAddressStateLessThan returns a condition that checks if the field equals the value.
+func WhereAddressStateLessThan(value interface{}) Condition {
 	return LessThanCondition{Field: "state", Value: value}
 }
 
-// AddressZipLessThan returns a condition that checks if the field equals the value.
-func AddressZipLessThan(value interface{}) Condition {
+// WhereAddressZipLessThan returns a condition that checks if the field equals the value.
+func WhereAddressZipLessThan(value interface{}) Condition {
 	return LessThanCondition{Field: "zip", Value: value}
 }
 
-// AddressUserIdLessThan returns a condition that checks if the field equals the value.
-func AddressUserIdLessThan(value interface{}) Condition {
+// WhereAddressUserIdLessThan returns a condition that checks if the field equals the value.
+func WhereAddressUserIdLessThan(value interface{}) Condition {
 	return LessThanCondition{Field: "user_id", Value: value}
 }
 
-// UserIdLessThan returns a condition that checks if the field equals the value.
-func UserIdLessThan(value interface{}) Condition {
+// WhereUserIdLessThan returns a condition that checks if the field equals the value.
+func WhereUserIdLessThan(value interface{}) Condition {
 	return LessThanCondition{Field: "id", Value: value}
 }
 
-// UserNameLessThan returns a condition that checks if the field equals the value.
-func UserNameLessThan(value interface{}) Condition {
+// WhereUserNameLessThan returns a condition that checks if the field equals the value.
+func WhereUserNameLessThan(value interface{}) Condition {
 	return LessThanCondition{Field: "name", Value: value}
 }
 
-// UserAgeLessThan returns a condition that checks if the field equals the value.
-func UserAgeLessThan(value interface{}) Condition {
+// WhereUserAgeLessThan returns a condition that checks if the field equals the value.
+func WhereUserAgeLessThan(value interface{}) Condition {
 	return LessThanCondition{Field: "age", Value: value}
 }
 
-// UserEmailLessThan returns a condition that checks if the field equals the value.
-func UserEmailLessThan(value interface{}) Condition {
+// WhereUserEmailLessThan returns a condition that checks if the field equals the value.
+func WhereUserEmailLessThan(value interface{}) Condition {
 	return LessThanCondition{Field: "email", Value: value}
 }
 
-// UserLastNameLessThan returns a condition that checks if the field equals the value.
-func UserLastNameLessThan(value interface{}) Condition {
+// WhereUserLastNameLessThan returns a condition that checks if the field equals the value.
+func WhereUserLastNameLessThan(value interface{}) Condition {
 	return LessThanCondition{Field: "last_name", Value: value}
 }
 
@@ -1420,63 +1430,63 @@ func (c GreaterThanOrEqualCondition) ApplyDelete(query sq.DeleteBuilder) sq.Dele
 	return query.Where(sq.GtOrEq{c.Field: c.Value})
 }
 
-// GreaterThanOrEqual returns a condition that checks if the field equals the value.
-func GreaterThanOrEqual(field string, value interface{}) Condition {
+// WhereGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereGreaterThanOrEqual(field string, value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: field, Value: value}
 }
 
-// AddressIdGreaterThanOrEqual returns a condition that checks if the field equals the value.
-func AddressIdGreaterThanOrEqual(value interface{}) Condition {
+// WhereAddressIdGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereAddressIdGreaterThanOrEqual(value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: "id", Value: value}
 }
 
-// AddressStreetGreaterThanOrEqual returns a condition that checks if the field equals the value.
-func AddressStreetGreaterThanOrEqual(value interface{}) Condition {
+// WhereAddressStreetGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereAddressStreetGreaterThanOrEqual(value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: "street", Value: value}
 }
 
-// AddressCityGreaterThanOrEqual returns a condition that checks if the field equals the value.
-func AddressCityGreaterThanOrEqual(value interface{}) Condition {
+// WhereAddressCityGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereAddressCityGreaterThanOrEqual(value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: "city", Value: value}
 }
 
-// AddressStateGreaterThanOrEqual returns a condition that checks if the field equals the value.
-func AddressStateGreaterThanOrEqual(value interface{}) Condition {
+// WhereAddressStateGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereAddressStateGreaterThanOrEqual(value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: "state", Value: value}
 }
 
-// AddressZipGreaterThanOrEqual returns a condition that checks if the field equals the value.
-func AddressZipGreaterThanOrEqual(value interface{}) Condition {
+// WhereAddressZipGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereAddressZipGreaterThanOrEqual(value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: "zip", Value: value}
 }
 
-// AddressUserIdGreaterThanOrEqual returns a condition that checks if the field equals the value.
-func AddressUserIdGreaterThanOrEqual(value interface{}) Condition {
+// WhereAddressUserIdGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereAddressUserIdGreaterThanOrEqual(value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: "user_id", Value: value}
 }
 
-// UserIdGreaterThanOrEqual returns a condition that checks if the field equals the value.
-func UserIdGreaterThanOrEqual(value interface{}) Condition {
+// WhereUserIdGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserIdGreaterThanOrEqual(value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: "id", Value: value}
 }
 
-// UserNameGreaterThanOrEqual returns a condition that checks if the field equals the value.
-func UserNameGreaterThanOrEqual(value interface{}) Condition {
+// WhereUserNameGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserNameGreaterThanOrEqual(value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: "name", Value: value}
 }
 
-// UserAgeGreaterThanOrEqual returns a condition that checks if the field equals the value.
-func UserAgeGreaterThanOrEqual(value interface{}) Condition {
+// WhereUserAgeGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserAgeGreaterThanOrEqual(value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: "age", Value: value}
 }
 
-// UserEmailGreaterThanOrEqual returns a condition that checks if the field equals the value.
-func UserEmailGreaterThanOrEqual(value interface{}) Condition {
+// WhereUserEmailGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserEmailGreaterThanOrEqual(value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: "email", Value: value}
 }
 
-// UserLastNameGreaterThanOrEqual returns a condition that checks if the field equals the value.
-func UserLastNameGreaterThanOrEqual(value interface{}) Condition {
+// WhereUserLastNameGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserLastNameGreaterThanOrEqual(value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: "last_name", Value: value}
 }
 
@@ -1498,62 +1508,63 @@ func (c LessThanOrEqualCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteB
 	return query.Where(sq.LtOrEq{c.Field: c.Value})
 }
 
-func LessThanOrEqual(field string, value interface{}) Condition {
+// WhereLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereLessThanOrEqual(field string, value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: field, Value: value}
 }
 
-// AddressIdLessThanOrEqual returns a condition that checks if the field equals the value.
-func AddressIdLessThanOrEqual(value interface{}) Condition {
+// WhereAddressIdLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereAddressIdLessThanOrEqual(value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: "id", Value: value}
 }
 
-// AddressStreetLessThanOrEqual returns a condition that checks if the field equals the value.
-func AddressStreetLessThanOrEqual(value interface{}) Condition {
+// WhereAddressStreetLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereAddressStreetLessThanOrEqual(value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: "street", Value: value}
 }
 
-// AddressCityLessThanOrEqual returns a condition that checks if the field equals the value.
-func AddressCityLessThanOrEqual(value interface{}) Condition {
+// WhereAddressCityLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereAddressCityLessThanOrEqual(value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: "city", Value: value}
 }
 
-// AddressStateLessThanOrEqual returns a condition that checks if the field equals the value.
-func AddressStateLessThanOrEqual(value interface{}) Condition {
+// WhereAddressStateLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereAddressStateLessThanOrEqual(value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: "state", Value: value}
 }
 
-// AddressZipLessThanOrEqual returns a condition that checks if the field equals the value.
-func AddressZipLessThanOrEqual(value interface{}) Condition {
+// WhereAddressZipLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereAddressZipLessThanOrEqual(value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: "zip", Value: value}
 }
 
-// AddressUserIdLessThanOrEqual returns a condition that checks if the field equals the value.
-func AddressUserIdLessThanOrEqual(value interface{}) Condition {
+// WhereAddressUserIdLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereAddressUserIdLessThanOrEqual(value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: "user_id", Value: value}
 }
 
-// UserIdLessThanOrEqual returns a condition that checks if the field equals the value.
-func UserIdLessThanOrEqual(value interface{}) Condition {
+// WhereUserIdLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserIdLessThanOrEqual(value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: "id", Value: value}
 }
 
-// UserNameLessThanOrEqual returns a condition that checks if the field equals the value.
-func UserNameLessThanOrEqual(value interface{}) Condition {
+// WhereUserNameLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserNameLessThanOrEqual(value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: "name", Value: value}
 }
 
-// UserAgeLessThanOrEqual returns a condition that checks if the field equals the value.
-func UserAgeLessThanOrEqual(value interface{}) Condition {
+// WhereUserAgeLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserAgeLessThanOrEqual(value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: "age", Value: value}
 }
 
-// UserEmailLessThanOrEqual returns a condition that checks if the field equals the value.
-func UserEmailLessThanOrEqual(value interface{}) Condition {
+// WhereUserEmailLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserEmailLessThanOrEqual(value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: "email", Value: value}
 }
 
-// UserLastNameLessThanOrEqual returns a condition that checks if the field equals the value.
-func UserLastNameLessThanOrEqual(value interface{}) Condition {
+// WhereUserLastNameLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserLastNameLessThanOrEqual(value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: "last_name", Value: value}
 }
 
@@ -1575,63 +1586,63 @@ func (c LikeCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.Like{c.Field: c.Value})
 }
 
-// Like returns a condition that checks if the field equals the value.
-func Like(field string, value interface{}) Condition {
+// WhereLike returns a condition that checks if the field equals the value.
+func WhereLike(field string, value interface{}) Condition {
 	return LikeCondition{Field: field, Value: value}
 }
 
-// AddressIdLike returns a condition that checks if the field equals the value.
-func AddressIdLike(value interface{}) Condition {
+// WhereAddressIdLike returns a condition that checks if the field equals the value.
+func WhereAddressIdLike(value interface{}) Condition {
 	return LikeCondition{Field: "id", Value: value}
 }
 
-// AddressStreetLike returns a condition that checks if the field equals the value.
-func AddressStreetLike(value interface{}) Condition {
+// WhereAddressStreetLike returns a condition that checks if the field equals the value.
+func WhereAddressStreetLike(value interface{}) Condition {
 	return LikeCondition{Field: "street", Value: value}
 }
 
-// AddressCityLike returns a condition that checks if the field equals the value.
-func AddressCityLike(value interface{}) Condition {
+// WhereAddressCityLike returns a condition that checks if the field equals the value.
+func WhereAddressCityLike(value interface{}) Condition {
 	return LikeCondition{Field: "city", Value: value}
 }
 
-// AddressStateLike returns a condition that checks if the field equals the value.
-func AddressStateLike(value interface{}) Condition {
+// WhereAddressStateLike returns a condition that checks if the field equals the value.
+func WhereAddressStateLike(value interface{}) Condition {
 	return LikeCondition{Field: "state", Value: value}
 }
 
-// AddressZipLike returns a condition that checks if the field equals the value.
-func AddressZipLike(value interface{}) Condition {
+// WhereAddressZipLike returns a condition that checks if the field equals the value.
+func WhereAddressZipLike(value interface{}) Condition {
 	return LikeCondition{Field: "zip", Value: value}
 }
 
-// AddressUserIdLike returns a condition that checks if the field equals the value.
-func AddressUserIdLike(value interface{}) Condition {
+// WhereAddressUserIdLike returns a condition that checks if the field equals the value.
+func WhereAddressUserIdLike(value interface{}) Condition {
 	return LikeCondition{Field: "user_id", Value: value}
 }
 
-// UserIdLike returns a condition that checks if the field equals the value.
-func UserIdLike(value interface{}) Condition {
+// WhereUserIdLike returns a condition that checks if the field equals the value.
+func WhereUserIdLike(value interface{}) Condition {
 	return LikeCondition{Field: "id", Value: value}
 }
 
-// UserNameLike returns a condition that checks if the field equals the value.
-func UserNameLike(value interface{}) Condition {
+// WhereUserNameLike returns a condition that checks if the field equals the value.
+func WhereUserNameLike(value interface{}) Condition {
 	return LikeCondition{Field: "name", Value: value}
 }
 
-// UserAgeLike returns a condition that checks if the field equals the value.
-func UserAgeLike(value interface{}) Condition {
+// WhereUserAgeLike returns a condition that checks if the field equals the value.
+func WhereUserAgeLike(value interface{}) Condition {
 	return LikeCondition{Field: "age", Value: value}
 }
 
-// UserEmailLike returns a condition that checks if the field equals the value.
-func UserEmailLike(value interface{}) Condition {
+// WhereUserEmailLike returns a condition that checks if the field equals the value.
+func WhereUserEmailLike(value interface{}) Condition {
 	return LikeCondition{Field: "email", Value: value}
 }
 
-// UserLastNameLike returns a condition that checks if the field equals the value.
-func UserLastNameLike(value interface{}) Condition {
+// WhereUserLastNameLike returns a condition that checks if the field equals the value.
+func WhereUserLastNameLike(value interface{}) Condition {
 	return LikeCondition{Field: "last_name", Value: value}
 }
 
@@ -1653,63 +1664,63 @@ func (c NotLikeCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.NotLike{c.Field: c.Value})
 }
 
-// NotLike returns a condition that checks if the field equals the value.
-func NotLike(field string, value interface{}) Condition {
+// WhereNotLike returns a condition that checks if the field equals the value.
+func WhereNotLike(field string, value interface{}) Condition {
 	return NotLikeCondition{Field: field, Value: value}
 }
 
-// AddressIdNotLike returns a condition that checks if the field equals the value.
-func AddressIdNotLike(value interface{}) Condition {
+// WhereAddressIdNotLike returns a condition that checks if the field equals the value.
+func WhereAddressIdNotLike(value interface{}) Condition {
 	return NotLikeCondition{Field: "id", Value: value}
 }
 
-// AddressStreetNotLike returns a condition that checks if the field equals the value.
-func AddressStreetNotLike(value interface{}) Condition {
+// WhereAddressStreetNotLike returns a condition that checks if the field equals the value.
+func WhereAddressStreetNotLike(value interface{}) Condition {
 	return NotLikeCondition{Field: "street", Value: value}
 }
 
-// AddressCityNotLike returns a condition that checks if the field equals the value.
-func AddressCityNotLike(value interface{}) Condition {
+// WhereAddressCityNotLike returns a condition that checks if the field equals the value.
+func WhereAddressCityNotLike(value interface{}) Condition {
 	return NotLikeCondition{Field: "city", Value: value}
 }
 
-// AddressStateNotLike returns a condition that checks if the field equals the value.
-func AddressStateNotLike(value interface{}) Condition {
+// WhereAddressStateNotLike returns a condition that checks if the field equals the value.
+func WhereAddressStateNotLike(value interface{}) Condition {
 	return NotLikeCondition{Field: "state", Value: value}
 }
 
-// AddressZipNotLike returns a condition that checks if the field equals the value.
-func AddressZipNotLike(value interface{}) Condition {
+// WhereAddressZipNotLike returns a condition that checks if the field equals the value.
+func WhereAddressZipNotLike(value interface{}) Condition {
 	return NotLikeCondition{Field: "zip", Value: value}
 }
 
-// AddressUserIdNotLike returns a condition that checks if the field equals the value.
-func AddressUserIdNotLike(value interface{}) Condition {
+// WhereAddressUserIdNotLike returns a condition that checks if the field equals the value.
+func WhereAddressUserIdNotLike(value interface{}) Condition {
 	return NotLikeCondition{Field: "user_id", Value: value}
 }
 
-// UserIdNotLike returns a condition that checks if the field equals the value.
-func UserIdNotLike(value interface{}) Condition {
+// WhereUserIdNotLike returns a condition that checks if the field equals the value.
+func WhereUserIdNotLike(value interface{}) Condition {
 	return NotLikeCondition{Field: "id", Value: value}
 }
 
-// UserNameNotLike returns a condition that checks if the field equals the value.
-func UserNameNotLike(value interface{}) Condition {
+// WhereUserNameNotLike returns a condition that checks if the field equals the value.
+func WhereUserNameNotLike(value interface{}) Condition {
 	return NotLikeCondition{Field: "name", Value: value}
 }
 
-// UserAgeNotLike returns a condition that checks if the field equals the value.
-func UserAgeNotLike(value interface{}) Condition {
+// WhereUserAgeNotLike returns a condition that checks if the field equals the value.
+func WhereUserAgeNotLike(value interface{}) Condition {
 	return NotLikeCondition{Field: "age", Value: value}
 }
 
-// UserEmailNotLike returns a condition that checks if the field equals the value.
-func UserEmailNotLike(value interface{}) Condition {
+// WhereUserEmailNotLike returns a condition that checks if the field equals the value.
+func WhereUserEmailNotLike(value interface{}) Condition {
 	return NotLikeCondition{Field: "email", Value: value}
 }
 
-// UserLastNameNotLike returns a condition that checks if the field equals the value.
-func UserLastNameNotLike(value interface{}) Condition {
+// WhereUserLastNameNotLike returns a condition that checks if the field equals the value.
+func WhereUserLastNameNotLike(value interface{}) Condition {
 	return NotLikeCondition{Field: "last_name", Value: value}
 }
 
@@ -1730,63 +1741,63 @@ func (c IsNullCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.Expr(c.Field + " IS NULL"))
 }
 
-// IsNull returns a condition that checks if the field is null.
-func IsNull(field string) Condition {
+// WhereIsNull returns a condition that checks if the field is null.
+func WhereIsNull(field string) Condition {
 	return IsNullCondition{Field: field}
 }
 
-// AddressIdIsNull returns a condition that checks if the field is null.
-func AddressIdIsNull() Condition {
+// WhereAddressIdIsNull returns a condition that checks if the field is null.
+func WhereAddressIdIsNull() Condition {
 	return IsNullCondition{Field: "id"}
 }
 
-// AddressStreetIsNull returns a condition that checks if the field is null.
-func AddressStreetIsNull() Condition {
+// WhereAddressStreetIsNull returns a condition that checks if the field is null.
+func WhereAddressStreetIsNull() Condition {
 	return IsNullCondition{Field: "street"}
 }
 
-// AddressCityIsNull returns a condition that checks if the field is null.
-func AddressCityIsNull() Condition {
+// WhereAddressCityIsNull returns a condition that checks if the field is null.
+func WhereAddressCityIsNull() Condition {
 	return IsNullCondition{Field: "city"}
 }
 
-// AddressStateIsNull returns a condition that checks if the field is null.
-func AddressStateIsNull() Condition {
+// WhereAddressStateIsNull returns a condition that checks if the field is null.
+func WhereAddressStateIsNull() Condition {
 	return IsNullCondition{Field: "state"}
 }
 
-// AddressZipIsNull returns a condition that checks if the field is null.
-func AddressZipIsNull() Condition {
+// WhereAddressZipIsNull returns a condition that checks if the field is null.
+func WhereAddressZipIsNull() Condition {
 	return IsNullCondition{Field: "zip"}
 }
 
-// AddressUserIdIsNull returns a condition that checks if the field is null.
-func AddressUserIdIsNull() Condition {
+// WhereAddressUserIdIsNull returns a condition that checks if the field is null.
+func WhereAddressUserIdIsNull() Condition {
 	return IsNullCondition{Field: "user_id"}
 }
 
-// UserIdIsNull returns a condition that checks if the field is null.
-func UserIdIsNull() Condition {
+// WhereUserIdIsNull returns a condition that checks if the field is null.
+func WhereUserIdIsNull() Condition {
 	return IsNullCondition{Field: "id"}
 }
 
-// UserNameIsNull returns a condition that checks if the field is null.
-func UserNameIsNull() Condition {
+// WhereUserNameIsNull returns a condition that checks if the field is null.
+func WhereUserNameIsNull() Condition {
 	return IsNullCondition{Field: "name"}
 }
 
-// UserAgeIsNull returns a condition that checks if the field is null.
-func UserAgeIsNull() Condition {
+// WhereUserAgeIsNull returns a condition that checks if the field is null.
+func WhereUserAgeIsNull() Condition {
 	return IsNullCondition{Field: "age"}
 }
 
-// UserEmailIsNull returns a condition that checks if the field is null.
-func UserEmailIsNull() Condition {
+// WhereUserEmailIsNull returns a condition that checks if the field is null.
+func WhereUserEmailIsNull() Condition {
 	return IsNullCondition{Field: "email"}
 }
 
-// UserLastNameIsNull returns a condition that checks if the field is null.
-func UserLastNameIsNull() Condition {
+// WhereUserLastNameIsNull returns a condition that checks if the field is null.
+func WhereUserLastNameIsNull() Condition {
 	return IsNullCondition{Field: "last_name"}
 }
 
@@ -1807,63 +1818,63 @@ func (c IsNotNullCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder
 	return query.Where(sq.Expr(c.Field + " IS NOT NULL"))
 }
 
-// IsNotNull returns a condition that checks if the field is not null.
-func IsNotNull(field string) Condition {
+// WhereIsNotNull returns a condition that checks if the field is not null.
+func WhereIsNotNull(field string) Condition {
 	return IsNotNullCondition{Field: field}
 }
 
-// AddressIdIsNotNull returns a condition that checks if the field is not null.
-func AddressIdIsNotNull() Condition {
+// WhereAddressIdIsNotNull returns a condition that checks if the field is not null.
+func WhereAddressIdIsNotNull() Condition {
 	return IsNotNullCondition{Field: "id"}
 }
 
-// AddressStreetIsNotNull returns a condition that checks if the field is not null.
-func AddressStreetIsNotNull() Condition {
+// WhereAddressStreetIsNotNull returns a condition that checks if the field is not null.
+func WhereAddressStreetIsNotNull() Condition {
 	return IsNotNullCondition{Field: "street"}
 }
 
-// AddressCityIsNotNull returns a condition that checks if the field is not null.
-func AddressCityIsNotNull() Condition {
+// WhereAddressCityIsNotNull returns a condition that checks if the field is not null.
+func WhereAddressCityIsNotNull() Condition {
 	return IsNotNullCondition{Field: "city"}
 }
 
-// AddressStateIsNotNull returns a condition that checks if the field is not null.
-func AddressStateIsNotNull() Condition {
+// WhereAddressStateIsNotNull returns a condition that checks if the field is not null.
+func WhereAddressStateIsNotNull() Condition {
 	return IsNotNullCondition{Field: "state"}
 }
 
-// AddressZipIsNotNull returns a condition that checks if the field is not null.
-func AddressZipIsNotNull() Condition {
+// WhereAddressZipIsNotNull returns a condition that checks if the field is not null.
+func WhereAddressZipIsNotNull() Condition {
 	return IsNotNullCondition{Field: "zip"}
 }
 
-// AddressUserIdIsNotNull returns a condition that checks if the field is not null.
-func AddressUserIdIsNotNull() Condition {
+// WhereAddressUserIdIsNotNull returns a condition that checks if the field is not null.
+func WhereAddressUserIdIsNotNull() Condition {
 	return IsNotNullCondition{Field: "user_id"}
 }
 
-// UserIdIsNotNull returns a condition that checks if the field is not null.
-func UserIdIsNotNull() Condition {
+// WhereUserIdIsNotNull returns a condition that checks if the field is not null.
+func WhereUserIdIsNotNull() Condition {
 	return IsNotNullCondition{Field: "id"}
 }
 
-// UserNameIsNotNull returns a condition that checks if the field is not null.
-func UserNameIsNotNull() Condition {
+// WhereUserNameIsNotNull returns a condition that checks if the field is not null.
+func WhereUserNameIsNotNull() Condition {
 	return IsNotNullCondition{Field: "name"}
 }
 
-// UserAgeIsNotNull returns a condition that checks if the field is not null.
-func UserAgeIsNotNull() Condition {
+// WhereUserAgeIsNotNull returns a condition that checks if the field is not null.
+func WhereUserAgeIsNotNull() Condition {
 	return IsNotNullCondition{Field: "age"}
 }
 
-// UserEmailIsNotNull returns a condition that checks if the field is not null.
-func UserEmailIsNotNull() Condition {
+// WhereUserEmailIsNotNull returns a condition that checks if the field is not null.
+func WhereUserEmailIsNotNull() Condition {
 	return IsNotNullCondition{Field: "email"}
 }
 
-// UserLastNameIsNotNull returns a condition that checks if the field is not null.
-func UserLastNameIsNotNull() Condition {
+// WhereUserLastNameIsNotNull returns a condition that checks if the field is not null.
+func WhereUserLastNameIsNotNull() Condition {
 	return IsNotNullCondition{Field: "last_name"}
 }
 
@@ -1885,63 +1896,63 @@ func (c InCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.Eq{c.Field: c.Values})
 }
 
-// In returns a condition that checks if the field is in the given values.
-func In(field string, values ...interface{}) Condition {
+// WhereIn returns a condition that checks if the field is in the given values.
+func WhereIn(field string, values ...interface{}) Condition {
 	return InCondition{Field: field, Values: values}
 }
 
-// AddressIdIn returns a condition that checks if the field is in the given values.
-func AddressIdIn(values ...interface{}) Condition {
+// WhereAddressIdIn returns a condition that checks if the field is in the given values.
+func WhereAddressIdIn(values ...interface{}) Condition {
 	return InCondition{Field: "id", Values: values}
 }
 
-// AddressStreetIn returns a condition that checks if the field is in the given values.
-func AddressStreetIn(values ...interface{}) Condition {
+// WhereAddressStreetIn returns a condition that checks if the field is in the given values.
+func WhereAddressStreetIn(values ...interface{}) Condition {
 	return InCondition{Field: "street", Values: values}
 }
 
-// AddressCityIn returns a condition that checks if the field is in the given values.
-func AddressCityIn(values ...interface{}) Condition {
+// WhereAddressCityIn returns a condition that checks if the field is in the given values.
+func WhereAddressCityIn(values ...interface{}) Condition {
 	return InCondition{Field: "city", Values: values}
 }
 
-// AddressStateIn returns a condition that checks if the field is in the given values.
-func AddressStateIn(values ...interface{}) Condition {
+// WhereAddressStateIn returns a condition that checks if the field is in the given values.
+func WhereAddressStateIn(values ...interface{}) Condition {
 	return InCondition{Field: "state", Values: values}
 }
 
-// AddressZipIn returns a condition that checks if the field is in the given values.
-func AddressZipIn(values ...interface{}) Condition {
+// WhereAddressZipIn returns a condition that checks if the field is in the given values.
+func WhereAddressZipIn(values ...interface{}) Condition {
 	return InCondition{Field: "zip", Values: values}
 }
 
-// AddressUserIdIn returns a condition that checks if the field is in the given values.
-func AddressUserIdIn(values ...interface{}) Condition {
+// WhereAddressUserIdIn returns a condition that checks if the field is in the given values.
+func WhereAddressUserIdIn(values ...interface{}) Condition {
 	return InCondition{Field: "user_id", Values: values}
 }
 
-// UserIdIn returns a condition that checks if the field is in the given values.
-func UserIdIn(values ...interface{}) Condition {
+// WhereUserIdIn returns a condition that checks if the field is in the given values.
+func WhereUserIdIn(values ...interface{}) Condition {
 	return InCondition{Field: "id", Values: values}
 }
 
-// UserNameIn returns a condition that checks if the field is in the given values.
-func UserNameIn(values ...interface{}) Condition {
+// WhereUserNameIn returns a condition that checks if the field is in the given values.
+func WhereUserNameIn(values ...interface{}) Condition {
 	return InCondition{Field: "name", Values: values}
 }
 
-// UserAgeIn returns a condition that checks if the field is in the given values.
-func UserAgeIn(values ...interface{}) Condition {
+// WhereUserAgeIn returns a condition that checks if the field is in the given values.
+func WhereUserAgeIn(values ...interface{}) Condition {
 	return InCondition{Field: "age", Values: values}
 }
 
-// UserEmailIn returns a condition that checks if the field is in the given values.
-func UserEmailIn(values ...interface{}) Condition {
+// WhereUserEmailIn returns a condition that checks if the field is in the given values.
+func WhereUserEmailIn(values ...interface{}) Condition {
 	return InCondition{Field: "email", Values: values}
 }
 
-// UserLastNameIn returns a condition that checks if the field is in the given values.
-func UserLastNameIn(values ...interface{}) Condition {
+// WhereUserLastNameIn returns a condition that checks if the field is in the given values.
+func WhereUserLastNameIn(values ...interface{}) Condition {
 	return InCondition{Field: "last_name", Values: values}
 }
 
@@ -1963,63 +1974,63 @@ func (c NotInCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.NotEq{c.Field: c.Values})
 }
 
-// NotIn returns a condition that checks if the field is not in the given values.
-func NotIn(field string, values ...interface{}) Condition {
+// WhereNotIn returns a condition that checks if the field is not in the given values.
+func WhereNotIn(field string, values ...interface{}) Condition {
 	return NotInCondition{Field: field, Values: values}
 }
 
-// AddressIdNotIn returns a condition that checks if the field is not in the given values.
-func AddressIdNotIn(values ...interface{}) Condition {
+// WhereAddressIdNotIn returns a condition that checks if the field is not in the given values.
+func WhereAddressIdNotIn(values ...interface{}) Condition {
 	return NotInCondition{Field: "id", Values: values}
 }
 
-// AddressStreetNotIn returns a condition that checks if the field is not in the given values.
-func AddressStreetNotIn(values ...interface{}) Condition {
+// WhereAddressStreetNotIn returns a condition that checks if the field is not in the given values.
+func WhereAddressStreetNotIn(values ...interface{}) Condition {
 	return NotInCondition{Field: "street", Values: values}
 }
 
-// AddressCityNotIn returns a condition that checks if the field is not in the given values.
-func AddressCityNotIn(values ...interface{}) Condition {
+// WhereAddressCityNotIn returns a condition that checks if the field is not in the given values.
+func WhereAddressCityNotIn(values ...interface{}) Condition {
 	return NotInCondition{Field: "city", Values: values}
 }
 
-// AddressStateNotIn returns a condition that checks if the field is not in the given values.
-func AddressStateNotIn(values ...interface{}) Condition {
+// WhereAddressStateNotIn returns a condition that checks if the field is not in the given values.
+func WhereAddressStateNotIn(values ...interface{}) Condition {
 	return NotInCondition{Field: "state", Values: values}
 }
 
-// AddressZipNotIn returns a condition that checks if the field is not in the given values.
-func AddressZipNotIn(values ...interface{}) Condition {
+// WhereAddressZipNotIn returns a condition that checks if the field is not in the given values.
+func WhereAddressZipNotIn(values ...interface{}) Condition {
 	return NotInCondition{Field: "zip", Values: values}
 }
 
-// AddressUserIdNotIn returns a condition that checks if the field is not in the given values.
-func AddressUserIdNotIn(values ...interface{}) Condition {
+// WhereAddressUserIdNotIn returns a condition that checks if the field is not in the given values.
+func WhereAddressUserIdNotIn(values ...interface{}) Condition {
 	return NotInCondition{Field: "user_id", Values: values}
 }
 
-// UserIdNotIn returns a condition that checks if the field is not in the given values.
-func UserIdNotIn(values ...interface{}) Condition {
+// WhereUserIdNotIn returns a condition that checks if the field is not in the given values.
+func WhereUserIdNotIn(values ...interface{}) Condition {
 	return NotInCondition{Field: "id", Values: values}
 }
 
-// UserNameNotIn returns a condition that checks if the field is not in the given values.
-func UserNameNotIn(values ...interface{}) Condition {
+// WhereUserNameNotIn returns a condition that checks if the field is not in the given values.
+func WhereUserNameNotIn(values ...interface{}) Condition {
 	return NotInCondition{Field: "name", Values: values}
 }
 
-// UserAgeNotIn returns a condition that checks if the field is not in the given values.
-func UserAgeNotIn(values ...interface{}) Condition {
+// WhereUserAgeNotIn returns a condition that checks if the field is not in the given values.
+func WhereUserAgeNotIn(values ...interface{}) Condition {
 	return NotInCondition{Field: "age", Values: values}
 }
 
-// UserEmailNotIn returns a condition that checks if the field is not in the given values.
-func UserEmailNotIn(values ...interface{}) Condition {
+// WhereUserEmailNotIn returns a condition that checks if the field is not in the given values.
+func WhereUserEmailNotIn(values ...interface{}) Condition {
 	return NotInCondition{Field: "email", Values: values}
 }
 
-// UserLastNameNotIn returns a condition that checks if the field is not in the given values.
-func UserLastNameNotIn(values ...interface{}) Condition {
+// WhereUserLastNameNotIn returns a condition that checks if the field is not in the given values.
+func WhereUserLastNameNotIn(values ...interface{}) Condition {
 	return NotInCondition{Field: "last_name", Values: values}
 }
 
@@ -2042,63 +2053,63 @@ func (c BetweenCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.Expr(fmt.Sprintf("%s BETWEEN ? AND ?", c.Field), c.From, c.To))
 }
 
-// Between returns a condition that checks if the field is between the given values.
-func Between(field string, from, to interface{}) Condition {
+// WhereBetween returns a condition that checks if the field is between the given values.
+func WhereBetween(field string, from, to interface{}) Condition {
 	return BetweenCondition{Field: field, From: from, To: to}
 }
 
-// AddressIdBetween returns a condition that checks if the field is between the given values.
-func AddressIdBetween(from, to interface{}) Condition {
+// WhereAddressIdBetween returns a condition that checks if the field is between the given values.
+func WhereAddressIdBetween(from, to interface{}) Condition {
 	return BetweenCondition{Field: "id", From: from, To: to}
 }
 
-// AddressStreetBetween returns a condition that checks if the field is between the given values.
-func AddressStreetBetween(from, to interface{}) Condition {
+// WhereAddressStreetBetween returns a condition that checks if the field is between the given values.
+func WhereAddressStreetBetween(from, to interface{}) Condition {
 	return BetweenCondition{Field: "street", From: from, To: to}
 }
 
-// AddressCityBetween returns a condition that checks if the field is between the given values.
-func AddressCityBetween(from, to interface{}) Condition {
+// WhereAddressCityBetween returns a condition that checks if the field is between the given values.
+func WhereAddressCityBetween(from, to interface{}) Condition {
 	return BetweenCondition{Field: "city", From: from, To: to}
 }
 
-// AddressStateBetween returns a condition that checks if the field is between the given values.
-func AddressStateBetween(from, to interface{}) Condition {
+// WhereAddressStateBetween returns a condition that checks if the field is between the given values.
+func WhereAddressStateBetween(from, to interface{}) Condition {
 	return BetweenCondition{Field: "state", From: from, To: to}
 }
 
-// AddressZipBetween returns a condition that checks if the field is between the given values.
-func AddressZipBetween(from, to interface{}) Condition {
+// WhereAddressZipBetween returns a condition that checks if the field is between the given values.
+func WhereAddressZipBetween(from, to interface{}) Condition {
 	return BetweenCondition{Field: "zip", From: from, To: to}
 }
 
-// AddressUserIdBetween returns a condition that checks if the field is between the given values.
-func AddressUserIdBetween(from, to interface{}) Condition {
+// WhereAddressUserIdBetween returns a condition that checks if the field is between the given values.
+func WhereAddressUserIdBetween(from, to interface{}) Condition {
 	return BetweenCondition{Field: "user_id", From: from, To: to}
 }
 
-// UserIdBetween returns a condition that checks if the field is between the given values.
-func UserIdBetween(from, to interface{}) Condition {
+// WhereUserIdBetween returns a condition that checks if the field is between the given values.
+func WhereUserIdBetween(from, to interface{}) Condition {
 	return BetweenCondition{Field: "id", From: from, To: to}
 }
 
-// UserNameBetween returns a condition that checks if the field is between the given values.
-func UserNameBetween(from, to interface{}) Condition {
+// WhereUserNameBetween returns a condition that checks if the field is between the given values.
+func WhereUserNameBetween(from, to interface{}) Condition {
 	return BetweenCondition{Field: "name", From: from, To: to}
 }
 
-// UserAgeBetween returns a condition that checks if the field is between the given values.
-func UserAgeBetween(from, to interface{}) Condition {
+// WhereUserAgeBetween returns a condition that checks if the field is between the given values.
+func WhereUserAgeBetween(from, to interface{}) Condition {
 	return BetweenCondition{Field: "age", From: from, To: to}
 }
 
-// UserEmailBetween returns a condition that checks if the field is between the given values.
-func UserEmailBetween(from, to interface{}) Condition {
+// WhereUserEmailBetween returns a condition that checks if the field is between the given values.
+func WhereUserEmailBetween(from, to interface{}) Condition {
 	return BetweenCondition{Field: "email", From: from, To: to}
 }
 
-// UserLastNameBetween returns a condition that checks if the field is between the given values.
-func UserLastNameBetween(from, to interface{}) Condition {
+// WhereUserLastNameBetween returns a condition that checks if the field is between the given values.
+func WhereUserLastNameBetween(from, to interface{}) Condition {
 	return BetweenCondition{Field: "last_name", From: from, To: to}
 }
 
@@ -2110,8 +2121,8 @@ type OrderCondition struct {
 	Asc    bool
 }
 
-// Apply applies the condition to the query.
-func OrderBy(column string, asc bool) Condition {
+// WhereOrderBy applies the condition to the query.
+func WhereOrderBy(column string, asc bool) Condition {
 	return OrderCondition{Column: column, Asc: asc}
 }
 
@@ -2127,57 +2138,57 @@ func (c OrderCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query
 }
 
-// AddressIdOrderBy returns a condition that orders the query by the given column.
-func AddressIdOrderBy(asc bool) Condition {
+// WhereAddressIdOrderBy returns a condition that orders the query by the given column.
+func WhereAddressIdOrderBy(asc bool) Condition {
 	return OrderCondition{Column: "id", Asc: asc}
 }
 
-// AddressStreetOrderBy returns a condition that orders the query by the given column.
-func AddressStreetOrderBy(asc bool) Condition {
+// WhereAddressStreetOrderBy returns a condition that orders the query by the given column.
+func WhereAddressStreetOrderBy(asc bool) Condition {
 	return OrderCondition{Column: "street", Asc: asc}
 }
 
-// AddressCityOrderBy returns a condition that orders the query by the given column.
-func AddressCityOrderBy(asc bool) Condition {
+// WhereAddressCityOrderBy returns a condition that orders the query by the given column.
+func WhereAddressCityOrderBy(asc bool) Condition {
 	return OrderCondition{Column: "city", Asc: asc}
 }
 
-// AddressStateOrderBy returns a condition that orders the query by the given column.
-func AddressStateOrderBy(asc bool) Condition {
+// WhereAddressStateOrderBy returns a condition that orders the query by the given column.
+func WhereAddressStateOrderBy(asc bool) Condition {
 	return OrderCondition{Column: "state", Asc: asc}
 }
 
-// AddressZipOrderBy returns a condition that orders the query by the given column.
-func AddressZipOrderBy(asc bool) Condition {
+// WhereAddressZipOrderBy returns a condition that orders the query by the given column.
+func WhereAddressZipOrderBy(asc bool) Condition {
 	return OrderCondition{Column: "zip", Asc: asc}
 }
 
-// AddressUserIdOrderBy returns a condition that orders the query by the given column.
-func AddressUserIdOrderBy(asc bool) Condition {
+// WhereAddressUserIdOrderBy returns a condition that orders the query by the given column.
+func WhereAddressUserIdOrderBy(asc bool) Condition {
 	return OrderCondition{Column: "user_id", Asc: asc}
 }
 
-// UserIdOrderBy returns a condition that orders the query by the given column.
-func UserIdOrderBy(asc bool) Condition {
+// WhereUserIdOrderBy returns a condition that orders the query by the given column.
+func WhereUserIdOrderBy(asc bool) Condition {
 	return OrderCondition{Column: "id", Asc: asc}
 }
 
-// UserNameOrderBy returns a condition that orders the query by the given column.
-func UserNameOrderBy(asc bool) Condition {
+// WhereUserNameOrderBy returns a condition that orders the query by the given column.
+func WhereUserNameOrderBy(asc bool) Condition {
 	return OrderCondition{Column: "name", Asc: asc}
 }
 
-// UserAgeOrderBy returns a condition that orders the query by the given column.
-func UserAgeOrderBy(asc bool) Condition {
+// WhereUserAgeOrderBy returns a condition that orders the query by the given column.
+func WhereUserAgeOrderBy(asc bool) Condition {
 	return OrderCondition{Column: "age", Asc: asc}
 }
 
-// UserEmailOrderBy returns a condition that orders the query by the given column.
-func UserEmailOrderBy(asc bool) Condition {
+// WhereUserEmailOrderBy returns a condition that orders the query by the given column.
+func WhereUserEmailOrderBy(asc bool) Condition {
 	return OrderCondition{Column: "email", Asc: asc}
 }
 
-// UserLastNameOrderBy returns a condition that orders the query by the given column.
-func UserLastNameOrderBy(asc bool) Condition {
+// WhereUserLastNameOrderBy returns a condition that orders the query by the given column.
+func WhereUserLastNameOrderBy(asc bool) Condition {
 	return OrderCondition{Column: "last_name", Asc: asc}
 }

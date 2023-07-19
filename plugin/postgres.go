@@ -98,9 +98,16 @@ func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) CreateTableSQL() string
 }
 
 {{if .IdType}}
-// FindByID returns a single row by ID.
+// FindBy{{ .IdName  | sToCml }} returns a single row by ID.
 func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) FindBy{{ .IdName  | sToCml }}({{ .IdName }} {{ .IdType }}) (*{{.Name | sToCml }}, error) {
-	return {{.Name | firstLetter}}.FindOne({{.Name | sToCml }}{{ .IdName  | sToCml }}Eq({{ .IdName }}))
+	return {{.Name | firstLetter}}.FindOne(Where{{.Name | sToCml }}{{ .IdName  | sToCml }}Eq({{ .IdName }}))
+}
+{{end}}
+
+{{if .IdType}}
+// DeleteBy{{ .IdName  | sToCml }} returns a single row by ID.
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) DeleteBy{{ .IdName  | sToCml }}({{ .IdName }} {{ .IdType }}) (int64, error) {
+	return {{.Name | firstLetter}}.Delete(Where{{.Name | sToCml }}{{ .IdName  | sToCml }}Eq({{ .IdName }}))
 }
 {{end}}
 

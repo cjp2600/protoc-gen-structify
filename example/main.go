@@ -49,20 +49,21 @@ func main() {
 		fmt.Println(user)*/
 
 	users, err := client.User().FindMany(
-		db.Or(
-			db.UserNameEq("test2"),
-			db.UserEmailEq("test@test.com"),
-			db.UserAgeGreaterThan(15),
-		),
+		db.WhereUserAgeGreaterThan(30),
 	)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println(users)
 
+	/*	count, err := client.User().Delete(
+			db.WhereUserAgeGreaterThan(35),
+		)
+		fmt.Println(count)*/
+
 	/*	count, err := client.User().Count(
 					db.Or(
-						db.UserAgeGreaterThan(30),
+						db.WhereUserAgeGreaterThan(30),
 					),
 				)
 				if err != nil {

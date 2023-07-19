@@ -177,15 +177,15 @@ func (c EqualsCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.Eq{c.Field: c.Value})
 }
 
-// Eq returns a condition that checks if the field equals the value.
-func Eq(field string, value interface{}) Condition {
+// WhereEq returns a condition that checks if the field equals the value.
+func WhereEq(field string, value interface{}) Condition {
 	return EqualsCondition{Field: field, Value: value}
 }
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// {{ $msg }}{{ $field | sToCml }}Eq returns a condition that checks if the field equals the value.
-    func {{ $msg }}{{ $field | sToCml }}Eq(value interface{}) Condition {
+	// Where{{ $msg }}{{ $field | sToCml }}Eq returns a condition that checks if the field equals the value.
+    func Where{{ $msg }}{{ $field | sToCml }}Eq(value interface{}) Condition {
       return EqualsCondition{Field: "{{ $field }}", Value: value}
     }
   {{ end }}
@@ -209,15 +209,15 @@ func (c NotEqualsCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder
 	return query.Where(sq.NotEq{c.Field: c.Value})
 }
 
-// NotEq returns a condition that checks if the field equals the value.
-func NotEq(field string, value interface{}) Condition {
+// WhereNotEq returns a condition that checks if the field equals the value.
+func WhereNotEq(field string, value interface{}) Condition {
 	return NotEqualsCondition{Field: field, Value: value}
 }
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// {{ $msg }}{{ $field | sToCml }}NotEq returns a condition that checks if the field equals the value.
-	func {{ $msg }}{{ $field | sToCml }}NotEq(value interface{}) Condition {
+	// Where{{ $msg }}{{ $field | sToCml }}NotEq returns a condition that checks if the field equals the value.
+	func Where{{ $msg }}{{ $field | sToCml }}NotEq(value interface{}) Condition {
 	  return NotEqualsCondition{Field: "{{ $field }}", Value: value}
 	}
   {{ end }}
@@ -241,15 +241,15 @@ func (c GreaterThanCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuild
 	return query.Where(sq.Gt{c.Field: c.Value})
 }
 
-// GreaterThan returns a condition that checks if the field equals the value.
-func GreaterThan(field string, value interface{}) Condition {
+// WhereGreaterThan returns a condition that checks if the field equals the value.
+func WhereGreaterThan(field string, value interface{}) Condition {
 	return GreaterThanCondition{Field: field, Value: value}
 }
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// {{ $msg }}{{ $field | sToCml }}GreaterThan returns a condition that checks if the field equals the value.
-	func {{ $msg }}{{ $field | sToCml }}GreaterThan(value interface{}) Condition {
+	// Where{{ $msg }}{{ $field | sToCml }}GreaterThan returns a condition that checks if the field equals the value.
+	func Where{{ $msg }}{{ $field | sToCml }}GreaterThan(value interface{}) Condition {
 	  return GreaterThanCondition{Field: "{{ $field }}", Value: value}
 	}
   {{ end }}
@@ -273,15 +273,15 @@ func (c LessThanCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder 
 	return query.Where(sq.Lt{c.Field: c.Value})
 }
 
-// LessThan returns a condition that checks if the field equals the value.
-func LessThan(field string, value interface{}) Condition {
+// WhereLessThan returns a condition that checks if the field equals the value.
+func WhereLessThan(field string, value interface{}) Condition {
 	return LessThanCondition{Field: field, Value: value}
 }
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// {{ $msg }}{{ $field | sToCml }}LessThan returns a condition that checks if the field equals the value.
-	func {{ $msg }}{{ $field | sToCml }}LessThan(value interface{}) Condition {
+	// Where{{ $msg }}{{ $field | sToCml }}LessThan returns a condition that checks if the field equals the value.
+	func Where{{ $msg }}{{ $field | sToCml }}LessThan(value interface{}) Condition {
 	  return LessThanCondition{Field: "{{ $field }}", Value: value}
 	}
   {{ end }}
@@ -305,15 +305,15 @@ func (c GreaterThanOrEqualCondition) ApplyDelete(query sq.DeleteBuilder) sq.Dele
 	return query.Where(sq.GtOrEq{c.Field: c.Value})
 }
 
-// GreaterThanOrEqual returns a condition that checks if the field equals the value.
-func GreaterThanOrEqual(field string, value interface{}) Condition {
+// WhereGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereGreaterThanOrEqual(field string, value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: field, Value: value}
 }
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// {{ $msg }}{{ $field | sToCml }}GreaterThanOrEqual returns a condition that checks if the field equals the value.
-	func {{ $msg }}{{ $field | sToCml }}GreaterThanOrEqual(value interface{}) Condition {
+	// Where{{ $msg }}{{ $field | sToCml }}GreaterThanOrEqual returns a condition that checks if the field equals the value.
+	func Where{{ $msg }}{{ $field | sToCml }}GreaterThanOrEqual(value interface{}) Condition {
 	  return GreaterThanOrEqualCondition{Field: "{{ $field }}", Value: value}
 	}
   {{ end }}
@@ -337,14 +337,15 @@ func (c LessThanOrEqualCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteB
 	return query.Where(sq.LtOrEq{c.Field: c.Value})
 }
 
-func LessThanOrEqual(field string, value interface{}) Condition {
+// WhereLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereLessThanOrEqual(field string, value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: field, Value: value}
 }
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// {{ $msg }}{{ $field | sToCml }}LessThanOrEqual returns a condition that checks if the field equals the value.
-	func {{ $msg }}{{ $field | sToCml }}LessThanOrEqual(value interface{}) Condition {
+	// Where{{ $msg }}{{ $field | sToCml }}LessThanOrEqual returns a condition that checks if the field equals the value.
+	func Where{{ $msg }}{{ $field | sToCml }}LessThanOrEqual(value interface{}) Condition {
 	  return LessThanOrEqualCondition{Field: "{{ $field }}", Value: value}
 	}
   {{ end }}
@@ -368,15 +369,15 @@ func (c LikeCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.Like{c.Field: c.Value})
 }
 
-// Like returns a condition that checks if the field equals the value.
-func Like(field string, value interface{}) Condition {
+// WhereLike returns a condition that checks if the field equals the value.
+func WhereLike(field string, value interface{}) Condition {
 	return LikeCondition{Field: field, Value: value}
 }
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// {{ $msg }}{{ $field | sToCml }}Like returns a condition that checks if the field equals the value.
-	func {{ $msg }}{{ $field | sToCml }}Like(value interface{}) Condition {
+	// Where{{ $msg }}{{ $field | sToCml }}Like returns a condition that checks if the field equals the value.
+	func Where{{ $msg }}{{ $field | sToCml }}Like(value interface{}) Condition {
 	  return LikeCondition{Field: "{{ $field }}", Value: value}
 	}
   {{ end }}
@@ -400,15 +401,15 @@ func (c NotLikeCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.NotLike{c.Field: c.Value})
 }
 
-// NotLike returns a condition that checks if the field equals the value.
-func NotLike(field string, value interface{}) Condition {
+// WhereNotLike returns a condition that checks if the field equals the value.
+func WhereNotLike(field string, value interface{}) Condition {
 	return NotLikeCondition{Field: field, Value: value}
 }
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// {{ $msg }}{{ $field | sToCml }}NotLike returns a condition that checks if the field equals the value.
-	func {{ $msg }}{{ $field | sToCml }}NotLike(value interface{}) Condition {
+	// Where{{ $msg }}{{ $field | sToCml }}NotLike returns a condition that checks if the field equals the value.
+	func Where{{ $msg }}{{ $field | sToCml }}NotLike(value interface{}) Condition {
 	  return NotLikeCondition{Field: "{{ $field }}", Value: value}
 	}
   {{ end }}
@@ -431,15 +432,15 @@ func (c IsNullCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.Expr(c.Field + " IS NULL"))
 }
 
-// IsNull returns a condition that checks if the field is null.
-func IsNull(field string) Condition {
+// WhereIsNull returns a condition that checks if the field is null.
+func WhereIsNull(field string) Condition {
 	return IsNullCondition{Field: field}
 }
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// {{ $msg }}{{ $field | sToCml }}IsNull returns a condition that checks if the field is null.
-	func {{ $msg }}{{ $field | sToCml }}IsNull() Condition {
+	// Where{{ $msg }}{{ $field | sToCml }}IsNull returns a condition that checks if the field is null.
+	func Where{{ $msg }}{{ $field | sToCml }}IsNull() Condition {
 	  return IsNullCondition{Field: "{{ $field }}"}
 	}
   {{ end }}
@@ -462,15 +463,15 @@ func (c IsNotNullCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder
 	return query.Where(sq.Expr(c.Field + " IS NOT NULL"))
 }
 
-// IsNotNull returns a condition that checks if the field is not null.
-func IsNotNull(field string) Condition {
+// WhereIsNotNull returns a condition that checks if the field is not null.
+func WhereIsNotNull(field string) Condition {
 	return IsNotNullCondition{Field: field}
 }
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// {{ $msg }}{{ $field | sToCml }}IsNotNull returns a condition that checks if the field is not null.
-	func {{ $msg }}{{ $field | sToCml }}IsNotNull() Condition {
+	// Where{{ $msg }}{{ $field | sToCml }}IsNotNull returns a condition that checks if the field is not null.
+	func Where{{ $msg }}{{ $field | sToCml }}IsNotNull() Condition {
 	  return IsNotNullCondition{Field: "{{ $field }}"}
 	}
   {{ end }}
@@ -494,15 +495,15 @@ func (c InCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.Eq{c.Field: c.Values})
 }
 
-// In returns a condition that checks if the field is in the given values.
-func In(field string, values ...interface{}) Condition {
+// WhereIn returns a condition that checks if the field is in the given values.
+func WhereIn(field string, values ...interface{}) Condition {
 	return InCondition{Field: field, Values: values}
 }
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// {{ $msg }}{{ $field | sToCml }}In returns a condition that checks if the field is in the given values.
-	func {{ $msg }}{{ $field | sToCml }}In(values ...interface{}) Condition {
+	// Where{{ $msg }}{{ $field | sToCml }}In returns a condition that checks if the field is in the given values.
+	func Where{{ $msg }}{{ $field | sToCml }}In(values ...interface{}) Condition {
 	  return InCondition{Field: "{{ $field }}", Values: values}
 	}
   {{ end }}
@@ -526,15 +527,15 @@ func (c NotInCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.NotEq{c.Field: c.Values})
 }
 
-// NotIn returns a condition that checks if the field is not in the given values.
-func NotIn(field string, values ...interface{}) Condition {
+// WhereNotIn returns a condition that checks if the field is not in the given values.
+func WhereNotIn(field string, values ...interface{}) Condition {
 	return NotInCondition{Field: field, Values: values}
 }
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// {{ $msg }}{{ $field | sToCml }}NotIn returns a condition that checks if the field is not in the given values.
-	func {{ $msg }}{{ $field | sToCml }}NotIn(values ...interface{}) Condition {
+	// Where{{ $msg }}{{ $field | sToCml }}NotIn returns a condition that checks if the field is not in the given values.
+	func Where{{ $msg }}{{ $field | sToCml }}NotIn(values ...interface{}) Condition {
 	  return NotInCondition{Field: "{{ $field }}", Values: values}
 	}
   {{ end }}
@@ -559,15 +560,15 @@ func (c BetweenCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.Expr(fmt.Sprintf("%s BETWEEN ? AND ?", c.Field), c.From, c.To))
 }
 
-// Between returns a condition that checks if the field is between the given values.
-func Between(field string, from, to interface{}) Condition {
+// WhereBetween returns a condition that checks if the field is between the given values.
+func WhereBetween(field string, from, to interface{}) Condition {
 	return BetweenCondition{Field: field, From: from, To: to}
 }
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// {{ $msg }}{{ $field | sToCml }}Between returns a condition that checks if the field is between the given values.
-	func {{ $msg }}{{ $field | sToCml }}Between(from, to interface{}) Condition {
+	// Where{{ $msg }}{{ $field | sToCml }}Between returns a condition that checks if the field is between the given values.
+	func Where{{ $msg }}{{ $field | sToCml }}Between(from, to interface{}) Condition {
 	  return BetweenCondition{Field: "{{ $field }}", From: from, To: to}
 	}
   {{ end }}
@@ -581,8 +582,8 @@ type OrderCondition struct {
 	Asc    bool
 }
 
-// Apply applies the condition to the query.
-func OrderBy(column string, asc bool) Condition {
+// WhereOrderBy applies the condition to the query.
+func WhereOrderBy(column string, asc bool) Condition {
 	return OrderCondition{Column: column, Asc: asc}
 }
 
@@ -600,8 +601,8 @@ func (c OrderCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// {{ $msg }}{{ $field | sToCml }}OrderBy returns a condition that orders the query by the given column.
-	func {{ $msg }}{{ $field | sToCml }}OrderBy(asc bool) Condition {
+	// Where{{ $msg }}{{ $field | sToCml }}OrderBy returns a condition that orders the query by the given column.
+	func Where{{ $msg }}{{ $field | sToCml }}OrderBy(asc bool) Condition {
 	  return OrderCondition{Column: "{{ $field }}", Asc: asc}
 	}
   {{ end }}
