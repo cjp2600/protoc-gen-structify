@@ -17,6 +17,20 @@ import (
 	structify "github.com/cjp2600/structify/plugin/options"
 )
 
+func getFieldOptions(f *descriptorpb.FieldDescriptorProto) *structify.StructifyFieldOptions {
+	opts := f.GetOptions()
+	if opts != nil {
+		ext, _ := proto.GetExtension(opts, structify.E_Field)
+		if ext != nil {
+			customOpts, ok := ext.(*structify.StructifyFieldOptions)
+			if ok {
+				return customOpts
+			}
+		}
+	}
+	return nil
+}
+
 // getMessageOptions returns the custom options for a message.
 func getMessageOptions(d *descriptorpb.DescriptorProto) *structify.StructifyMessageOptions {
 	opts := d.GetOptions()
@@ -89,6 +103,18 @@ func lowerCasePlural(name string) string {
 	client := pluralize.NewClient()
 	plural := client.Plural(name)
 	return strings.ToLower(plural)
+}
+
+func postgresType(goType string, options *structify.StructifyFieldOptions) string {
+	t := goTypeToPostgresType(goType)
+
+	if options != nil {
+		if options.Uuid {
+			return "UUID"
+		}
+	}
+
+	return t
 }
 
 // goTypeToPostgresType converts a Go type to a Postgres type.

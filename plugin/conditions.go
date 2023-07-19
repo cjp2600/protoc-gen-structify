@@ -10,6 +10,93 @@ const ConditionTemplate = `
 // Condition is a condition filters.
 type Condition interface {
 	Apply(query sq.SelectBuilder) sq.SelectBuilder
+	ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder
+}
+
+// PageCondition is a condition that limits the number of rows returned based on the page number.
+type PageCondition struct {
+	PageSize uint64
+	Page     uint64
+}
+
+// Page returns a condition that limits the number of rows returned based on the page number.
+func Page(pageSize uint64, page uint64) Condition {
+	return PageCondition{PageSize: pageSize, Page: page}
+}
+
+// Apply applies the condition to the query.
+func (c PageCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	// Calculate offset based on the page number
+	offset := c.PageSize * (c.Page - 1)
+	return query.Limit(c.PageSize).Offset(offset)
+}
+
+// ApplyDelete applies the condition to the query.
+func (c PageCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	// Calculate offset based on the page number
+	offset := c.PageSize * (c.Page - 1)
+	return query.Limit(c.PageSize).Offset(offset)
+}
+
+// PaginateCondition is a condition that limits the number of rows returned.
+type PaginateCondition struct {
+	Limit  uint64
+	Offset uint64
+}
+
+// Paginate returns a condition that limits the number of rows returned.
+func Paginate(limit uint64, offset uint64) Condition {
+	return PaginateCondition{Limit: limit, Offset: offset}
+}
+
+// Apply applies the condition to the query.
+func (c PaginateCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Limit(c.Limit).Offset(c.Offset)
+}
+
+// ApplyDelete applies the condition to the query.
+func (c PaginateCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Limit(c.Limit).Offset(c.Offset)
+}
+
+// LimitCondition is a condition that limits the number of rows returned.
+type LimitCondition struct {
+	Limit uint64
+}
+
+// Limit returns a condition that limits the number of rows returned.
+func Limit(limit uint64) Condition {
+	return LimitCondition{Limit: limit}
+}
+
+// Apply applies the condition to the query.
+func (c LimitCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Limit(c.Limit)
+}
+
+// ApplyDelete applies the condition to the query.
+func (c LimitCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Limit(c.Limit)
+}
+
+// OffsetCondition is a condition that skips the first n rows.
+type OffsetCondition struct {
+	Offset uint64
+}
+
+// Offset returns a condition that skips the first n rows.
+func Offset(offset uint64) Condition {
+	return OffsetCondition{Offset: offset}
+}
+
+// Apply applies the condition to the query.
+func (c OffsetCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Offset(c.Offset)
+}
+
+// ApplyDelete applies the condition to the query.
+func (c OffsetCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Offset(c.Offset)
 }
 
 // And returns a condition that combines the given conditions with AND.
@@ -26,6 +113,14 @@ func And(conditions ...Condition) Condition {
 func (c AndCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
 	for _, condition := range c.Where {
 		query = condition.Apply(query)
+	}
+	return query
+}
+
+// And returns a condition that combines the given conditions with AND.
+func (c AndCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	for _, condition := range c.Where {
+		query = condition.ApplyDelete(query)
 	}
 	return query
 }
@@ -54,6 +149,20 @@ func (c OrCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
 	return query.Where(or)
 }
 
+// Apply applies the condition to the query.
+func (c OrCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	or := sq.Or{}
+	for _, condition := range c.Where {
+		condQuery := condition.ApplyDelete(query)
+		sql, args, _ := condQuery.ToSql()
+		{
+			or = append(or, sq.Expr(sql, args...))
+		}
+	}
+
+	return query.Where(or)
+}
+
 // EqualsCondition equals condition.
 type EqualsCondition struct {
 	Field string
@@ -62,6 +171,10 @@ type EqualsCondition struct {
 
 // Apply applies the condition to the query.
 func (c EqualsCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Eq{c.Field: c.Value})
+}
+
+func (c EqualsCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.Eq{c.Field: c.Value})
 }
 
@@ -92,6 +205,11 @@ func (c NotEqualsCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
 	return query.Where(sq.NotEq{c.Field: c.Value})
 }
 
+// ApplyDelete applies the condition to the query.
+func (c NotEqualsCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.NotEq{c.Field: c.Value})
+}
+
 // NotEq returns a condition that checks if the field equals the value.
 func NotEq(field string, value interface{}) Condition {
 	return NotEqualsCondition{Field: field, Value: value}
@@ -116,6 +234,11 @@ type GreaterThanCondition struct {
 
 // Apply applies the condition to the query.
 func (c GreaterThanCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Gt{c.Field: c.Value})
+}
+
+// ApplyDelete applies the condition to the query.
+func (c GreaterThanCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.Gt{c.Field: c.Value})
 }
 
@@ -146,6 +269,11 @@ func (c LessThanCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
 	return query.Where(sq.Lt{c.Field: c.Value})
 }
 
+// ApplyDelete applies the condition to the query.
+func (c LessThanCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Lt{c.Field: c.Value})
+}
+
 // LessThan returns a condition that checks if the field equals the value.
 func LessThan(field string, value interface{}) Condition {
 	return LessThanCondition{Field: field, Value: value}
@@ -170,6 +298,11 @@ type GreaterThanOrEqualCondition struct {
 
 // Apply applies the condition to the query.
 func (c GreaterThanOrEqualCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.GtOrEq{c.Field: c.Value})
+}
+
+// ApplyDelete applies the condition to the query.
+func (c GreaterThanOrEqualCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.GtOrEq{c.Field: c.Value})
 }
 
@@ -200,6 +333,11 @@ func (c LessThanOrEqualCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder
 	return query.Where(sq.LtOrEq{c.Field: c.Value})
 }
 
+// ApplyDelete applies the condition to the query.
+func (c LessThanOrEqualCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.LtOrEq{c.Field: c.Value})
+}
+
 func LessThanOrEqual(field string, value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: field, Value: value}
 }
@@ -223,6 +361,11 @@ type LikeCondition struct {
 
 // Apply applies the condition to the query.
 func (c LikeCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Like{c.Field: c.Value})
+}
+
+// ApplyDelete applies the condition to the query.
+func (c LikeCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.Like{c.Field: c.Value})
 }
 
@@ -253,6 +396,11 @@ func (c NotLikeCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
 	return query.Where(sq.NotLike{c.Field: c.Value})
 }
 
+// ApplyDelete applies the condition to the query.
+func (c NotLikeCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.NotLike{c.Field: c.Value})
+}
+
 // NotLike returns a condition that checks if the field equals the value.
 func NotLike(field string, value interface{}) Condition {
 	return NotLikeCondition{Field: field, Value: value}
@@ -279,6 +427,11 @@ func (c IsNullCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
 	return query.Where(sq.Expr(c.Field + " IS NULL"))
 }
 
+// ApplyDelete applies the condition to the query.
+func (c IsNullCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(c.Field + " IS NULL"))
+}
+
 // IsNull returns a condition that checks if the field is null.
 func IsNull(field string) Condition {
 	return IsNullCondition{Field: field}
@@ -302,6 +455,11 @@ type IsNotNullCondition struct {
 
 // Apply applies the condition to the query.
 func (c IsNotNullCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Expr(c.Field + " IS NOT NULL"))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c IsNotNullCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.Expr(c.Field + " IS NOT NULL"))
 }
 
@@ -332,6 +490,11 @@ func (c InCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
 	return query.Where(sq.Eq{c.Field: c.Values})
 }
 
+// ApplyDelete applies the condition to the query.
+func (c InCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Eq{c.Field: c.Values})
+}
+
 // In returns a condition that checks if the field is in the given values.
 func In(field string, values ...interface{}) Condition {
 	return InCondition{Field: field, Values: values}
@@ -356,6 +519,11 @@ type NotInCondition struct {
 
 // Apply applies the condition to the query.
 func (c NotInCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.NotEq{c.Field: c.Values})
+}
+
+// ApplyDelete applies the condition to the query.
+func (c NotInCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query.Where(sq.NotEq{c.Field: c.Values})
 }
 
@@ -387,6 +555,11 @@ func (c BetweenCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
 	return query.Where(sq.Expr(fmt.Sprintf("%s BETWEEN ? AND ?", c.Field), c.From, c.To))
 }
 
+// ApplyDelete applies the condition to the query.
+func (c BetweenCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s BETWEEN ? AND ?", c.Field), c.From, c.To))
+}
+
 // Between returns a condition that checks if the field is between the given values.
 func Between(field string, from, to interface{}) Condition {
 	return BetweenCondition{Field: field, From: from, To: to}
@@ -397,6 +570,40 @@ func Between(field string, from, to interface{}) Condition {
 	// {{ $msg }}{{ $field | sToCml }}Between returns a condition that checks if the field is between the given values.
 	func {{ $msg }}{{ $field | sToCml }}Between(from, to interface{}) Condition {
 	  return BetweenCondition{Field: "{{ $field }}", From: from, To: to}
+	}
+  {{ end }}
+{{ end }}
+
+// --------------------------------
+
+// OrderCondition represents the ORDER BY condition.
+type OrderCondition struct {
+	Column string
+	Asc    bool
+}
+
+// Apply applies the condition to the query.
+func OrderBy(column string, asc bool) Condition {
+	return OrderCondition{Column: column, Asc: asc}
+}
+
+// Apply applies the condition to the query.
+func (c OrderCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	if c.Asc {
+		return query.OrderBy(c.Column + " ASC")
+	}
+	return query.OrderBy(c.Column + " DESC")
+}
+
+func (c OrderCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query
+}
+
+{{ range $msg, $fields := .Messages }}
+  {{ range $field := $fields }}
+	// {{ $msg }}{{ $field | sToCml }}OrderBy returns a condition that orders the query by the given column.
+	func {{ $msg }}{{ $field | sToCml }}OrderBy(asc bool) Condition {
+	  return OrderCondition{Column: "{{ $field }}", Asc: asc}
 	}
   {{ end }}
 {{ end }}

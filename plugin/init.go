@@ -29,6 +29,11 @@ func (c *{{ $.Plugin.FileNameWithoutExt | upperClientName }}) {{ $value }}() *{{
 }
 {{ end }}
 
+// error row not found
+var ErrRowNotFound = errors.New("row not found")
+
+// ErrNoTransaction is returned when the transaction is nil.
+var ErrNoTransaction = errors.New("no transaction provided")
 `
 
 func (p *Plugin) BuildInitFunctionTemplate() string {

@@ -7,7 +7,7 @@ option go_package = "github.com/cjp2600/structify/plugin/options;structify";
 
 // Defines a custom option for file-level settings.
 extend google.protobuf.FileOptions {
-  StructifyDBOptions db = 50000;
+  StructifyDBOptions db = 50002;
 }
 
 extend google.protobuf.MessageOptions {
@@ -30,11 +30,20 @@ extend google.protobuf.FieldOptions {
 }
 
 message StructifyFieldOptions {
-  StructifyTag tag = 1;
+  bool primary_key = 1;
+  bool auto_increment = 2;
+  bool unique = 3;
+  bool uuid = 4;
+  bool index = 5;
+  bool skip = 6;
+  bool nullable = 7;
+  string default = 8;
+  Relation relation = 9;
 }
 
-message StructifyTag {
-  bool skip = 1;
+message Relation {
+  repeated string fields = 1;
+  repeated string references = 2;
 }
 
 extend google.protobuf.MethodOptions {

@@ -11,11 +11,11 @@ option (structify.db) = {
 };
 
 message User {
-  string name = 1;
-  int32 age = 2;
-  string email = 3;
+  string id = 1 [(structify.field) = {primary_key: true, uuid: true, default: "uuid_generate_v4()"}];
+  string name = 2 [(structify.field) = {index: true}];
+  int32 age = 3;
+  string email = 4 [(structify.field) = {unique: true}];
   string last_name = 5;
-  repeated int64 addresses = 4;
 
   option (structify.opts) = {
     table: "users"
@@ -24,12 +24,11 @@ message User {
 }
 
 message Address {
-  string street = 1;
-  string city = 2;
-  int32 state = 3;
-  int64 zip = 4;
-
-  option (structify.opts) = {
-    table: "addresses"
-  };
+  string id = 1 [(structify.field) = {primary_key: true, default: "uuid_generate_v4()"}];
+  string street = 2;
+  string city = 3 [(structify.field) = {index: true}];
+  int32 state = 4;
+  int64 zip = 5;
+  //User user = 6 [(structify.field) = {relation: { fields: ["user_id"], references: ["id"] } }];
+  string user_id = 7 [(structify.field) = {index: true}];
 }

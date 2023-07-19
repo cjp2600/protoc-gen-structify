@@ -68,4 +68,6 @@ var (
 	ImportStrings  = Import("strings")
 	ImportSquirrel = Import("github.com/Masterminds/squirrel")
 	ImportFMT      = Import("fmt")
+	ImportErrors   = Import("errors")
+	ImportContext  = Import("context")
 )

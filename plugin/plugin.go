@@ -245,6 +245,7 @@ func (p *Plugin) getTemplaterTables() ([]Templater, error) {
 		var table Templater
 		switch p.provider {
 		case ProviderPostgres:
+			p.imports.Enable(ImportErrors, ImportContext)
 			table = createNewPostgresTableTemplate(m)
 		case ProviderMysql:
 			// todo: implement
