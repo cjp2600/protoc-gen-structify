@@ -260,9 +260,9 @@ func sliceToString(slice []string) template.HTML {
 }
 
 func upperClientName(name string) string {
-	return fmt.Sprintf("%sDB", sToCml(name))
+	return fmt.Sprintf("%sDBClient", sToCml(name))
 }
 
 func lowerClientName(name string) string {
-	return fmt.Sprintf("%sDB", sToLowerCamel(name))
+	return fmt.Sprintf("%sDBClient", sToLowerCamel(name))
 }

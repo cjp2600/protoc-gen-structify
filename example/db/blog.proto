@@ -2,7 +2,7 @@ syntax = "proto3";
 
 import "github.com/cjp2600/structify/plugin/options/structify.proto";
 
-package example;
+package db;
 
 // main db options
 option (structify.db) = {

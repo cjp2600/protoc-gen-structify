@@ -127,39 +127,38 @@ func (c AndCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 
 // Or returns a condition that checks if any of the conditions are true.
 type OrCondition struct {
-	Where []Condition
+	Conditions []Condition
 }
 
-// Apply applies the condition to the query.
 func Or(conditions ...Condition) Condition {
-	return OrCondition{Where: conditions}
+	return OrCondition{Conditions: conditions}
 }
 
 // Apply applies the condition to the query.
 func (c OrCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
 	or := sq.Or{}
-	for _, condition := range c.Where {
-		condQuery := condition.Apply(query)
-		sql, args, _ := condQuery.ToSql()
-		{
-			or = append(or, sq.Expr(sql, args...))
-		}
+	for _, condition := range c.Conditions {
+		subQuery := condition.Apply(sq.Select("*"))
+		// Extract WHERE clause from the subquery
+		whereParts, args, _ := subQuery.ToSql()
+		whereParts = strings.TrimPrefix(whereParts, "SELECT * WHERE ")
+		// Append the WHERE clause to the OR condition
+		or = append(or, sq.Expr(whereParts, args...))
 	}
-
 	return query.Where(or)
 }
 
 // Apply applies the condition to the query.
 func (c OrCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	or := sq.Or{}
-	for _, condition := range c.Where {
-		condQuery := condition.ApplyDelete(query)
-		sql, args, _ := condQuery.ToSql()
-		{
-			or = append(or, sq.Expr(sql, args...))
-		}
+	for _, condition := range c.Conditions {
+		subQuery := condition.Apply(sq.Select("*"))
+		// Extract WHERE clause from the subquery
+		whereParts, args, _ := subQuery.ToSql()
+		whereParts = strings.TrimPrefix(whereParts, "SELECT * WHERE ")
+		// Append the WHERE clause to the OR condition
+		or = append(or, sq.Expr(whereParts, args...))
 	}
-
 	return query.Where(or)
 }
 
@@ -647,7 +646,7 @@ func (p *Plugin) BuildConditionsTemplate() string {
 	}
 
 	// enable imports
-	p.imports.Enable(ImportSquirrel, ImportFMT)
+	p.imports.Enable(ImportSquirrel, ImportFMT, ImportStrings)
 
 	return output.String()
 }

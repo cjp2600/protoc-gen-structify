@@ -55,6 +55,7 @@ func createNewPostgresTableTemplate(d *descriptorpb.DescriptorProto) Templater {
 				Nullable:      options.Nullable,
 				AutoIncrement: options.AutoIncrement,
 				Default:       options.Default,
+				UUID:          options.Uuid,
 			}
 		}
 
@@ -71,7 +72,7 @@ func createNewPostgresTableTemplate(d *descriptorpb.DescriptorProto) Templater {
 
 // PostgresStructTemplate is the template for the Go struct.
 const PostgresStructTemplate = `
-type {{.Name | sToLowerCamel }}Store struct {
+type {{.Name | sToCml }}Store struct {
 	db *sql.DB
 }
 
@@ -82,29 +83,29 @@ type {{.Name}} struct {
 }
 
 // TableName returns the name of the table.
-func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel }}Store) TableName() string {
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) TableName() string {
 	return "{{.TableName}}"
 }
 
 // Columns returns the database columns for the table.
-func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel }}Store) Columns() []string {
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) Columns() []string {
 	return {{.Columns | sliceToString}}
 }
 
 // CreateTableSQL returns the SQL statement to create the table.
-func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel }}Store) CreateTableSQL() string {
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) CreateTableSQL() string {
 	return ` + "`" + `{{.CreateSQL}}` + "`" + `
 }
 
 {{if .IdType}}
 // FindByID returns a single row by ID.
-func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel }}Store) FindBy{{ .IdName  | sToCml }}({{ .IdName }} {{ .IdType }}) (*{{.Name | sToCml }}, error) {
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) FindBy{{ .IdName  | sToCml }}({{ .IdName }} {{ .IdType }}) (*{{.Name | sToCml }}, error) {
 	return {{.Name | firstLetter}}.FindOne({{.Name | sToCml }}{{ .IdName  | sToCml }}Eq({{ .IdName }}))
 }
 {{end}}
 
 // FindOne filters rows by the provided conditions and returns the first matching row.
-func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel }}Store) FindOne(conditions ...Condition) (*{{.Name}}, error) {
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) FindOne(conditions ...Condition) (*{{.Name}}, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Select({{.Name | firstLetter}}.Columns()...).From({{.Name | firstLetter}}.TableName())
@@ -133,7 +134,7 @@ func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel }}Store) FindOne(conditio
 }
 
 // FindMany filters rows by the provided conditions and returns matching rows.
-func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel }}Store) FindMany(conditions ...Condition) ([]{{.Name}}, error) {
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) FindMany(conditions ...Condition) ([]{{.Name}}, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Select({{.Name | firstLetter}}.Columns()...).From({{.Name | firstLetter}}.TableName())
@@ -167,7 +168,7 @@ func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel }}Store) FindMany(conditi
 }
 
 // Count returns the number of rows that match the provided conditions.
-func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel }}Store) Count(conditions ...Condition) (int64, error) {
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) Count(conditions ...Condition) (int64, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Select("COUNT(*)").From({{.Name | firstLetter}}.TableName())
@@ -193,7 +194,7 @@ func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel }}Store) Count(conditions
 }
 
 // Delete deletes rows that match the provided conditions.
-func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel }}Store) Delete(conditions ...Condition) (int64, error) {
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) Delete(conditions ...Condition) (int64, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Delete({{.Name | firstLetter}}.TableName())
@@ -221,7 +222,7 @@ func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel }}Store) Delete(condition
 }
 
 // DeleteWithTx deletes rows that match the provided conditions inside a transaction.
-func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel }}Store) DeleteWithTx(tx *sql.Tx, conditions ...Condition) (int64, error) {
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) DeleteWithTx(tx *sql.Tx, conditions ...Condition) (int64, error) {
 	if tx == nil {
 		return 0, ErrNoTransaction
 	}
@@ -260,7 +261,7 @@ type {{.Name}}UpdateRequest struct {
 }
 
 // Update updates a row with the provided data.
-func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel}}Store) Update(ctx context.Context, id {{.IdType}}, model *{{.Name}}UpdateRequest) error {
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) Update(ctx context.Context, id {{.IdType}}, model *{{.Name}}UpdateRequest) error {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Update({{.Name | firstLetter}}.TableName())
@@ -289,7 +290,7 @@ func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel}}Store) Update(ctx contex
 }
 
 // UpdateWithTx updates a row with the provided data inside a transaction.
-func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel}}Store) UpdateWithTx(ctx context.Context, tx *sql.Tx, id {{.IdType}}, model *{{.Name}}UpdateRequest) error {
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) UpdateWithTx(ctx context.Context, tx *sql.Tx, id {{.IdType}}, model *{{.Name}}UpdateRequest) error {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Update({{.Name | firstLetter}}.TableName())
@@ -318,7 +319,7 @@ func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel}}Store) UpdateWithTx(ctx 
 }
 
 // Create inserts a new row into the database.
-func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel}}Store) Create(ctx context.Context, model *{{.Name}}) ({{.IdType}}, error) {
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) Create(ctx context.Context, model *{{.Name}}) ({{.IdType}}, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert({{.Name | firstLetter}}.TableName()).
@@ -345,7 +346,7 @@ func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel}}Store) Create(ctx contex
 }
 
 // CreateWithTx inserts a new row into the database inside a transaction.
-func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel}}Store) CreateWithTx(tx *sql.Tx, model *{{.Name}}) ({{.IdType}}, error) {
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) CreateWithTx(tx *sql.Tx, model *{{.Name}}) ({{.IdType}}, error) {
 	if tx == nil {
 		return {{if .IdType}}""{{end}}, ErrNoTransaction
 	}
@@ -376,7 +377,7 @@ func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel}}Store) CreateWithTx(tx *
 }
 
 // CreateMany inserts multiple rows into the database.
-func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel}}Store) CreateMany(ctx context.Context, models []*{{.Name}}) ([]{{.IdType}}, error) {
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) CreateMany(ctx context.Context, models []*{{.Name}}) ([]{{.IdType}}, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert({{.Name | firstLetter}}.TableName()).
@@ -415,7 +416,7 @@ func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel}}Store) CreateMany(ctx co
 }
 
 // CreateManyWithTx inserts multiple rows into the database inside a transaction.
-func ({{.Name | firstLetter}} *{{.Name | sToLowerCamel}}Store) CreateManyWithTx(ctx context.Context, tx *sql.Tx, models []*{{.Name}}) ([]{{.IdType}}, error) {
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) CreateManyWithTx(ctx context.Context, tx *sql.Tx, models []*{{.Name}}) ([]{{.IdType}}, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert({{.Name | firstLetter}}.TableName()).
@@ -518,9 +519,10 @@ type Options struct {
 	Nullable      bool
 	AutoIncrement bool
 	Default       string
+	UUID          bool
 }
 
-const createSQLTemplate = `CREATE TABLE IF NOT EXISTS {{.TableName}} (
+const createSQLTemplate = `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";CREATE TABLE IF NOT EXISTS {{.TableName}} (
 {{- range $index, $element := .Fields}}
 {{$element.SourceName}} {{if $element.Options.AutoIncrement}}{{$element.DBType}} SERIAL{{else}}{{$element.DBType}}{{end}}{{if $element.Options.PrimaryKey}} PRIMARY KEY{{end}}{{if $element.Options.Unique}} UNIQUE{{end}}{{if not $element.Options.Nullable}} NOT NULL{{end}}{{if $element.Options.Default}} DEFAULT {{$element.Options.Default}}{{end}}{{if not (isLast $index (len $.Fields))}},{{end}}
 {{- end}});{{if .Comment}}COMMENT ON TABLE {{.TableName}} IS '{{.Comment}}';{{end}}`

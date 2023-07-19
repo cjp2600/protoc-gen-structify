@@ -15,7 +15,7 @@ $(GOBIN):
 .PHONY: build-example
 build-example: build ## Build example: make build-example f=example/blog.proto
 ifndef f
-f = example/blog.proto
+f = example/db/blog.proto
 endif
 	@$(PROTOC) -I/usr/local/include -I.  \
 	-I$(GOPATH)/src   \
