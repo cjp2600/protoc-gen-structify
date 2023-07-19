@@ -52,11 +52,29 @@ func main() {
 		db.Or(
 			db.UserNameEq("test2"),
 			db.UserEmailEq("test@test.com"),
+			db.UserAgeGreaterThan(15),
 		),
-		db.UserAgeGreaterThan(15),
 	)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println(users)
+
+	/*	count, err := client.User().Count(
+					db.Or(
+						db.UserAgeGreaterThan(30),
+					),
+				)
+				if err != nil {
+					panic(err)
+				}
+				fmt.Println(count)
+
+		/*	val := "testov"
+			err = client.User().Update(context.Background(), "3ef245be-720e-4b84-9243-645aae39058f", &db.UserUpdateRequest{
+				LastName: &val,
+			})
+			if err != nil {
+				panic(err)
+			}*/
 }
