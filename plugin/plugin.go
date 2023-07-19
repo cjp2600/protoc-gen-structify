@@ -18,7 +18,7 @@ var ErrUnsupportedProvider = errors.New("unsupported provider")
 // Templater is an interface for generating templates.
 type Templater interface {
 	BuildTemplate() string
-	Imports() map[Import]bool
+	Imports() ImportSet
 }
 
 // Provider represents the database provider.
@@ -49,21 +49,24 @@ const GeneratedFilePostfix = ".db.go"
 
 // Plugin handles generation of code based on protobufs.
 type Plugin struct {
-	req         *plugingo.CodeGeneratorRequest
-	res         *plugingo.CodeGeneratorResponse
-	Param       map[string]string
-	packageName string
-	pathType    PathType
-	provider    Provider
+	req *plugingo.CodeGeneratorRequest
+	res *plugingo.CodeGeneratorResponse
 
-	imports []Import
+	pathType PathType
+	provider Provider
+	imports  ImportSet
+
+	Param              map[string]string
+	PackageName        string
+	FileNameWithoutExt string
 }
 
 // NewPlugin creates a new Plugin.
 func NewPlugin() *Plugin {
 	return &Plugin{
-		req: &plugingo.CodeGeneratorRequest{},
-		res: &plugingo.CodeGeneratorResponse{},
+		req:     &plugingo.CodeGeneratorRequest{},
+		res:     &plugingo.CodeGeneratorResponse{},
+		imports: ImportSet{},
 	}
 }
 
@@ -85,6 +88,9 @@ func (p *Plugin) Run() {
 	if err != nil {
 		log.Fatalf("Failed to parse protobuf: %v", err)
 	}
+
+	// fill imports
+	p.fillImports(tables)
 
 	content := p.generateContent(tables)
 	{
@@ -119,33 +125,23 @@ func (p *Plugin) generateContent(tables []Templater) string {
 	builder.WriteString("// provider: ")
 	builder.WriteString(p.provider.String() + "\n")
 
+	conditions := p.BuildConditionsTemplate()
+	inits := p.BuildInitFunctionTemplate()
+
 	// write package name
-	builder.WriteString("package " + p.packageName + "\n\n")
-
-	// write tables to builder
-	writeTable := func() {
-		for _, t := range tables {
-			builder.WriteString(t.BuildTemplate())
-			builder.WriteString("\n")
-
-			// add active imports
-			for i, v := range t.Imports() {
-				if v {
-					p.imports = append(p.imports, i)
-				}
-			}
-		}
-	}
+	builder.WriteString("package " + p.PackageName + "\n\n")
 
 	// write imports
-	for _, i := range p.imports {
-		builder.WriteString("import " + i.String() + "\n")
-	}
-
-	// todo: add init function
+	builder.WriteString(p.imports.String())
+	builder.WriteString(inits + "\n")
 
 	// write tables
-	writeTable()
+	for _, t := range tables {
+		builder.WriteString(t.BuildTemplate())
+		builder.WriteString("\n")
+	}
+
+	builder.WriteString(conditions + "\n")
 
 	return builder.String()
 }
@@ -164,7 +160,18 @@ func (p *Plugin) parseCommandLineParameters(parameter string) {
 	p.parsePathType()
 }
 
-// parsePathType parses the path type from the parameters.
+// fillImports fills the imports based on the tables.
+func (p *Plugin) fillImports(tables []Templater) {
+	for _, t := range tables {
+		for i, v := range t.Imports() {
+			if v {
+				p.imports[i] = v
+			}
+		}
+	}
+}
+
+// parsePatmhType parses the path type from the parameters.
 func (p *Plugin) parsePathType() {
 	switch p.Param["paths"] {
 	case "import":
@@ -180,21 +187,25 @@ func (p *Plugin) parsePathType() {
 func (p *Plugin) fillDefaultOptions() {
 	p.parseProvider()
 	p.parsePackageName()
+	p.parseFileName()
+}
+
+func (p *Plugin) parseFileName() {
+	fileBase := path.Base(p.req.GetFileToGenerate()[0])
+	fileExt := path.Ext(fileBase)
+	p.FileNameWithoutExt = strings.TrimSuffix(fileBase, fileExt)
 }
 
 // parsePackageName parses the package name from the protobuf options.
 func (p *Plugin) parsePackageName() {
 	for _, f := range p.req.GetProtoFile() {
-		p.packageName = f.GetPackage()
+		p.PackageName = f.GetPackage()
 	}
 }
 
 // getGeneratedFilePath gets the generated file path based on the source file path.
 func (p *Plugin) getGeneratedFilePath(sourceFilePath string) string {
-	fileBase := path.Base(sourceFilePath)
-	fileExt := path.Ext(fileBase)
-	fileNameWithoutExt := strings.TrimSuffix(fileBase, fileExt)
-	generatedBaseName := fileNameWithoutExt + GeneratedFilePostfix
+	generatedBaseName := p.FileNameWithoutExt + GeneratedFilePostfix
 
 	if p.pathType == PathTypeSourceRelative {
 		// The generated file will have the same base as the source file, and it will be located in the same directory.
@@ -234,7 +245,7 @@ func (p *Plugin) getTemplaterTables() ([]Templater, error) {
 		var table Templater
 		switch p.provider {
 		case ProviderPostgres:
-			table = newPostgresTable(m)
+			table = createNewPostgresTableTemplate(m)
 		case ProviderMysql:
 			// todo: implement
 		default:

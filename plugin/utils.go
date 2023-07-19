@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/gertd/go-pluralize"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	plugingo "github.com/golang/protobuf/protoc-gen-go/plugin"
@@ -73,6 +74,21 @@ func isUserMessage(f *descriptorpb.FileDescriptorProto, m *descriptorpb.Descript
 // sToCml converts a string to a CamelCase string.
 func sToCml(name string) string {
 	return strcase.UpperCamelCase(name)
+}
+
+// sToLowerCamel converts a string to a lowerCamelCase string.
+func sToLowerCamel(name string) string {
+	return strcase.LowerCamelCase(name)
+}
+
+func lowerCase(name string) string {
+	return strings.ToLower(name)
+}
+
+func lowerCasePlural(name string) string {
+	client := pluralize.NewClient()
+	plural := client.Plural(name)
+	return strings.ToLower(plural)
 }
 
 // goTypeToPostgresType converts a Go type to a Postgres type.
@@ -191,6 +207,7 @@ func goFmt(resp *plugingo.CodeGeneratorResponse) error {
 		if err != nil {
 			return fmt.Errorf("go format error: %v", err)
 		}
+
 		fmts := string(formatted)
 		resp.File[i].Content = &fmts
 	}
@@ -214,4 +231,12 @@ func sliceToString(slice []string) template.HTML {
 		quoted[i] = fmt.Sprintf("\"%s\"", elem)
 	}
 	return template.HTML(fmt.Sprintf("[]string{%s}", strings.Join(quoted, ", ")))
+}
+
+func upperClientName(name string) string {
+	return fmt.Sprintf("%sDB", sToCml(name))
+}
+
+func lowerClientName(name string) string {
+	return fmt.Sprintf("%sDB", sToLowerCamel(name))
 }
