@@ -12,6 +12,7 @@ import (
 	_ "github.com/lib/pq"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // BlogDBClientOptions are the options for the BlogDBClient.
@@ -144,6 +145,23 @@ type User struct {
 	Addresses []*Address
 }
 
+// SacnRow scans a row into the struct fields.
+func (u *UserStore) ScanRow(row *sql.Row) (*User, error) {
+	var model *User
+	err := row.Scan(
+		&model.Id,
+		&model.Name,
+		&model.Age,
+		&model.Email,
+		&model.LastName,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan row: %w", err)
+	}
+
+	return model, nil
+}
+
 // TableName returns the name of the table.
 func (u *UserStore) TableName() string {
 	return "users"
@@ -151,7 +169,7 @@ func (u *UserStore) TableName() string {
 
 // Columns returns the database columns for the table.
 func (u *UserStore) Columns() []string {
-	return []string{"id", "name", "age", "email", "last_name"}
+	return []string{"users.id", "users.name", "users.age", "users.email", "users.last_name"}
 }
 
 // CreateTableSQL returns the SQL statement to create the table.
@@ -195,24 +213,50 @@ func (u *UserStore) FindOne(conditions ...Condition) (*User, error) {
 		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
-	// Relations statement
 
-	settingsRelationStore := &SettingStore{db: u.db}
-	settingsRelation, err := settingsRelationStore.FindMany(WhereSettingUserIdEq(model.Id), Limit(100))
-	if err != nil {
-		return nil, fmt.Errorf("failed to find relation settings: %w", err)
+	var wg sync.WaitGroup
+	var findRelationErr error
+	var mutex sync.Mutex
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		settingsRelationStore := &SettingStore{db: u.db}
+
+		settingsRelation, err := settingsRelationStore.FindMany(WhereSettingUserIdEq(model.Id), Limit(100))
+
+		mutex.Lock()
+		if err != nil && err != ErrRowNotFound && findRelationErr == nil {
+			findRelationErr = fmt.Errorf("failed to find relation settings: %w", err)
+		}
+		if settingsRelation != nil {
+			model.Settings = settingsRelation
+		}
+		mutex.Unlock()
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		addressesRelationStore := &AddressStore{db: u.db}
+
+		addressesRelation, err := addressesRelationStore.FindMany(WhereAddressUserIdEq(model.Id), Limit(3))
+
+		mutex.Lock()
+		if err != nil && err != ErrRowNotFound && findRelationErr == nil {
+			findRelationErr = fmt.Errorf("failed to find relation addresses: %w", err)
+		}
+		if addressesRelation != nil {
+			model.Addresses = addressesRelation
+		}
+		mutex.Unlock()
+	}()
+
+	wg.Wait()
+	if findRelationErr != nil {
+		return nil, findRelationErr
 	}
-	if settingsRelation != nil {
-		model.Settings = settingsRelation
-	}
-	addressesRelationStore := &AddressStore{db: u.db}
-	addressesRelation, err := addressesRelationStore.FindMany(WhereAddressUserIdEq(model.Id), Limit(3))
-	if err != nil {
-		return nil, fmt.Errorf("failed to find relation addresses: %w", err)
-	}
-	if addressesRelation != nil {
-		model.Addresses = addressesRelation
-	}
+
 	return &model, nil
 }
 
@@ -559,6 +603,22 @@ type Setting struct {
 	UserId string `db:"user_id"`
 }
 
+// SacnRow scans a row into the struct fields.
+func (s *SettingStore) ScanRow(row *sql.Row) (*Setting, error) {
+	var model *Setting
+	err := row.Scan(
+		&model.Id,
+		&model.Name,
+		&model.Value,
+		&model.UserId,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan row: %w", err)
+	}
+
+	return model, nil
+}
+
 // TableName returns the name of the table.
 func (s *SettingStore) TableName() string {
 	return "settings"
@@ -566,7 +626,7 @@ func (s *SettingStore) TableName() string {
 
 // Columns returns the database columns for the table.
 func (s *SettingStore) Columns() []string {
-	return []string{"id", "name", "value", "user_id"}
+	return []string{"settings.id", "settings.name", "settings.value", "settings.user_id"}
 }
 
 // CreateTableSQL returns the SQL statement to create the table.
@@ -609,15 +669,31 @@ func (s *SettingStore) FindOne(conditions ...Condition) (*Setting, error) {
 		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
-	// Relations statement
 
-	userRelationStore := &UserStore{db: s.db}
-	userRelation, err := userRelationStore.FindOne(WhereUserIdEq(model.UserId))
-	if err != nil && err != ErrRowNotFound {
-		return nil, fmt.Errorf("failed to find relation users: %w", err)
-	}
-	if userRelation != nil {
-		model.User = userRelation
+	var wg sync.WaitGroup
+	var findRelationErr error
+	var mutex sync.Mutex
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		userRelationStore := &UserStore{db: s.db}
+
+		userRelation, err := userRelationStore.FindOne(WhereUserIdEq(model.UserId))
+
+		mutex.Lock()
+		if err != nil && err != ErrRowNotFound && findRelationErr == nil {
+			findRelationErr = fmt.Errorf("failed to find relation users: %w", err)
+		}
+		if userRelation != nil {
+			model.User = userRelation
+		}
+		mutex.Unlock()
+	}()
+
+	wg.Wait()
+	if findRelationErr != nil {
+		return nil, findRelationErr
 	}
 
 	return &model, nil
@@ -961,6 +1037,24 @@ type Address struct {
 	UserId string `db:"user_id"`
 }
 
+// SacnRow scans a row into the struct fields.
+func (a *AddressStore) ScanRow(row *sql.Row) (*Address, error) {
+	var model *Address
+	err := row.Scan(
+		&model.Id,
+		&model.Street,
+		&model.City,
+		&model.State,
+		&model.Zip,
+		&model.UserId,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan row: %w", err)
+	}
+
+	return model, nil
+}
+
 // TableName returns the name of the table.
 func (a *AddressStore) TableName() string {
 	return "addresses"
@@ -968,7 +1062,7 @@ func (a *AddressStore) TableName() string {
 
 // Columns returns the database columns for the table.
 func (a *AddressStore) Columns() []string {
-	return []string{"id", "street", "city", "state", "zip", "user_id"}
+	return []string{"addresses.id", "addresses.street", "addresses.city", "addresses.state", "addresses.zip", "addresses.user_id"}
 }
 
 // CreateTableSQL returns the SQL statement to create the table.
@@ -1013,15 +1107,31 @@ func (a *AddressStore) FindOne(conditions ...Condition) (*Address, error) {
 		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
-	// Relations statement
 
-	userRelationStore := &UserStore{db: a.db}
-	userRelation, err := userRelationStore.FindOne(WhereUserIdEq(model.UserId))
-	if err != nil && err != ErrRowNotFound {
-		return nil, fmt.Errorf("failed to find relation users: %w", err)
-	}
-	if userRelation != nil {
-		model.User = userRelation
+	var wg sync.WaitGroup
+	var findRelationErr error
+	var mutex sync.Mutex
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		userRelationStore := &UserStore{db: a.db}
+
+		userRelation, err := userRelationStore.FindOne(WhereUserIdEq(model.UserId))
+
+		mutex.Lock()
+		if err != nil && err != ErrRowNotFound && findRelationErr == nil {
+			findRelationErr = fmt.Errorf("failed to find relation users: %w", err)
+		}
+		if userRelation != nil {
+			model.User = userRelation
+		}
+		mutex.Unlock()
+	}()
+
+	wg.Wait()
+	if findRelationErr != nil {
+		return nil, findRelationErr
 	}
 
 	return &model, nil

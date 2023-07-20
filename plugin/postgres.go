@@ -75,7 +75,7 @@ func createNewPostgresTableTemplate(d *descriptorpb.DescriptorProto, state *Stat
 	var columns []string
 	for _, field := range table.Fields {
 		if !field.IsRelation {
-			columns = append(columns, field.SourceName)
+			columns = append(columns, lowerCasePlural(d.GetName())+"."+field.SourceName)
 		}
 	}
 	table.Columns = columns
@@ -105,6 +105,21 @@ type {{.Name | sToCml }}Store struct {
 type {{.Name}} struct {
 {{range .Fields}}
 	{{.Name}} {{.Type}}{{if not .IsRelation}}` + " `db:\"{{.SourceName}}\"`" + `{{end}}{{end}}
+}
+
+// SacnRow scans a row into the struct fields.
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) ScanRow(row *sql.Row) (*{{.Name}}, error) {
+	var model *{{.Name}}
+    err := row.Scan(
+        {{- range .Fields }}{{if not .IsRelation}}
+        &model.{{ .Name }},
+        {{- end }}{{- end }}
+    )
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan row: %w", err)
+	}
+
+	return model, nil
 }
 
 // TableName returns the name of the table.
@@ -156,19 +171,37 @@ func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) FindOne(conditions ...C
 		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
-	{{ if .HasRelations }}// Relations statement
+
+	{{ if .HasRelations }}
+	var wg sync.WaitGroup
+	var findRelationErr error
+	var mutex sync.Mutex
 	{{ range $element := .Fields }}
-	{{ if $element.IsRelation }}{{$element.Name | lowerCase}}RelationStore := &{{$element.Options.Relation.Store}}{db: {{$.Name | firstLetter}}.db}
-	{{ if $element.Options.Relation.Many }}{{$element.Name | lowerCase}}Relation, err := {{$element.Name | lowerCase}}RelationStore.FindMany(Where{{$element.Options.Relation.StructName }}{{$element.Options.Relation.Reference | sToCml }}Eq(model.{{$element.Options.Relation.Field | sToCml}}), Limit({{$element.Options.Relation.Limit}}))
-	if err != nil {
-		return nil, fmt.Errorf("failed to find relation {{$element.Options.Relation.TableName}}: %w", err)
-	}{{ else }}{{$element.Name | lowerCase}}Relation, err := {{$element.Name | lowerCase}}RelationStore.FindOne(Where{{$element.Options.Relation.StructName }}{{$element.Options.Relation.Reference | sToCml }}Eq(model.{{$element.Options.Relation.Field | sToCml}}))
-	if err != nil && err != ErrRowNotFound {
-		return nil, fmt.Errorf("failed to find relation {{$element.Options.Relation.TableName}}: %w", err)
-	}{{ end }}
-	if {{$element.Name | lowerCase}}Relation != nil {
-		model.{{$element.Name}} = {{$element.Name | lowerCase}}Relation
-	}{{ end }}{{ end }}{{ end }}
+	{{ if $element.IsRelation }}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		{{$element.Name | lowerCase}}RelationStore := &{{$element.Options.Relation.Store}}{db: {{$.Name | firstLetter}}.db}
+		{{ if $element.Options.Relation.Many }}
+		{{$element.Name | lowerCase}}Relation, err := {{$element.Name | lowerCase}}RelationStore.FindMany(Where{{$element.Options.Relation.StructName }}{{$element.Options.Relation.Reference | sToCml }}Eq(model.{{$element.Options.Relation.Field | sToCml}}), Limit({{$element.Options.Relation.Limit}}))
+		{{ else }}
+		{{$element.Name | lowerCase}}Relation, err := {{$element.Name | lowerCase}}RelationStore.FindOne(Where{{$element.Options.Relation.StructName }}{{$element.Options.Relation.Reference | sToCml }}Eq(model.{{$element.Options.Relation.Field | sToCml}}))
+		{{ end }}
+		mutex.Lock()
+		if err != nil && err != ErrRowNotFound && findRelationErr == nil {
+			findRelationErr = fmt.Errorf("failed to find relation {{$element.Options.Relation.TableName}}: %w", err)
+		}
+		if {{$element.Name | lowerCase}}Relation != nil {
+			model.{{$element.Name}} = {{$element.Name | lowerCase}}Relation
+		}
+		mutex.Unlock()
+	}()
+	{{ end }}{{ end }}
+	wg.Wait()
+	if findRelationErr != nil {
+		return nil, findRelationErr
+	}
+	{{ end }}
 	return &model, nil
 }
 
@@ -514,6 +547,7 @@ func (t *PostgresTable) Imports() ImportSet {
 		ImportLibPQ:   true,
 		ImportDb:      true,
 		ImportStrings: false,
+		ImportSync:    true,
 	}
 }
 

@@ -71,4 +71,5 @@ var (
 	ImportErrors   = Import("errors")
 	ImportContext  = Import("context")
 	ImportStrconv  = Import("strconv")
+	ImportSync     = Import("sync")
 )

@@ -9,7 +9,11 @@ option (structify.db) = {
   provider: "postgres"
   url_env: "DATABASE_URL"
 };
-
+/**
+  * @structify.table users
+  * @structify.comment This is a comment of User
+  * @structify.field primary_key: true, uuid: true, default: "uuid_generate_v4()"
+ */
 message User {
   string id = 1 [(structify.field) = {primary_key: true, uuid: true, default: "uuid_generate_v4()"}];
   string name = 2 [(structify.field) = {index: true}];
@@ -26,6 +30,10 @@ message User {
   };
 }
 
+/**
+  * @structify.table settings
+  * @structify.field primary_key: true, uuid: true, default: "uuid_generate_v4()"
+ */
 message Setting {
   string id = 1 [(structify.field) = {primary_key: true, uuid: true, default: "uuid_generate_v4()"}];
   string name = 2 [(structify.field) = {index: true}];
@@ -34,6 +42,10 @@ message Setting {
   string user_id = 5 [(structify.field) = {index: true, uuid: true}];
 }
 
+/**
+  * @structify.table addresses
+  * @structify.field primary_key: true, uuid: true, default: "uuid_generate_v4()"
+ */
 message Address {
   string id = 1 [(structify.field) = {primary_key: true, uuid: true, default: "uuid_generate_v4()"}];
   string street = 2;
