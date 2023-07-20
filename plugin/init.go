@@ -100,6 +100,7 @@ var ErrRowNotFound = errors.New("row not found")
 var ErrNoTransaction = errors.New("no transaction provided")
 `
 
+// BuildInitFunctionTemplate builds the init function template.
 func (p *Plugin) BuildInitFunctionTemplate() string {
 	type TemplateData struct {
 		Plugin   *Plugin
@@ -114,13 +115,13 @@ func (p *Plugin) BuildInitFunctionTemplate() string {
 		Storages: make(map[string]string),
 	}
 
+	// get the messages
 	for _, m := range getMessages(p.req) {
 		data.Messages = append(data.Messages, m.GetName())
 		data.Storages[sToLowerCamel(m.GetName())+"Store"] = sToCml(m.GetName()) + "Store"
 	}
 
 	var output bytes.Buffer
-
 	funcs := template.FuncMap{
 		"upperClientName": upperClientName,
 		"lowerClientName": lowerClientName,
@@ -128,17 +129,20 @@ func (p *Plugin) BuildInitFunctionTemplate() string {
 		"sToLowerCamel":   sToLowerCamel,
 	}
 
+	// parse the template
 	tmpl, err := template.New("goFile").Funcs(funcs).Parse(InitFunctionsTemplate)
 	if err != nil {
 		return ""
 	}
 
+	// execute the template
 	if err = tmpl.Execute(&output, data); err != nil {
 		return ""
 	}
 
 	// enable imports
-	p.imports.Enable(ImportDb, ImportLibPQ, ImportStrconv)
+	//
+	p.state.Imports.Enable(ImportDb, ImportLibPQ, ImportStrconv)
 
 	return output.String()
 }

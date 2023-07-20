@@ -123,11 +123,12 @@ type UserStore struct {
 
 // User is a struct for the "users" table.
 type User struct {
-	Id       string `db:"id"`
-	Name     string `db:"name"`
-	Age      int32  `db:"age"`
-	Email    string `db:"email"`
-	LastName string `db:"last_name"`
+	Id        string `db:"id"`
+	Name      string `db:"name"`
+	Age       int32  `db:"age"`
+	Email     string `db:"email"`
+	LastName  string `db:"last_name"`
+	Addresses []*Address
 }
 
 // TableName returns the name of the table.
@@ -142,12 +143,13 @@ func (u *UserStore) Columns() []string {
 
 // CreateTableSQL returns the SQL statement to create the table.
 func (u *UserStore) CreateTableSQL() string {
-	return `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";CREATE TABLE IF NOT EXISTS users (
+	return `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE TABLE IF NOT EXISTS users (
 id UUID PRIMARY KEY NOT NULL DEFAULT uuid_generate_v4(),
 name TEXT NOT NULL,
 age INTEGER NOT NULL,
 email TEXT UNIQUE NOT NULL,
-last_name TEXT NOT NULL);COMMENT ON TABLE users IS 'This is a comment of User';`
+last_name TEXT NOT NULL,);COMMENT ON TABLE users IS 'This is a comment of User';`
 }
 
 // FindById returns a single row by ID.
@@ -163,20 +165,15 @@ func (u *UserStore) DeleteById(id string) (int64, error) {
 // FindOne filters rows by the provided conditions and returns the first matching row.
 func (u *UserStore) FindOne(conditions ...Condition) (*User, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
-
 	query := psql.Select(u.Columns()...).From(u.TableName())
-
 	for _, condition := range conditions {
 		query = condition.Apply(query)
 	}
-
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("failed to build sql: %w", err)
 	}
-
 	row := u.db.QueryRow(sqlQuery, args...)
-
 	var model User
 	err = row.Scan(&model.Id, &model.Name, &model.Age, &model.Email, &model.LastName)
 	if err != nil {
@@ -186,11 +183,21 @@ func (u *UserStore) FindOne(conditions ...Condition) (*User, error) {
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
 
+	// Relations statement
+
+	aStore := &AddressStore{db: u.db}
+	a, err := aStore.FindMany(WhereAddressUserIdEq(model.Id))
+	if err != nil {
+		return nil, fmt.Errorf("failed to find relation addresses: %w", err)
+	}
+	if a != nil {
+		model.Addresses = a
+	}
 	return &model, nil
 }
 
 // FindMany filters rows by the provided conditions and returns matching rows.
-func (u *UserStore) FindMany(conditions ...Condition) ([]User, error) {
+func (u *UserStore) FindMany(conditions ...Condition) ([]*User, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Select(u.Columns()...).From(u.TableName())
@@ -210,14 +217,14 @@ func (u *UserStore) FindMany(conditions ...Condition) ([]User, error) {
 	}
 	defer rows.Close()
 
-	var users []User
+	var users []*User
 	for rows.Next() {
 		var model User
 		err = rows.Scan(&model.Id, &model.Name, &model.Age, &model.Email, &model.LastName)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
-		users = append(users, model)
+		users = append(users, &model)
 	}
 
 	return users, nil
@@ -322,19 +329,15 @@ func (u *UserStore) Update(ctx context.Context, id string, model *UserUpdateRequ
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Update(u.TableName())
-
 	if model.Name != nil {
 		query = query.Set("name", model.Name)
 	}
-
 	if model.Age != nil {
 		query = query.Set("age", model.Age)
 	}
-
 	if model.Email != nil {
 		query = query.Set("email", model.Email)
 	}
-
 	if model.LastName != nil {
 		query = query.Set("last_name", model.LastName)
 	}
@@ -359,19 +362,15 @@ func (u *UserStore) UpdateWithTx(ctx context.Context, tx *sql.Tx, id string, mod
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Update(u.TableName())
-
 	if model.Name != nil {
 		query = query.Set("name", model.Name)
 	}
-
 	if model.Age != nil {
 		query = query.Set("age", model.Age)
 	}
-
 	if model.Email != nil {
 		query = query.Set("email", model.Email)
 	}
-
 	if model.LastName != nil {
 		query = query.Set("last_name", model.LastName)
 	}
@@ -538,6 +537,7 @@ type Address struct {
 	City   string `db:"city"`
 	State  int32  `db:"state"`
 	Zip    int64  `db:"zip"`
+	User   *User
 	UserId string `db:"user_id"`
 }
 
@@ -553,13 +553,14 @@ func (a *AddressStore) Columns() []string {
 
 // CreateTableSQL returns the SQL statement to create the table.
 func (a *AddressStore) CreateTableSQL() string {
-	return `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";CREATE TABLE IF NOT EXISTS addresses (
-id TEXT PRIMARY KEY NOT NULL DEFAULT uuid_generate_v4(),
+	return `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE TABLE IF NOT EXISTS addresses (
+id UUID PRIMARY KEY NOT NULL DEFAULT uuid_generate_v4(),
 street TEXT NOT NULL,
 city TEXT NOT NULL,
 state INTEGER NOT NULL,
 zip BIGINT NOT NULL,
-user_id TEXT NOT NULL);`
+user_id UUID NOT NULL);`
 }
 
 // FindById returns a single row by ID.
@@ -575,20 +576,15 @@ func (a *AddressStore) DeleteById(id string) (int64, error) {
 // FindOne filters rows by the provided conditions and returns the first matching row.
 func (a *AddressStore) FindOne(conditions ...Condition) (*Address, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
-
 	query := psql.Select(a.Columns()...).From(a.TableName())
-
 	for _, condition := range conditions {
 		query = condition.Apply(query)
 	}
-
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("failed to build sql: %w", err)
 	}
-
 	row := a.db.QueryRow(sqlQuery, args...)
-
 	var model Address
 	err = row.Scan(&model.Id, &model.Street, &model.City, &model.State, &model.Zip, &model.UserId)
 	if err != nil {
@@ -598,11 +594,22 @@ func (a *AddressStore) FindOne(conditions ...Condition) (*Address, error) {
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
 
+	// Relations statement
+
+	uStore := &UserStore{db: a.db}
+	u, err := uStore.FindOne(WhereUserIdEq(model.UserId))
+	if err != nil && err != ErrRowNotFound {
+		return nil, fmt.Errorf("failed to find relation users: %w", err)
+	}
+	if u != nil {
+		model.User = u
+	}
+
 	return &model, nil
 }
 
 // FindMany filters rows by the provided conditions and returns matching rows.
-func (a *AddressStore) FindMany(conditions ...Condition) ([]Address, error) {
+func (a *AddressStore) FindMany(conditions ...Condition) ([]*Address, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Select(a.Columns()...).From(a.TableName())
@@ -622,14 +629,14 @@ func (a *AddressStore) FindMany(conditions ...Condition) ([]Address, error) {
 	}
 	defer rows.Close()
 
-	var addresses []Address
+	var addresses []*Address
 	for rows.Next() {
 		var model Address
 		err = rows.Scan(&model.Id, &model.Street, &model.City, &model.State, &model.Zip, &model.UserId)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
-		addresses = append(addresses, model)
+		addresses = append(addresses, &model)
 	}
 
 	return addresses, nil
@@ -735,23 +742,18 @@ func (a *AddressStore) Update(ctx context.Context, id string, model *AddressUpda
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Update(a.TableName())
-
 	if model.Street != nil {
 		query = query.Set("street", model.Street)
 	}
-
 	if model.City != nil {
 		query = query.Set("city", model.City)
 	}
-
 	if model.State != nil {
 		query = query.Set("state", model.State)
 	}
-
 	if model.Zip != nil {
 		query = query.Set("zip", model.Zip)
 	}
-
 	if model.UserId != nil {
 		query = query.Set("user_id", model.UserId)
 	}
@@ -776,23 +778,18 @@ func (a *AddressStore) UpdateWithTx(ctx context.Context, tx *sql.Tx, id string, 
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Update(a.TableName())
-
 	if model.Street != nil {
 		query = query.Set("street", model.Street)
 	}
-
 	if model.City != nil {
 		query = query.Set("city", model.City)
 	}
-
 	if model.State != nil {
 		query = query.Set("state", model.State)
 	}
-
 	if model.Zip != nil {
 		query = query.Set("zip", model.Zip)
 	}
-
 	if model.UserId != nil {
 		query = query.Set("user_id", model.UserId)
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	plugingo "github.com/golang/protobuf/protoc-gen-go/plugin"
+	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 // ErrUnsupportedProvider is returned when the provider is not supported.
@@ -54,7 +55,7 @@ type Plugin struct {
 
 	pathType PathType
 	provider Provider
-	imports  ImportSet
+	state    *State
 
 	Param              map[string]string
 	PackageName        string
@@ -64,13 +65,13 @@ type Plugin struct {
 // NewPlugin creates a new Plugin.
 func NewPlugin() *Plugin {
 	return &Plugin{
-		req:     &plugingo.CodeGeneratorRequest{},
-		res:     &plugingo.CodeGeneratorResponse{},
-		imports: ImportSet{},
+		req: &plugingo.CodeGeneratorRequest{},
+		res: &plugingo.CodeGeneratorResponse{},
 	}
 }
 
 // Run handles the input/output of the plugin.
+// It reads the request from stdin and writes the response to stdout.
 func (p *Plugin) Run() {
 	data, err := io.ReadAll(os.Stdin)
 	if err != nil {
@@ -81,17 +82,63 @@ func (p *Plugin) Run() {
 		log.Fatalf("Failed to unmarshal protobuf: %v", err)
 	}
 
-	p.parseCommandLineParameters(p.req.GetParameter())
-	p.fillDefaultOptions()
+	if len(p.getUserProtoFiles()) == 0 {
+		log.Fatalf("No proto file is supported: %d", len(p.getUserProtoFiles()))
+	}
 
+	// only one proto file is supported
+	if len(p.getUserProtoFiles()) > 1 {
+		log.Fatalf("Only one proto file is supported: %d", len(p.getUserProtoFiles()))
+	}
+
+	// fill default state
+	//
+	p.state = p.fillState()
+	{
+		p.FileNameWithoutExt = p.state.FileName
+		p.PackageName = p.state.PackageName
+		p.provider = p.state.Provider
+	}
+
+	// fill relations map in state struct
+	//		- field name
+	//		- reference name
+	//		- table name
+	//		- struct name
+	//		- store name
+	//		- many
+	p.state = p.fillRelation(p.state)
+
+	// parse command line parameters
+	//
+	p.parseCommandLineParameters(p.req.GetParameter())
+
+	// tables is a slice of Templater interface
+	// it contains all the tables that will be generated
 	tables, err := p.getTemplaterTables()
 	if err != nil {
 		log.Fatalf("Failed to parse protobuf: %v", err)
 	}
 
 	// fill imports
-	p.fillImports(tables)
+	//
+	// 	- import "database/sql"
+	// 	- import "github.com/lib/pq"
+	// 	- import "github.com/Masterminds/squirrel"
+	// 	- import "context"
+	// 	- import "errors"
+	// 	- import "fmt"
+	// 	- import "strings"
+	//
+	p.state.FillImports(tables)
 
+	// generate content
+	// 	- package name
+	// 	- imports
+	// 	- tables
+	// 	- conditions
+	// 	- init function
+	//
 	content := p.generateContent(tables)
 	{
 		generatedFileName := p.getGeneratedFilePath(p.req.GetFileToGenerate()[0])
@@ -101,15 +148,22 @@ func (p *Plugin) Run() {
 		})
 	}
 
+	// format Go code and marshal protobuf
+	//
 	if err := goFmt(p.res); err != nil {
 		log.Fatalf("Failed to format Go code: %v", err)
 	}
 
+	// marshal protobuf and write to stdout
+	// 	- generated file name
+	// 	- generated file content
+	//
 	data, err = proto.Marshal(p.res)
 	if err != nil {
 		log.Fatalf("Failed to marshal protobuf: %v", err)
 	}
 
+	// write to stdout
 	if _, err := os.Stdout.Write(data); err != nil {
 		log.Fatalf("Failed to write to stdout: %v", err)
 	}
@@ -132,7 +186,7 @@ func (p *Plugin) generateContent(tables []Templater) string {
 	builder.WriteString("package " + p.PackageName + "\n\n")
 
 	// write imports
-	builder.WriteString(p.imports.String())
+	builder.WriteString(p.state.Imports.String())
 	builder.WriteString(inits + "\n")
 
 	// write tables
@@ -160,18 +214,7 @@ func (p *Plugin) parseCommandLineParameters(parameter string) {
 	p.parsePathType()
 }
 
-// fillImports fills the imports based on the tables.
-func (p *Plugin) fillImports(tables []Templater) {
-	for _, t := range tables {
-		for i, v := range t.Imports() {
-			if v {
-				p.imports[i] = v
-			}
-		}
-	}
-}
-
-// parsePatmhType parses the path type from the parameters.
+// parsePathType parses the path type from the parameters.
 func (p *Plugin) parsePathType() {
 	switch p.Param["paths"] {
 	case "import":
@@ -183,22 +226,27 @@ func (p *Plugin) parsePathType() {
 	}
 }
 
-// fillDefaultOptions fills the default options based on the protobuf.
-func (p *Plugin) fillDefaultOptions() {
-	p.parseProvider()
-	p.parsePackageName()
-	p.parseFileName()
+// fillState fills the state with default values.
+func (p *Plugin) fillState() *State {
+	protoFile := p.getUserProtoFile()
+
+	return &State{
+		Provider:    p.parseProvider(),
+		PackageName: protoFile.GetPackage(),
+		FileName:    p.parseFileName(),
+		Imports:     map[Import]bool{},
+	}
 }
 
-func (p *Plugin) parseFileName() {
+func (p *Plugin) parseFileName() string {
 	fileBase := path.Base(p.req.GetFileToGenerate()[0])
 	fileExt := path.Ext(fileBase)
-	p.FileNameWithoutExt = strings.TrimSuffix(fileBase, fileExt)
+	return strings.TrimSuffix(fileBase, fileExt)
 }
 
 // parsePackageName parses the package name from the protobuf options.
 func (p *Plugin) parsePackageName() {
-	for _, f := range p.req.GetProtoFile() {
+	for _, f := range p.getUserProtoFiles() {
 		p.PackageName = f.GetPackage()
 	}
 }
@@ -219,22 +267,22 @@ func (p *Plugin) getGeneratedFilePath(sourceFilePath string) string {
 }
 
 // parseProvider parses the provider from the protobuf options.
-func (p *Plugin) parseProvider() {
-	for _, f := range p.req.GetProtoFile() {
-		opts := getDBOptions(f)
-		if opts != nil {
-			switch opts.GetProvider() {
-			case "mysql":
-				p.provider = ProviderMysql
-			case "postgres":
-				p.provider = ProviderPostgres
-			case "sqlite":
-				p.provider = ProviderSqlite
-			default:
-				p.provider = ProviderPostgres
-			}
+func (p *Plugin) parseProvider() Provider {
+	protoFile := p.getUserProtoFile()
+	opts := getDBOptions(protoFile)
+	if opts != nil {
+		switch opts.GetProvider() {
+		case "mysql":
+			return ProviderMysql
+		case "postgres":
+			return ProviderPostgres
+		case "sqlite":
+			return ProviderSqlite
+		default:
+			return ProviderPostgres
 		}
 	}
+	return ProviderPostgres
 }
 
 // getTemplaterTables parses the proto file and returns a slice of Tables.
@@ -245,8 +293,8 @@ func (p *Plugin) getTemplaterTables() ([]Templater, error) {
 		var table Templater
 		switch p.provider {
 		case ProviderPostgres:
-			p.imports.Enable(ImportErrors, ImportContext)
-			table = createNewPostgresTableTemplate(m)
+			p.state.Imports.Enable(ImportErrors, ImportContext)
+			table = createNewPostgresTableTemplate(m, p.state)
 		case ProviderMysql:
 			// todo: implement
 		default:
@@ -257,4 +305,76 @@ func (p *Plugin) getTemplaterTables() ([]Templater, error) {
 	}
 
 	return tables, nil
+}
+
+// getUserProtoFiles returns the user proto files.
+func (p *Plugin) getUserProtoFiles() []*descriptorpb.FileDescriptorProto {
+	var userProtoFiles []*descriptorpb.FileDescriptorProto
+	filesToGenerate := make(map[string]bool)
+	for _, fileName := range p.req.GetFileToGenerate() {
+		filesToGenerate[fileName] = true
+	}
+
+	for _, protoFile := range p.req.GetProtoFile() {
+		if _, ok := filesToGenerate[*protoFile.Name]; ok {
+			userProtoFiles = append(userProtoFiles, protoFile)
+		}
+	}
+
+	return userProtoFiles
+}
+
+// getUserProtoFile returns the first user proto file.
+func (p *Plugin) getUserProtoFile() *descriptorpb.FileDescriptorProto {
+	return p.getUserProtoFiles()[0]
+}
+
+// fillRelation fills the relations map in the state struct.
+func (p *Plugin) fillRelation(state *State) *State {
+	protoFile := p.getUserProtoFile()
+	state.Relations = make(map[string]*Relation)
+
+	for _, msg := range protoFile.GetMessageType() {
+		for _, field := range msg.GetField() {
+			if field.GetType() == descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
+				convertedType := convertType(field)
+
+				relation := &Relation{
+					Field:      detectField(detectStructName(convertedType)),
+					Reference:  detectReference(msg.GetName()),
+					TableName:  detectTableName(convertedType),  // Assuming msg.GetName() is the table name
+					StructName: detectStructName(convertedType), // Assuming field.GetName() is the struct name
+					Store:      detectStoreName(convertedType),  // Fill this with the proper value
+					Many:       detectMany(convertedType),       // As the field is repeated, it means there are many relations
+				}
+
+				options := getFieldOptions(field)
+				if options != nil {
+					relOptions := options.GetRelation()
+					if relOptions != nil {
+						relation.Field = relOptions.GetField()
+						relation.Reference = relOptions.GetReference()
+					}
+				}
+
+				// Add the relation to the map of relations
+				state.Relations[msg.GetName()+"::"+relation.StructName] = relation
+			}
+		}
+	}
+
+	for _, msg := range protoFile.GetMessageType() {
+		for _, field := range msg.GetField() {
+			if field.GetType() == descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
+				convertedType := convertType(field)
+				structName := detectStructName(convertedType)
+				if v, ok := state.Relations[structName+"::"+msg.GetName()]; ok {
+					state.Relations[msg.GetName()+"::"+structName].Field = v.Reference
+					state.Relations[msg.GetName()+"::"+structName].Reference = v.Field
+				}
+			}
+		}
+	}
+
+	return state
 }

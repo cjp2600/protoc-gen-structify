@@ -3,6 +3,7 @@ package plugin
 import (
 	"bytes"
 	"fmt"
+	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"text/template"
 )
 
@@ -622,7 +623,9 @@ func (p *Plugin) BuildConditionsTemplate() string {
 
 	for _, m := range getMessages(p.req) {
 		for _, f := range m.GetField() {
-			data.Messages[m.GetName()] = append(data.Messages[m.GetName()], f.GetName())
+			if *f.Type != descriptor.FieldDescriptorProto_TYPE_MESSAGE {
+				data.Messages[m.GetName()] = append(data.Messages[m.GetName()], f.GetName())
+			}
 		}
 	}
 
@@ -647,7 +650,7 @@ func (p *Plugin) BuildConditionsTemplate() string {
 	}
 
 	// enable imports
-	p.imports.Enable(ImportSquirrel, ImportFMT, ImportStrings)
+	p.state.Imports.Enable(ImportSquirrel, ImportFMT, ImportStrings)
 
 	return output.String()
 }

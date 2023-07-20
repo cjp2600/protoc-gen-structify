@@ -42,8 +42,8 @@ message StructifyFieldOptions {
 }
 
 message Relation {
-  repeated string fields = 1;
-  repeated string references = 2;
+  string field = 1;
+  string reference = 2;
 }
 
 extend google.protobuf.MethodOptions {

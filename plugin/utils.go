@@ -1,9 +1,11 @@
 package plugin
 
 import (
+	"encoding/json"
 	"fmt"
 	"go/format"
 	"html/template"
+	"log"
 	"strings"
 	"unicode"
 
@@ -169,7 +171,9 @@ func convertType(field *descriptor.FieldDescriptorProto) string {
 	case descriptorpb.FieldDescriptorProto_TYPE_GROUP:
 		typ = "error" // Group type is deprecated and not recommended.
 	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
-		typ = "struct" // This is used for nested messages and it should be handled separately.
+		parts := strings.Split(typ, ".")
+		typName := parts[len(parts)-1]
+		typ = "*" + sToCml(typName)
 	case descriptorpb.FieldDescriptorProto_TYPE_BYTES:
 		typ = "[]byte"
 	case descriptorpb.FieldDescriptorProto_TYPE_UINT32:
@@ -265,4 +269,39 @@ func upperClientName(name string) string {
 
 func lowerClientName(name string) string {
 	return fmt.Sprintf("%sDBClient", sToLowerCamel(name))
+}
+
+func dump(s interface{}) string {
+	jsonData, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		log.Fatalf("JSON marshaling failed: %s", err)
+	}
+	return string(jsonData)
+}
+
+func dumpP(s interface{}) {
+	panic(fmt.Sprintf("%+v", dump(s)))
+}
+
+// postgresType returns the postgres type for the given type.
+func detectTableName(t string) string {
+	name := strings.ReplaceAll(t, "*", "")
+	name = strings.ReplaceAll(name, "[]", "")
+	return lowerCasePlural(name)
+}
+
+func detectStoreName(t string) string {
+	name := strings.ReplaceAll(t, "*", "")
+	name = strings.ReplaceAll(name, "[]", "")
+	return sToCml(name) + "Store"
+}
+
+func detectStructName(t string) string {
+	name := strings.ReplaceAll(t, "*", "")
+	name = strings.ReplaceAll(name, "[]", "")
+	return sToCml(name)
+}
+
+func checkIsRelation(f *descriptorpb.FieldDescriptorProto) bool {
+	return *f.Type == descriptorpb.FieldDescriptorProto_TYPE_MESSAGE
 }

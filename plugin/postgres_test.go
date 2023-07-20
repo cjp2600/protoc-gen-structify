@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestGenerateCreateSQL tests the GenerateCreateSQL method.
 func TestGenerateCreateSQL(t *testing.T) {
 	testCases := []struct {
 		desc     string

@@ -10,7 +10,7 @@ import (
 )
 
 // createNewPostgresTableTemplate creates a new PostgresTable from the given descriptor.
-func createNewPostgresTableTemplate(d *descriptorpb.DescriptorProto) Templater {
+func createNewPostgresTableTemplate(d *descriptorpb.DescriptorProto, state *State) Templater {
 	table := &PostgresTable{
 		Name:      d.GetName(),
 		TableName: lowerCasePlural(d.GetName()),
@@ -30,6 +30,8 @@ func createNewPostgresTableTemplate(d *descriptorpb.DescriptorProto) Templater {
 
 		convertedType := convertType(f)
 		sourceName := f.GetName()
+		structureName := detectStructName(convertedType)
+		relKey := d.GetName() + "::" + structureName
 
 		// detect id field
 		if strings.ToLower(f.GetName()) == "id" || (options != nil && options.PrimaryKey) {
@@ -39,6 +41,7 @@ func createNewPostgresTableTemplate(d *descriptorpb.DescriptorProto) Templater {
 
 			table.IdType = convertedType
 			table.IdName = sourceName
+			table.IsIdUUID = postgresType(convertedType, options) == "UUID"
 		}
 
 		field := &Field{
@@ -46,28 +49,50 @@ func createNewPostgresTableTemplate(d *descriptorpb.DescriptorProto) Templater {
 			SourceName: sourceName,
 			Type:       convertedType,
 			DBType:     postgresType(convertedType, options),
+			IsRelation: checkIsRelation(f),
+		}
+
+		field.Options = Options{}
+		if checkIsRelation(f) {
+			table.HasRelations = true
+			if v, ok := state.Relations[relKey]; ok {
+				field.Options.Relation = v
+			}
 		}
 
 		if options != nil {
-			field.Options = Options{
-				PrimaryKey:    options.PrimaryKey,
-				Unique:        options.Unique,
-				Nullable:      options.Nullable,
-				AutoIncrement: options.AutoIncrement,
-				Default:       options.Default,
-				UUID:          options.Uuid,
-			}
+			field.Options.PrimaryKey = options.PrimaryKey
+			field.Options.Unique = options.Unique
+			field.Options.Nullable = options.Nullable
+			field.Options.AutoIncrement = options.AutoIncrement
+			field.Options.Default = options.Default
+			field.Options.UUID = options.Uuid
 		}
 
 		table.Fields = append(table.Fields, field)
 	}
 
-	table.Columns = make([]string, len(table.Fields))
-	for i, field := range table.Fields {
-		table.Columns[i] = field.SourceName
+	var columns []string
+	for _, field := range table.Fields {
+		if !field.IsRelation {
+			columns = append(columns, field.SourceName)
+		}
 	}
+	table.Columns = columns
 
 	return table
+}
+
+func detectMany(t string) bool {
+	return strings.Contains(t, "[]")
+}
+
+func detectReference(structName string) string {
+	return lowerCase(structName) + "_id"
+}
+
+func detectField(structName string) string {
+	return "id"
 }
 
 // PostgresStructTemplate is the template for the Go struct.
@@ -79,7 +104,7 @@ type {{.Name | sToCml }}Store struct {
 // {{.Name}} is a struct for the "{{.TableName}}" table.
 type {{.Name}} struct {
 {{range .Fields}}
-    {{.Name}} {{.Type}}` + " `db:\"{{.SourceName}}\"`" + `{{end}}
+	{{.Name}} {{.Type}}{{if not .IsRelation}}` + " `db:\"{{.SourceName}}\"`" + `{{end}}{{end}}
 }
 
 // TableName returns the name of the table.
@@ -114,34 +139,42 @@ func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) DeleteBy{{ .IdName  | s
 // FindOne filters rows by the provided conditions and returns the first matching row.
 func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) FindOne(conditions ...Condition) (*{{.Name}}, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
-
 	query := psql.Select({{.Name | firstLetter}}.Columns()...).From({{.Name | firstLetter}}.TableName())
-
 	for _, condition := range conditions {
 		query = condition.Apply(query)
 	}
-
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("failed to build sql: %w", err)
 	}
-
 	row := {{.Name | firstLetter}}.db.QueryRow(sqlQuery, args...)
-
 	var model {{.Name}}
-	err = row.Scan({{range .Fields}}&model.{{.Name}}, {{end}})
+	err = row.Scan({{range .Fields}}{{if not .IsRelation}}&model.{{.Name}}, {{end}}{{end}})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrRowNotFound
 		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
-
+	{{ if .HasRelations }}
+	// Relations statement
+	{{ range $element := .Fields }}
+	{{ if $element.IsRelation }}{{$element.Name | firstLetter}}Store := &{{$element.Options.Relation.Store}}{db: {{$.Name | firstLetter}}.db}
+	{{ if $element.Options.Relation.Many }}{{$element.Name | firstLetter}}, err := {{$element.Name | firstLetter}}Store.FindMany(Where{{$element.Options.Relation.StructName }}{{$element.Options.Relation.Reference | sToCml }}Eq(model.{{$element.Options.Relation.Field | sToCml}}))
+	if err != nil {
+		return nil, fmt.Errorf("failed to find relation {{$element.Options.Relation.TableName}}: %w", err)
+	}{{ else }}{{$element.Name | firstLetter}}, err := {{$element.Name | firstLetter}}Store.FindOne(Where{{$element.Options.Relation.StructName }}{{$element.Options.Relation.Reference | sToCml }}Eq(model.{{$element.Options.Relation.Field | sToCml}}))
+	if err != nil && err != ErrRowNotFound {
+		return nil, fmt.Errorf("failed to find relation {{$element.Options.Relation.TableName}}: %w", err)
+	}{{ end }}
+	if {{$element.Name | firstLetter}} != nil {
+		model.{{$element.Name}} = {{$element.Name | firstLetter}}
+	}{{ end }}{{ end }}{{ end }}
 	return &model, nil
 }
 
 // FindMany filters rows by the provided conditions and returns matching rows.
-func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) FindMany(conditions ...Condition) ([]{{.Name}}, error) {
+func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) FindMany(conditions ...Condition) ([]*{{.Name}}, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Select({{.Name | firstLetter}}.Columns()...).From({{.Name | firstLetter}}.TableName())
@@ -161,14 +194,14 @@ func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) FindMany(conditions ...
 	}
 	defer rows.Close()
 
-	var {{.Name | lowerCasePlural}} []{{.Name}}
+	var {{.Name | lowerCasePlural}} []*{{.Name}}
 	for rows.Next() {
 		var model {{.Name}}
-		err = rows.Scan({{range .Fields}}&model.{{.Name}}, {{end}})
+		err = rows.Scan({{range .Fields}}{{if not .IsRelation}}&model.{{.Name}}, {{end}}{{end}})
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
-		{{.Name | lowerCasePlural}} = append({{.Name | lowerCasePlural}}, model)
+		{{.Name | lowerCasePlural}} = append({{.Name | lowerCasePlural}}, &model)
 	}
 
 	return {{.Name | lowerCasePlural}}, nil
@@ -263,8 +296,8 @@ func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) DeleteWithTx(tx *sql.Tx
 {{if .IdType}}
 // {{.Name}}UpdateRequest is the data required to update a row.
 type {{.Name}}UpdateRequest struct {
-{{range .Fields}}{{if not (eq (.Name | sToLowerCamel) ($.IdName | sToLowerCamel) )}}
-	{{.Name}} *{{.Type}}{{end}}{{end}}
+{{- range .Fields}}{{- if and (not (eq (.Name | sToLowerCamel) ($.IdName | sToLowerCamel))) (not .IsRelation)}}
+	{{.Name}} *{{.Type}}{{- end}}{{- end}}
 }
 
 // Update updates a row with the provided data.
@@ -273,13 +306,13 @@ func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) Update(ctx context.Cont
 
 	query := psql.Update({{.Name | firstLetter}}.TableName())
 
-	{{range .Fields}}
-	{{if not .Options.PrimaryKey}}
-	if model.{{.Name}} != nil {
-		query = query.Set("{{.SourceName}}", model.{{.Name}})
-	}
-	{{end}}
-	{{end}}
+	{{- range .Fields}}
+	{{- if and (not .Options.PrimaryKey) (not .IsRelation)}}
+		if model.{{.Name}} != nil {
+			query = query.Set("{{.SourceName}}", model.{{.Name}})
+		}
+	{{- end}}
+	{{- end}}
 
 	query = query.Where(sq.Eq{"{{.IdName}}": id})
 
@@ -302,13 +335,13 @@ func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) UpdateWithTx(ctx contex
 
 	query := psql.Update({{.Name | firstLetter}}.TableName())
 
-	{{range .Fields}}
-	{{if not .Options.PrimaryKey}}
-	if model.{{.Name}} != nil {
-		query = query.Set("{{.SourceName}}", model.{{.Name}})
-	}
-	{{end}}
-	{{end}}
+	{{- range .Fields}}
+	{{- if and (not .Options.PrimaryKey) (not .IsRelation)}}
+		if model.{{.Name}} != nil {
+			query = query.Set("{{.SourceName}}", model.{{.Name}})
+		}
+	{{- end}}
+	{{- end}}
 
 	query = query.Where(sq.Eq{"{{$.IdName}}": id})
 
@@ -330,9 +363,9 @@ func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) Create(ctx context.Cont
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert({{.Name | firstLetter}}.TableName()).
-		Columns({{range .Fields}}{{if not .Options.PrimaryKey}}"{{.SourceName}}", {{end}}{{end}}).
+		Columns({{range .Fields}}{{if and (not .Options.PrimaryKey) (not .IsRelation)}}"{{.SourceName}}", {{end}}{{end}}).
 		Suffix("RETURNING \"{{.IdName}}\"").
-		Values({{range .Fields}}{{if not .Options.PrimaryKey}}model.{{.Name}}, {{end}}{{end}})
+		Values({{range .Fields}}{{if and (not .Options.PrimaryKey) (not .IsRelation)}}model.{{.Name}}, {{end}}{{end}})
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -361,9 +394,9 @@ func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) CreateWithTx(tx *sql.Tx
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert({{.Name | firstLetter}}.TableName()).
-		Columns({{range .Fields}}{{if not .Options.PrimaryKey}}"{{.SourceName}}", {{end}}{{end}}).
+		Columns({{range .Fields}}{{if and (not .Options.PrimaryKey) (not .IsRelation)}}"{{.SourceName}}", {{end}}{{end}}).
 		Suffix("RETURNING \"{{.IdName}}\"").
-		Values({{range .Fields}}{{if not .Options.PrimaryKey}}model.{{.Name}}, {{end}}{{end}})
+		Values({{range .Fields}}{{if and (not .Options.PrimaryKey) (not .IsRelation)}}model.{{.Name}}, {{end}}{{end}})
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -388,10 +421,10 @@ func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) CreateMany(ctx context.
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert({{.Name | firstLetter}}.TableName()).
-		Columns({{range .Fields}}{{if not .Options.PrimaryKey}}"{{.SourceName}}", {{end}}{{end}})
-
+		Columns({{range .Fields}}{{if and (not .Options.PrimaryKey) (not .IsRelation)}}"{{.SourceName}}", {{end}}{{end}})
+	
 	for _, model := range models {
-		query = query.Values({{range .Fields}}{{if not .Options.PrimaryKey}}model.{{.Name}}, {{end}}{{end}})
+		query = query.Values({{range .Fields}}{{if and (not .Options.PrimaryKey) (not .IsRelation)}}model.{{.Name}}, {{end}}{{end}})
 	}
 
 	query = query.Suffix("RETURNING \"{{.IdName}}\"")
@@ -427,10 +460,10 @@ func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) CreateManyWithTx(ctx co
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert({{.Name | firstLetter}}.TableName()).
-		Columns({{range .Fields}}{{if not .Options.PrimaryKey}}"{{.SourceName}}", {{end}}{{end}})
-
+		Columns({{range .Fields}}{{if and (not .Options.PrimaryKey) (not .IsRelation)}}"{{.SourceName}}", {{end}}{{end}})
+	
 	for _, model := range models {
-		query = query.Values({{range .Fields}}{{if not .Options.PrimaryKey}}model.{{.Name}}, {{end}}{{end}})
+		query = query.Values({{range .Fields}}{{if and (not .Options.PrimaryKey) (not .IsRelation)}}model.{{.Name}}, {{end}}{{end}})
 	}
 
 	query = query.Suffix("RETURNING \"{{.IdName}}\"")
@@ -464,14 +497,16 @@ func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) CreateManyWithTx(ctx co
 `
 
 type PostgresTable struct {
-	Name      string
-	TableName string
-	IdType    string
-	IdName    string
-	Fields    []*Field
-	Columns   []string
-	CreateSQL string
-	Comment   string
+	Name         string
+	TableName    string
+	IdType       string
+	IdName       string
+	IsIdUUID     bool
+	Fields       []*Field
+	Columns      []string
+	CreateSQL    string
+	Comment      string
+	HasRelations bool
 }
 
 // Imports - returns the imports for the template.
@@ -485,6 +520,11 @@ func (t *PostgresTable) Imports() ImportSet {
 
 func (t *PostgresTable) BuildTemplate() string {
 	t.CreateSQL = t.GenerateCreateSQL()
+
+	if t.IsIdUUID {
+		// Add the uuid extension to the create sql.
+		t.CreateSQL = ExtensionUUID.String() + "\n" + t.CreateSQL
+	}
 
 	var output bytes.Buffer
 
@@ -518,6 +558,7 @@ type Field struct {
 	DBType     string
 	Optional   bool
 	Options    Options
+	IsRelation bool
 }
 
 type Options struct {
@@ -527,11 +568,14 @@ type Options struct {
 	AutoIncrement bool
 	Default       string
 	UUID          bool
+	Relation      *Relation
 }
 
-const createSQLTemplate = `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";CREATE TABLE IF NOT EXISTS {{.TableName}} (
+const createSQLTemplate = `CREATE TABLE IF NOT EXISTS {{.TableName}} (
 {{- range $index, $element := .Fields}}
+{{- if not $element.IsRelation}}
 {{$element.SourceName}} {{if $element.Options.AutoIncrement}}{{$element.DBType}} SERIAL{{else}}{{$element.DBType}}{{end}}{{if $element.Options.PrimaryKey}} PRIMARY KEY{{end}}{{if $element.Options.Unique}} UNIQUE{{end}}{{if not $element.Options.Nullable}} NOT NULL{{end}}{{if $element.Options.Default}} DEFAULT {{$element.Options.Default}}{{end}}{{if not (isLast $index (len $.Fields))}},{{end}}
+{{- end}}
 {{- end}});{{if .Comment}}COMMENT ON TABLE {{.TableName}} IS '{{.Comment}}';{{end}}`
 
 // GenerateCreateSQL generates the SQL statement to create the table.
