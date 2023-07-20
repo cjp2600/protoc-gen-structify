@@ -156,19 +156,18 @@ func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) FindOne(conditions ...C
 		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
-	{{ if .HasRelations }}
-	// Relations statement
+	{{ if .HasRelations }}// Relations statement
 	{{ range $element := .Fields }}
-	{{ if $element.IsRelation }}{{$element.Name | firstLetter}}Store := &{{$element.Options.Relation.Store}}{db: {{$.Name | firstLetter}}.db}
-	{{ if $element.Options.Relation.Many }}{{$element.Name | firstLetter}}, err := {{$element.Name | firstLetter}}Store.FindMany(Where{{$element.Options.Relation.StructName }}{{$element.Options.Relation.Reference | sToCml }}Eq(model.{{$element.Options.Relation.Field | sToCml}}))
+	{{ if $element.IsRelation }}{{$element.Name | lowerCase}}RelationStore := &{{$element.Options.Relation.Store}}{db: {{$.Name | firstLetter}}.db}
+	{{ if $element.Options.Relation.Many }}{{$element.Name | lowerCase}}Relation, err := {{$element.Name | lowerCase}}RelationStore.FindMany(Where{{$element.Options.Relation.StructName }}{{$element.Options.Relation.Reference | sToCml }}Eq(model.{{$element.Options.Relation.Field | sToCml}}), Limit({{$element.Options.Relation.Limit}}))
 	if err != nil {
 		return nil, fmt.Errorf("failed to find relation {{$element.Options.Relation.TableName}}: %w", err)
-	}{{ else }}{{$element.Name | firstLetter}}, err := {{$element.Name | firstLetter}}Store.FindOne(Where{{$element.Options.Relation.StructName }}{{$element.Options.Relation.Reference | sToCml }}Eq(model.{{$element.Options.Relation.Field | sToCml}}))
+	}{{ else }}{{$element.Name | lowerCase}}Relation, err := {{$element.Name | lowerCase}}RelationStore.FindOne(Where{{$element.Options.Relation.StructName }}{{$element.Options.Relation.Reference | sToCml }}Eq(model.{{$element.Options.Relation.Field | sToCml}}))
 	if err != nil && err != ErrRowNotFound {
 		return nil, fmt.Errorf("failed to find relation {{$element.Options.Relation.TableName}}: %w", err)
 	}{{ end }}
-	if {{$element.Name | firstLetter}} != nil {
-		model.{{$element.Name}} = {{$element.Name | firstLetter}}
+	if {{$element.Name | lowerCase}}Relation != nil {
+		model.{{$element.Name}} = {{$element.Name | lowerCase}}Relation
 	}{{ end }}{{ end }}{{ end }}
 	return &model, nil
 }

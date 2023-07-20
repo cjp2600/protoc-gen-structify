@@ -17,6 +17,7 @@ type Relation struct {
 	TableName  string
 	StructName string
 	Store      string
+	Limit      uint64
 	Many       bool
 }
 

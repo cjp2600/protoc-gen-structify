@@ -346,6 +346,7 @@ func (p *Plugin) fillRelation(state *State) *State {
 					StructName: detectStructName(convertedType), // Assuming field.GetName() is the struct name
 					Store:      detectStoreName(convertedType),  // Fill this with the proper value
 					Many:       detectMany(convertedType),       // As the field is repeated, it means there are many relations
+					Limit:      100,                             // default relation limit
 				}
 
 				options := getFieldOptions(field)
@@ -354,6 +355,7 @@ func (p *Plugin) fillRelation(state *State) *State {
 					if relOptions != nil {
 						relation.Field = relOptions.GetField()
 						relation.Reference = relOptions.GetReference()
+						relation.Limit = uint64(relOptions.GetLimit())
 					}
 				}
 

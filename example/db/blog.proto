@@ -17,11 +17,21 @@ message User {
   string email = 4 [(structify.field) = {unique: true}];
   string last_name = 5;
 
-  repeated Address addresses = 6;
+  repeated Setting settings = 7;
+  repeated Address addresses = 6 [(structify.field) = {relation: { limit: 3 } }];
+
   option (structify.opts) = {
     table: "users"
     comment: "This is a comment of User"
   };
+}
+
+message Setting {
+  string id = 1 [(structify.field) = {primary_key: true, uuid: true, default: "uuid_generate_v4()"}];
+  string name = 2 [(structify.field) = {index: true}];
+  string value = 3;
+  User user = 4 [(structify.field) = {relation: { field: "user_id", reference: "id" } }];
+  string user_id = 5 [(structify.field) = {index: true, uuid: true}];
 }
 
 message Address {

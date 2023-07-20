@@ -72,6 +72,7 @@ type BlogDBClient struct {
 	db *sql.DB
 
 	addressStore *AddressStore
+	settingStore *SettingStore
 	userStore    *UserStore
 }
 
@@ -81,6 +82,7 @@ func NewBlogDBClient(db *sql.DB) *BlogDBClient {
 		db: db,
 
 		addressStore: &AddressStore{db: db},
+		settingStore: &SettingStore{db: db},
 		userStore:    &UserStore{db: db},
 	}
 }
@@ -88,6 +90,11 @@ func NewBlogDBClient(db *sql.DB) *BlogDBClient {
 // User returns the User store.
 func (c *BlogDBClient) User() *UserStore {
 	return c.userStore
+}
+
+// Setting returns the Setting store.
+func (c *BlogDBClient) Setting() *SettingStore {
+	return c.settingStore
 }
 
 // Address returns the Address store.
@@ -99,6 +106,11 @@ func (c *BlogDBClient) CreateTables() error {
 	var err error
 
 	_, err = c.db.Exec(c.userStore.CreateTableSQL())
+	if err != nil {
+		return fmt.Errorf("failed to create table: %w", err)
+	}
+
+	_, err = c.db.Exec(c.settingStore.CreateTableSQL())
 	if err != nil {
 		return fmt.Errorf("failed to create table: %w", err)
 	}
@@ -128,6 +140,7 @@ type User struct {
 	Age       int32  `db:"age"`
 	Email     string `db:"email"`
 	LastName  string `db:"last_name"`
+	Settings  []*Setting
 	Addresses []*Address
 }
 
@@ -182,16 +195,23 @@ func (u *UserStore) FindOne(conditions ...Condition) (*User, error) {
 		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
-
 	// Relations statement
 
-	aStore := &AddressStore{db: u.db}
-	a, err := aStore.FindMany(WhereAddressUserIdEq(model.Id))
+	settingsRelationStore := &SettingStore{db: u.db}
+	settingsRelation, err := settingsRelationStore.FindMany(WhereSettingUserIdEq(model.Id), Limit(100))
+	if err != nil {
+		return nil, fmt.Errorf("failed to find relation settings: %w", err)
+	}
+	if settingsRelation != nil {
+		model.Settings = settingsRelation
+	}
+	addressesRelationStore := &AddressStore{db: u.db}
+	addressesRelation, err := addressesRelationStore.FindMany(WhereAddressUserIdEq(model.Id), Limit(3))
 	if err != nil {
 		return nil, fmt.Errorf("failed to find relation addresses: %w", err)
 	}
-	if a != nil {
-		model.Addresses = a
+	if addressesRelation != nil {
+		model.Addresses = addressesRelation
 	}
 	return &model, nil
 }
@@ -526,6 +546,406 @@ func (u *UserStore) CreateManyWithTx(ctx context.Context, tx *sql.Tx, models []*
 	return ids, nil
 }
 
+type SettingStore struct {
+	db *sql.DB
+}
+
+// Setting is a struct for the "settings" table.
+type Setting struct {
+	Id     string `db:"id"`
+	Name   string `db:"name"`
+	Value  string `db:"value"`
+	User   *User
+	UserId string `db:"user_id"`
+}
+
+// TableName returns the name of the table.
+func (s *SettingStore) TableName() string {
+	return "settings"
+}
+
+// Columns returns the database columns for the table.
+func (s *SettingStore) Columns() []string {
+	return []string{"id", "name", "value", "user_id"}
+}
+
+// CreateTableSQL returns the SQL statement to create the table.
+func (s *SettingStore) CreateTableSQL() string {
+	return `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE TABLE IF NOT EXISTS settings (
+id UUID PRIMARY KEY NOT NULL DEFAULT uuid_generate_v4(),
+name TEXT NOT NULL,
+value TEXT NOT NULL,
+user_id UUID NOT NULL);`
+}
+
+// FindById returns a single row by ID.
+func (s *SettingStore) FindById(id string) (*Setting, error) {
+	return s.FindOne(WhereSettingIdEq(id))
+}
+
+// DeleteById returns a single row by ID.
+func (s *SettingStore) DeleteById(id string) (int64, error) {
+	return s.Delete(WhereSettingIdEq(id))
+}
+
+// FindOne filters rows by the provided conditions and returns the first matching row.
+func (s *SettingStore) FindOne(conditions ...Condition) (*Setting, error) {
+	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+	query := psql.Select(s.Columns()...).From(s.TableName())
+	for _, condition := range conditions {
+		query = condition.Apply(query)
+	}
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build sql: %w", err)
+	}
+	row := s.db.QueryRow(sqlQuery, args...)
+	var model Setting
+	err = row.Scan(&model.Id, &model.Name, &model.Value, &model.UserId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrRowNotFound
+		}
+		return nil, fmt.Errorf("failed to scan row: %w", err)
+	}
+	// Relations statement
+
+	userRelationStore := &UserStore{db: s.db}
+	userRelation, err := userRelationStore.FindOne(WhereUserIdEq(model.UserId))
+	if err != nil && err != ErrRowNotFound {
+		return nil, fmt.Errorf("failed to find relation users: %w", err)
+	}
+	if userRelation != nil {
+		model.User = userRelation
+	}
+
+	return &model, nil
+}
+
+// FindMany filters rows by the provided conditions and returns matching rows.
+func (s *SettingStore) FindMany(conditions ...Condition) ([]*Setting, error) {
+	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+
+	query := psql.Select(s.Columns()...).From(s.TableName())
+
+	for _, condition := range conditions {
+		query = condition.Apply(query)
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build sql: %w", err)
+	}
+
+	rows, err := s.db.Query(sqlQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute query: %w", err)
+	}
+	defer rows.Close()
+
+	var settings []*Setting
+	for rows.Next() {
+		var model Setting
+		err = rows.Scan(&model.Id, &model.Name, &model.Value, &model.UserId)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+		settings = append(settings, &model)
+	}
+
+	return settings, nil
+}
+
+// Count returns the number of rows that match the provided conditions.
+func (s *SettingStore) Count(conditions ...Condition) (int64, error) {
+	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+
+	query := psql.Select("COUNT(*)").From(s.TableName())
+
+	for _, condition := range conditions {
+		query = condition.Apply(query)
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("failed to build sql: %w", err)
+	}
+
+	row := s.db.QueryRow(sqlQuery, args...)
+
+	var count int64
+	err = row.Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to execute query: %w", err)
+	}
+
+	return count, nil
+}
+
+// Delete deletes rows that match the provided conditions.
+func (s *SettingStore) Delete(conditions ...Condition) (int64, error) {
+	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+
+	query := psql.Delete(s.TableName())
+
+	for _, condition := range conditions {
+		query = condition.ApplyDelete(query)
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("failed to build sql: %w", err)
+	}
+
+	result, err := s.db.Exec(sqlQuery, args...)
+	if err != nil {
+		return 0, fmt.Errorf("failed to execute query: %w", err)
+	}
+
+	deletedRows, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get affected rows: %w", err)
+	}
+
+	return deletedRows, nil
+}
+
+// DeleteWithTx deletes rows that match the provided conditions inside a transaction.
+func (s *SettingStore) DeleteWithTx(tx *sql.Tx, conditions ...Condition) (int64, error) {
+	if tx == nil {
+		return 0, ErrNoTransaction
+	}
+
+	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+
+	query := psql.Delete(s.TableName())
+
+	for _, condition := range conditions {
+		query = condition.ApplyDelete(query)
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("failed to build sql: %w", err)
+	}
+
+	result, err := tx.Exec(sqlQuery, args...)
+	if err != nil {
+		return 0, fmt.Errorf("failed to execute query: %w", err)
+	}
+
+	deletedRows, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get affected rows: %w", err)
+	}
+
+	return deletedRows, nil
+}
+
+// SettingUpdateRequest is the data required to update a row.
+type SettingUpdateRequest struct {
+	Name   *string
+	Value  *string
+	UserId *string
+}
+
+// Update updates a row with the provided data.
+func (s *SettingStore) Update(ctx context.Context, id string, model *SettingUpdateRequest) error {
+	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+
+	query := psql.Update(s.TableName())
+	if model.Name != nil {
+		query = query.Set("name", model.Name)
+	}
+	if model.Value != nil {
+		query = query.Set("value", model.Value)
+	}
+	if model.UserId != nil {
+		query = query.Set("user_id", model.UserId)
+	}
+
+	query = query.Where(sq.Eq{"id": id})
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build sql: %w", err)
+	}
+
+	_, err = s.db.ExecContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return fmt.Errorf("failed to execute query: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateWithTx updates a row with the provided data inside a transaction.
+func (s *SettingStore) UpdateWithTx(ctx context.Context, tx *sql.Tx, id string, model *SettingUpdateRequest) error {
+	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+
+	query := psql.Update(s.TableName())
+	if model.Name != nil {
+		query = query.Set("name", model.Name)
+	}
+	if model.Value != nil {
+		query = query.Set("value", model.Value)
+	}
+	if model.UserId != nil {
+		query = query.Set("user_id", model.UserId)
+	}
+
+	query = query.Where(sq.Eq{"id": id})
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build sql: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return fmt.Errorf("failed to execute query: %w", err)
+	}
+
+	return nil
+}
+
+// Create inserts a new row into the database.
+func (s *SettingStore) Create(ctx context.Context, model *Setting) (string, error) {
+	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+
+	query := psql.Insert(s.TableName()).
+		Columns("name", "value", "user_id").
+		Suffix("RETURNING \"id\"").
+		Values(model.Name, model.Value, model.UserId)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return "", fmt.Errorf("failed to build sql: %w", err)
+	}
+
+	row := s.db.QueryRowContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return "", fmt.Errorf("failed to execute query: %w", err)
+	}
+
+	var id string
+	if err := row.Scan(&id); err != nil {
+		return "", fmt.Errorf("failed to scan id: %w", err)
+	}
+
+	return id, nil
+}
+
+// CreateWithTx inserts a new row into the database inside a transaction.
+func (s *SettingStore) CreateWithTx(tx *sql.Tx, model *Setting) (string, error) {
+	if tx == nil {
+		return "", ErrNoTransaction
+	}
+
+	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+
+	query := psql.Insert(s.TableName()).
+		Columns("name", "value", "user_id").
+		Suffix("RETURNING \"id\"").
+		Values(model.Name, model.Value, model.UserId)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return "", fmt.Errorf("failed to build sql: %w", err)
+	}
+
+	row := tx.QueryRow(sqlQuery, args...)
+	if err != nil {
+		return "", fmt.Errorf("failed to execute query: %w", err)
+	}
+
+	var id string
+	if err := row.Scan(&id); err != nil {
+		return "", fmt.Errorf("failed to scan id: %w", err)
+	}
+
+	return id, nil
+}
+
+// CreateMany inserts multiple rows into the database.
+func (s *SettingStore) CreateMany(ctx context.Context, models []*Setting) ([]string, error) {
+	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+
+	query := psql.Insert(s.TableName()).
+		Columns("name", "value", "user_id")
+
+	for _, model := range models {
+		query = query.Values(model.Name, model.Value, model.UserId)
+	}
+
+	query = query.Suffix("RETURNING \"id\"")
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build sql: %w", err)
+	}
+
+	rows, err := s.db.QueryContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute query: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error: %w", err)
+	}
+
+	return ids, nil
+}
+
+// CreateManyWithTx inserts multiple rows into the database inside a transaction.
+func (s *SettingStore) CreateManyWithTx(ctx context.Context, tx *sql.Tx, models []*Setting) ([]string, error) {
+	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+
+	query := psql.Insert(s.TableName()).
+		Columns("name", "value", "user_id")
+
+	for _, model := range models {
+		query = query.Values(model.Name, model.Value, model.UserId)
+	}
+
+	query = query.Suffix("RETURNING \"id\"")
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build sql: %w", err)
+	}
+
+	rows, err := tx.QueryContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute query: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error: %w", err)
+	}
+
+	return ids, nil
+}
+
 type AddressStore struct {
 	db *sql.DB
 }
@@ -593,16 +1013,15 @@ func (a *AddressStore) FindOne(conditions ...Condition) (*Address, error) {
 		}
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
-
 	// Relations statement
 
-	uStore := &UserStore{db: a.db}
-	u, err := uStore.FindOne(WhereUserIdEq(model.UserId))
+	userRelationStore := &UserStore{db: a.db}
+	userRelation, err := userRelationStore.FindOne(WhereUserIdEq(model.UserId))
 	if err != nil && err != ErrRowNotFound {
 		return nil, fmt.Errorf("failed to find relation users: %w", err)
 	}
-	if u != nil {
-		model.User = u
+	if userRelation != nil {
+		model.User = userRelation
 	}
 
 	return &model, nil
@@ -1150,6 +1569,26 @@ func WhereAddressUserIdEq(value interface{}) Condition {
 	return EqualsCondition{Field: "user_id", Value: value}
 }
 
+// WhereSettingIdEq returns a condition that checks if the field equals the value.
+func WhereSettingIdEq(value interface{}) Condition {
+	return EqualsCondition{Field: "id", Value: value}
+}
+
+// WhereSettingNameEq returns a condition that checks if the field equals the value.
+func WhereSettingNameEq(value interface{}) Condition {
+	return EqualsCondition{Field: "name", Value: value}
+}
+
+// WhereSettingValueEq returns a condition that checks if the field equals the value.
+func WhereSettingValueEq(value interface{}) Condition {
+	return EqualsCondition{Field: "value", Value: value}
+}
+
+// WhereSettingUserIdEq returns a condition that checks if the field equals the value.
+func WhereSettingUserIdEq(value interface{}) Condition {
+	return EqualsCondition{Field: "user_id", Value: value}
+}
+
 // WhereUserIdEq returns a condition that checks if the field equals the value.
 func WhereUserIdEq(value interface{}) Condition {
 	return EqualsCondition{Field: "id", Value: value}
@@ -1225,6 +1664,26 @@ func WhereAddressZipNotEq(value interface{}) Condition {
 
 // WhereAddressUserIdNotEq returns a condition that checks if the field equals the value.
 func WhereAddressUserIdNotEq(value interface{}) Condition {
+	return NotEqualsCondition{Field: "user_id", Value: value}
+}
+
+// WhereSettingIdNotEq returns a condition that checks if the field equals the value.
+func WhereSettingIdNotEq(value interface{}) Condition {
+	return NotEqualsCondition{Field: "id", Value: value}
+}
+
+// WhereSettingNameNotEq returns a condition that checks if the field equals the value.
+func WhereSettingNameNotEq(value interface{}) Condition {
+	return NotEqualsCondition{Field: "name", Value: value}
+}
+
+// WhereSettingValueNotEq returns a condition that checks if the field equals the value.
+func WhereSettingValueNotEq(value interface{}) Condition {
+	return NotEqualsCondition{Field: "value", Value: value}
+}
+
+// WhereSettingUserIdNotEq returns a condition that checks if the field equals the value.
+func WhereSettingUserIdNotEq(value interface{}) Condition {
 	return NotEqualsCondition{Field: "user_id", Value: value}
 }
 
@@ -1306,6 +1765,26 @@ func WhereAddressUserIdGreaterThan(value interface{}) Condition {
 	return GreaterThanCondition{Field: "user_id", Value: value}
 }
 
+// WhereSettingIdGreaterThan returns a condition that checks if the field equals the value.
+func WhereSettingIdGreaterThan(value interface{}) Condition {
+	return GreaterThanCondition{Field: "id", Value: value}
+}
+
+// WhereSettingNameGreaterThan returns a condition that checks if the field equals the value.
+func WhereSettingNameGreaterThan(value interface{}) Condition {
+	return GreaterThanCondition{Field: "name", Value: value}
+}
+
+// WhereSettingValueGreaterThan returns a condition that checks if the field equals the value.
+func WhereSettingValueGreaterThan(value interface{}) Condition {
+	return GreaterThanCondition{Field: "value", Value: value}
+}
+
+// WhereSettingUserIdGreaterThan returns a condition that checks if the field equals the value.
+func WhereSettingUserIdGreaterThan(value interface{}) Condition {
+	return GreaterThanCondition{Field: "user_id", Value: value}
+}
+
 // WhereUserIdGreaterThan returns a condition that checks if the field equals the value.
 func WhereUserIdGreaterThan(value interface{}) Condition {
 	return GreaterThanCondition{Field: "id", Value: value}
@@ -1381,6 +1860,26 @@ func WhereAddressZipLessThan(value interface{}) Condition {
 
 // WhereAddressUserIdLessThan returns a condition that checks if the field equals the value.
 func WhereAddressUserIdLessThan(value interface{}) Condition {
+	return LessThanCondition{Field: "user_id", Value: value}
+}
+
+// WhereSettingIdLessThan returns a condition that checks if the field equals the value.
+func WhereSettingIdLessThan(value interface{}) Condition {
+	return LessThanCondition{Field: "id", Value: value}
+}
+
+// WhereSettingNameLessThan returns a condition that checks if the field equals the value.
+func WhereSettingNameLessThan(value interface{}) Condition {
+	return LessThanCondition{Field: "name", Value: value}
+}
+
+// WhereSettingValueLessThan returns a condition that checks if the field equals the value.
+func WhereSettingValueLessThan(value interface{}) Condition {
+	return LessThanCondition{Field: "value", Value: value}
+}
+
+// WhereSettingUserIdLessThan returns a condition that checks if the field equals the value.
+func WhereSettingUserIdLessThan(value interface{}) Condition {
 	return LessThanCondition{Field: "user_id", Value: value}
 }
 
@@ -1462,6 +1961,26 @@ func WhereAddressUserIdGreaterThanOrEqual(value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: "user_id", Value: value}
 }
 
+// WhereSettingIdGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereSettingIdGreaterThanOrEqual(value interface{}) Condition {
+	return GreaterThanOrEqualCondition{Field: "id", Value: value}
+}
+
+// WhereSettingNameGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereSettingNameGreaterThanOrEqual(value interface{}) Condition {
+	return GreaterThanOrEqualCondition{Field: "name", Value: value}
+}
+
+// WhereSettingValueGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereSettingValueGreaterThanOrEqual(value interface{}) Condition {
+	return GreaterThanOrEqualCondition{Field: "value", Value: value}
+}
+
+// WhereSettingUserIdGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereSettingUserIdGreaterThanOrEqual(value interface{}) Condition {
+	return GreaterThanOrEqualCondition{Field: "user_id", Value: value}
+}
+
 // WhereUserIdGreaterThanOrEqual returns a condition that checks if the field equals the value.
 func WhereUserIdGreaterThanOrEqual(value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: "id", Value: value}
@@ -1537,6 +2056,26 @@ func WhereAddressZipLessThanOrEqual(value interface{}) Condition {
 
 // WhereAddressUserIdLessThanOrEqual returns a condition that checks if the field equals the value.
 func WhereAddressUserIdLessThanOrEqual(value interface{}) Condition {
+	return LessThanOrEqualCondition{Field: "user_id", Value: value}
+}
+
+// WhereSettingIdLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereSettingIdLessThanOrEqual(value interface{}) Condition {
+	return LessThanOrEqualCondition{Field: "id", Value: value}
+}
+
+// WhereSettingNameLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereSettingNameLessThanOrEqual(value interface{}) Condition {
+	return LessThanOrEqualCondition{Field: "name", Value: value}
+}
+
+// WhereSettingValueLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereSettingValueLessThanOrEqual(value interface{}) Condition {
+	return LessThanOrEqualCondition{Field: "value", Value: value}
+}
+
+// WhereSettingUserIdLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereSettingUserIdLessThanOrEqual(value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: "user_id", Value: value}
 }
 
@@ -1618,6 +2157,26 @@ func WhereAddressUserIdLike(value interface{}) Condition {
 	return LikeCondition{Field: "user_id", Value: value}
 }
 
+// WhereSettingIdLike returns a condition that checks if the field equals the value.
+func WhereSettingIdLike(value interface{}) Condition {
+	return LikeCondition{Field: "id", Value: value}
+}
+
+// WhereSettingNameLike returns a condition that checks if the field equals the value.
+func WhereSettingNameLike(value interface{}) Condition {
+	return LikeCondition{Field: "name", Value: value}
+}
+
+// WhereSettingValueLike returns a condition that checks if the field equals the value.
+func WhereSettingValueLike(value interface{}) Condition {
+	return LikeCondition{Field: "value", Value: value}
+}
+
+// WhereSettingUserIdLike returns a condition that checks if the field equals the value.
+func WhereSettingUserIdLike(value interface{}) Condition {
+	return LikeCondition{Field: "user_id", Value: value}
+}
+
 // WhereUserIdLike returns a condition that checks if the field equals the value.
 func WhereUserIdLike(value interface{}) Condition {
 	return LikeCondition{Field: "id", Value: value}
@@ -1693,6 +2252,26 @@ func WhereAddressZipNotLike(value interface{}) Condition {
 
 // WhereAddressUserIdNotLike returns a condition that checks if the field equals the value.
 func WhereAddressUserIdNotLike(value interface{}) Condition {
+	return NotLikeCondition{Field: "user_id", Value: value}
+}
+
+// WhereSettingIdNotLike returns a condition that checks if the field equals the value.
+func WhereSettingIdNotLike(value interface{}) Condition {
+	return NotLikeCondition{Field: "id", Value: value}
+}
+
+// WhereSettingNameNotLike returns a condition that checks if the field equals the value.
+func WhereSettingNameNotLike(value interface{}) Condition {
+	return NotLikeCondition{Field: "name", Value: value}
+}
+
+// WhereSettingValueNotLike returns a condition that checks if the field equals the value.
+func WhereSettingValueNotLike(value interface{}) Condition {
+	return NotLikeCondition{Field: "value", Value: value}
+}
+
+// WhereSettingUserIdNotLike returns a condition that checks if the field equals the value.
+func WhereSettingUserIdNotLike(value interface{}) Condition {
 	return NotLikeCondition{Field: "user_id", Value: value}
 }
 
@@ -1773,6 +2352,26 @@ func WhereAddressUserIdIsNull() Condition {
 	return IsNullCondition{Field: "user_id"}
 }
 
+// WhereSettingIdIsNull returns a condition that checks if the field is null.
+func WhereSettingIdIsNull() Condition {
+	return IsNullCondition{Field: "id"}
+}
+
+// WhereSettingNameIsNull returns a condition that checks if the field is null.
+func WhereSettingNameIsNull() Condition {
+	return IsNullCondition{Field: "name"}
+}
+
+// WhereSettingValueIsNull returns a condition that checks if the field is null.
+func WhereSettingValueIsNull() Condition {
+	return IsNullCondition{Field: "value"}
+}
+
+// WhereSettingUserIdIsNull returns a condition that checks if the field is null.
+func WhereSettingUserIdIsNull() Condition {
+	return IsNullCondition{Field: "user_id"}
+}
+
 // WhereUserIdIsNull returns a condition that checks if the field is null.
 func WhereUserIdIsNull() Condition {
 	return IsNullCondition{Field: "id"}
@@ -1847,6 +2446,26 @@ func WhereAddressZipIsNotNull() Condition {
 
 // WhereAddressUserIdIsNotNull returns a condition that checks if the field is not null.
 func WhereAddressUserIdIsNotNull() Condition {
+	return IsNotNullCondition{Field: "user_id"}
+}
+
+// WhereSettingIdIsNotNull returns a condition that checks if the field is not null.
+func WhereSettingIdIsNotNull() Condition {
+	return IsNotNullCondition{Field: "id"}
+}
+
+// WhereSettingNameIsNotNull returns a condition that checks if the field is not null.
+func WhereSettingNameIsNotNull() Condition {
+	return IsNotNullCondition{Field: "name"}
+}
+
+// WhereSettingValueIsNotNull returns a condition that checks if the field is not null.
+func WhereSettingValueIsNotNull() Condition {
+	return IsNotNullCondition{Field: "value"}
+}
+
+// WhereSettingUserIdIsNotNull returns a condition that checks if the field is not null.
+func WhereSettingUserIdIsNotNull() Condition {
 	return IsNotNullCondition{Field: "user_id"}
 }
 
@@ -1928,6 +2547,26 @@ func WhereAddressUserIdIn(values ...interface{}) Condition {
 	return InCondition{Field: "user_id", Values: values}
 }
 
+// WhereSettingIdIn returns a condition that checks if the field is in the given values.
+func WhereSettingIdIn(values ...interface{}) Condition {
+	return InCondition{Field: "id", Values: values}
+}
+
+// WhereSettingNameIn returns a condition that checks if the field is in the given values.
+func WhereSettingNameIn(values ...interface{}) Condition {
+	return InCondition{Field: "name", Values: values}
+}
+
+// WhereSettingValueIn returns a condition that checks if the field is in the given values.
+func WhereSettingValueIn(values ...interface{}) Condition {
+	return InCondition{Field: "value", Values: values}
+}
+
+// WhereSettingUserIdIn returns a condition that checks if the field is in the given values.
+func WhereSettingUserIdIn(values ...interface{}) Condition {
+	return InCondition{Field: "user_id", Values: values}
+}
+
 // WhereUserIdIn returns a condition that checks if the field is in the given values.
 func WhereUserIdIn(values ...interface{}) Condition {
 	return InCondition{Field: "id", Values: values}
@@ -2003,6 +2642,26 @@ func WhereAddressZipNotIn(values ...interface{}) Condition {
 
 // WhereAddressUserIdNotIn returns a condition that checks if the field is not in the given values.
 func WhereAddressUserIdNotIn(values ...interface{}) Condition {
+	return NotInCondition{Field: "user_id", Values: values}
+}
+
+// WhereSettingIdNotIn returns a condition that checks if the field is not in the given values.
+func WhereSettingIdNotIn(values ...interface{}) Condition {
+	return NotInCondition{Field: "id", Values: values}
+}
+
+// WhereSettingNameNotIn returns a condition that checks if the field is not in the given values.
+func WhereSettingNameNotIn(values ...interface{}) Condition {
+	return NotInCondition{Field: "name", Values: values}
+}
+
+// WhereSettingValueNotIn returns a condition that checks if the field is not in the given values.
+func WhereSettingValueNotIn(values ...interface{}) Condition {
+	return NotInCondition{Field: "value", Values: values}
+}
+
+// WhereSettingUserIdNotIn returns a condition that checks if the field is not in the given values.
+func WhereSettingUserIdNotIn(values ...interface{}) Condition {
 	return NotInCondition{Field: "user_id", Values: values}
 }
 
@@ -2085,6 +2744,26 @@ func WhereAddressUserIdBetween(from, to interface{}) Condition {
 	return BetweenCondition{Field: "user_id", From: from, To: to}
 }
 
+// WhereSettingIdBetween returns a condition that checks if the field is between the given values.
+func WhereSettingIdBetween(from, to interface{}) Condition {
+	return BetweenCondition{Field: "id", From: from, To: to}
+}
+
+// WhereSettingNameBetween returns a condition that checks if the field is between the given values.
+func WhereSettingNameBetween(from, to interface{}) Condition {
+	return BetweenCondition{Field: "name", From: from, To: to}
+}
+
+// WhereSettingValueBetween returns a condition that checks if the field is between the given values.
+func WhereSettingValueBetween(from, to interface{}) Condition {
+	return BetweenCondition{Field: "value", From: from, To: to}
+}
+
+// WhereSettingUserIdBetween returns a condition that checks if the field is between the given values.
+func WhereSettingUserIdBetween(from, to interface{}) Condition {
+	return BetweenCondition{Field: "user_id", From: from, To: to}
+}
+
 // WhereUserIdBetween returns a condition that checks if the field is between the given values.
 func WhereUserIdBetween(from, to interface{}) Condition {
 	return BetweenCondition{Field: "id", From: from, To: to}
@@ -2162,6 +2841,26 @@ func WhereAddressZipOrderBy(asc bool) Condition {
 
 // WhereAddressUserIdOrderBy returns a condition that orders the query by the given column.
 func WhereAddressUserIdOrderBy(asc bool) Condition {
+	return OrderCondition{Column: "user_id", Asc: asc}
+}
+
+// WhereSettingIdOrderBy returns a condition that orders the query by the given column.
+func WhereSettingIdOrderBy(asc bool) Condition {
+	return OrderCondition{Column: "id", Asc: asc}
+}
+
+// WhereSettingNameOrderBy returns a condition that orders the query by the given column.
+func WhereSettingNameOrderBy(asc bool) Condition {
+	return OrderCondition{Column: "name", Asc: asc}
+}
+
+// WhereSettingValueOrderBy returns a condition that orders the query by the given column.
+func WhereSettingValueOrderBy(asc bool) Condition {
+	return OrderCondition{Column: "value", Asc: asc}
+}
+
+// WhereSettingUserIdOrderBy returns a condition that orders the query by the given column.
+func WhereSettingUserIdOrderBy(asc bool) Condition {
 	return OrderCondition{Column: "user_id", Asc: asc}
 }
 
