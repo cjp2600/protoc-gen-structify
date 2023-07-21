@@ -9,21 +9,47 @@ import (
 )
 
 func main() {
-	db, err := store.DBConnect("localhost", 5432, "test", "test", "testdb", store.WithSSLMode("disable"))
+	client, err := connect()
 	if err != nil {
 		log.Fatalf("failed to connect to database: %s", err)
 	}
-	defer db.Close()
 
-	client := store.NewBlogDBClient(db)
-	userStore := client.User()
+	// migrate database
+	if err := migrate(client); err != nil {
+		log.Fatalf("failed to migrate database: %s", err)
+	}
 
-	users, err := userStore.FindOne()
+	var userStore = client.User() // UserStore is a generated struct from the User table
+
+	// get all users from the database where age is between 0 and 10 and between 20 and 30
+	// and order by created_at in ascending order
+	users, err := userStore.FindMany(
+		store.Or(
+			store.WhereUserAgeBetween(0, 10),
+			store.WhereUserAgeBetween(20, 30),
+		),
+		store.Limit(10),
+		store.WhereUserCreatedAtOrderBy(true),
+	)
 	if err != nil {
 		log.Fatalf("failed to find users: %s", err)
 	}
 
 	fmt.Println(dump(users))
+}
+
+// connect is a helper function to connect to the database.
+func connect() (*store.BlogDBClient, error) {
+	db, err := store.DBConnect("localhost", 5432, "test", "test", "testdb", store.WithSSLMode("disable"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+	return store.NewBlogDBClient(db), nil
+}
+
+// migrate is a helper function to migrate the database.
+func migrate(client *store.BlogDBClient) error {
+	return client.CreateTables()
 }
 
 // dump is a helper function to print structs as JSON.
