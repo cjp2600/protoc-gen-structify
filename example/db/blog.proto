@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 import "github.com/cjp2600/structify/plugin/options/structify.proto";
+import "google/protobuf/timestamp.proto";
 
 package db;
 
@@ -23,6 +24,9 @@ message User {
 
   repeated Setting settings = 7;
   repeated Address addresses = 6 [(structify.field) = {relation: { limit: 3 } }];
+
+  google.protobuf.Timestamp created_at = 8 [(structify.field) = {default: "now()"}];
+  google.protobuf.Timestamp updated_at = 9;
 
   option (structify.opts) = {
     table: "users"
@@ -54,4 +58,7 @@ message Address {
   int64 zip = 5;
   User user = 6 [(structify.field) = {relation: { field: "user_id", reference: "id" } }];
   string user_id = 7 [(structify.field) = {index: true, uuid: true}];
+
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
 }

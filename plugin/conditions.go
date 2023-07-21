@@ -3,7 +3,6 @@ package plugin
 import (
 	"bytes"
 	"fmt"
-	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"text/template"
 )
 
@@ -185,9 +184,9 @@ func WhereEq(field string, value interface{}) Condition {
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// Where{{ $msg }}{{ $field | sToCml }}Eq returns a condition that checks if the field equals the value.
-    func Where{{ $msg }}{{ $field | sToCml }}Eq(value interface{}) Condition {
-      return EqualsCondition{Field: "{{ $field }}", Value: value}
+	// Where{{ $msg }}{{ $field.Name | sToCml }}Eq returns a condition that checks if the field equals the value.
+    func Where{{ $msg }}{{ $field.Name | sToCml }}Eq(value interface{}) Condition {
+      return EqualsCondition{Field: "{{ $field.Name }}", Value: value}
     }
   {{ end }}
 {{ end }}
@@ -217,9 +216,9 @@ func WhereNotEq(field string, value interface{}) Condition {
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// Where{{ $msg }}{{ $field | sToCml }}NotEq returns a condition that checks if the field equals the value.
-	func Where{{ $msg }}{{ $field | sToCml }}NotEq(value interface{}) Condition {
-	  return NotEqualsCondition{Field: "{{ $field }}", Value: value}
+	// Where{{ $msg }}{{ $field.Name | sToCml }}NotEq returns a condition that checks if the field equals the value.
+	func Where{{ $msg }}{{ $field.Name | sToCml }}NotEq(value interface{}) Condition {
+	  return NotEqualsCondition{Field: "{{ $field.Name }}", Value: value}
 	}
   {{ end }}
 {{ end }}
@@ -249,9 +248,9 @@ func WhereGreaterThan(field string, value interface{}) Condition {
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// Where{{ $msg }}{{ $field | sToCml }}GreaterThan returns a condition that checks if the field equals the value.
-	func Where{{ $msg }}{{ $field | sToCml }}GreaterThan(value interface{}) Condition {
-	  return GreaterThanCondition{Field: "{{ $field }}", Value: value}
+	// Where{{ $msg }}{{ $field.Name | sToCml }}GreaterThan returns a condition that checks if the field equals the value.
+	func Where{{ $msg }}{{ $field.Name | sToCml }}GreaterThan(value interface{}) Condition {
+	  return GreaterThanCondition{Field: "{{ $field.Name }}", Value: value}
 	}
   {{ end }}
 {{ end }}
@@ -281,9 +280,9 @@ func WhereLessThan(field string, value interface{}) Condition {
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// Where{{ $msg }}{{ $field | sToCml }}LessThan returns a condition that checks if the field equals the value.
-	func Where{{ $msg }}{{ $field | sToCml }}LessThan(value interface{}) Condition {
-	  return LessThanCondition{Field: "{{ $field }}", Value: value}
+	// Where{{ $msg }}{{ $field.Name | sToCml }}LessThan returns a condition that checks if the field equals the value.
+	func Where{{ $msg }}{{ $field.Name | sToCml }}LessThan(value interface{}) Condition {
+	  return LessThanCondition{Field: "{{ $field.Name }}", Value: value}
 	}
   {{ end }}
 {{ end }}
@@ -313,9 +312,9 @@ func WhereGreaterThanOrEqual(field string, value interface{}) Condition {
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// Where{{ $msg }}{{ $field | sToCml }}GreaterThanOrEqual returns a condition that checks if the field equals the value.
-	func Where{{ $msg }}{{ $field | sToCml }}GreaterThanOrEqual(value interface{}) Condition {
-	  return GreaterThanOrEqualCondition{Field: "{{ $field }}", Value: value}
+	// Where{{ $msg }}{{ $field.Name | sToCml }}GreaterThanOrEqual returns a condition that checks if the field equals the value.
+	func Where{{ $msg }}{{ $field.Name | sToCml }}GreaterThanOrEqual(value interface{}) Condition {
+	  return GreaterThanOrEqualCondition{Field: "{{ $field.Name }}", Value: value}
 	}
   {{ end }}
 {{ end }}
@@ -345,9 +344,9 @@ func WhereLessThanOrEqual(field string, value interface{}) Condition {
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// Where{{ $msg }}{{ $field | sToCml }}LessThanOrEqual returns a condition that checks if the field equals the value.
-	func Where{{ $msg }}{{ $field | sToCml }}LessThanOrEqual(value interface{}) Condition {
-	  return LessThanOrEqualCondition{Field: "{{ $field }}", Value: value}
+	// Where{{ $msg }}{{ $field.Name | sToCml }}LessThanOrEqual returns a condition that checks if the field equals the value.
+	func Where{{ $msg }}{{ $field.Name | sToCml }}LessThanOrEqual(value interface{}) Condition {
+	  return LessThanOrEqualCondition{Field: "{{ $field.Name }}", Value: value}
 	}
   {{ end }}
 {{ end }}
@@ -377,9 +376,9 @@ func WhereLike(field string, value interface{}) Condition {
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// Where{{ $msg }}{{ $field | sToCml }}Like returns a condition that checks if the field equals the value.
-	func Where{{ $msg }}{{ $field | sToCml }}Like(value interface{}) Condition {
-	  return LikeCondition{Field: "{{ $field }}", Value: value}
+	// Where{{ $msg }}{{ $field.Name | sToCml }}Like returns a condition that checks if the field equals the value.
+	func Where{{ $msg }}{{ $field.Name | sToCml }}Like(value interface{}) Condition {
+	  return LikeCondition{Field: "{{ $field.Name }}", Value: value}
 	}
   {{ end }}
 {{ end }}
@@ -409,9 +408,9 @@ func WhereNotLike(field string, value interface{}) Condition {
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// Where{{ $msg }}{{ $field | sToCml }}NotLike returns a condition that checks if the field equals the value.
-	func Where{{ $msg }}{{ $field | sToCml }}NotLike(value interface{}) Condition {
-	  return NotLikeCondition{Field: "{{ $field }}", Value: value}
+	// Where{{ $msg }}{{ $field.Name | sToCml }}NotLike returns a condition that checks if the field equals the value.
+	func Where{{ $msg }}{{ $field.Name | sToCml }}NotLike(value interface{}) Condition {
+	  return NotLikeCondition{Field: "{{ $field.Name }}", Value: value}
 	}
   {{ end }}
 {{ end }}
@@ -440,9 +439,9 @@ func WhereIsNull(field string) Condition {
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// Where{{ $msg }}{{ $field | sToCml }}IsNull returns a condition that checks if the field is null.
-	func Where{{ $msg }}{{ $field | sToCml }}IsNull() Condition {
-	  return IsNullCondition{Field: "{{ $field }}"}
+	// Where{{ $msg }}{{ $field.Name | sToCml }}IsNull returns a condition that checks if the field is null.
+	func Where{{ $msg }}{{ $field.Name | sToCml }}IsNull() Condition {
+	  return IsNullCondition{Field: "{{ $field.Name }}"}
 	}
   {{ end }}
 {{ end }}
@@ -471,9 +470,9 @@ func WhereIsNotNull(field string) Condition {
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// Where{{ $msg }}{{ $field | sToCml }}IsNotNull returns a condition that checks if the field is not null.
-	func Where{{ $msg }}{{ $field | sToCml }}IsNotNull() Condition {
-	  return IsNotNullCondition{Field: "{{ $field }}"}
+	// Where{{ $msg }}{{ $field.Name | sToCml }}IsNotNull returns a condition that checks if the field is not null.
+	func Where{{ $msg }}{{ $field.Name | sToCml }}IsNotNull() Condition {
+	  return IsNotNullCondition{Field: "{{ $field.Name }}"}
 	}
   {{ end }}
 {{ end }}
@@ -503,9 +502,9 @@ func WhereIn(field string, values ...interface{}) Condition {
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// Where{{ $msg }}{{ $field | sToCml }}In returns a condition that checks if the field is in the given values.
-	func Where{{ $msg }}{{ $field | sToCml }}In(values ...interface{}) Condition {
-	  return InCondition{Field: "{{ $field }}", Values: values}
+	// Where{{ $msg }}{{ $field.Name | sToCml }}In returns a condition that checks if the field is in the given values.
+	func Where{{ $msg }}{{ $field.Name | sToCml }}In(values ...interface{}) Condition {
+	  return InCondition{Field: "{{ $field.Name }}", Values: values}
 	}
   {{ end }}
 {{ end }}
@@ -535,9 +534,9 @@ func WhereNotIn(field string, values ...interface{}) Condition {
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// Where{{ $msg }}{{ $field | sToCml }}NotIn returns a condition that checks if the field is not in the given values.
-	func Where{{ $msg }}{{ $field | sToCml }}NotIn(values ...interface{}) Condition {
-	  return NotInCondition{Field: "{{ $field }}", Values: values}
+	// Where{{ $msg }}{{ $field.Name | sToCml }}NotIn returns a condition that checks if the field is not in the given values.
+	func Where{{ $msg }}{{ $field.Name | sToCml }}NotIn(values ...interface{}) Condition {
+	  return NotInCondition{Field: "{{ $field.Name }}", Values: values}
 	}
   {{ end }}
 {{ end }}
@@ -568,9 +567,9 @@ func WhereBetween(field string, from, to interface{}) Condition {
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// Where{{ $msg }}{{ $field | sToCml }}Between returns a condition that checks if the field is between the given values.
-	func Where{{ $msg }}{{ $field | sToCml }}Between(from, to interface{}) Condition {
-	  return BetweenCondition{Field: "{{ $field }}", From: from, To: to}
+	// Where{{ $msg }}{{ $field.Name | sToCml }}Between returns a condition that checks if the field is between the given values.
+	func Where{{ $msg }}{{ $field.Name | sToCml }}Between(from, to interface{}) Condition {
+	  return BetweenCondition{Field: "{{ $field.Name }}", From: from, To: to}
 	}
   {{ end }}
 {{ end }}
@@ -602,29 +601,185 @@ func (c OrderCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 
 {{ range $msg, $fields := .Messages }}
   {{ range $field := $fields }}
-	// Where{{ $msg }}{{ $field | sToCml }}OrderBy returns a condition that orders the query by the given column.
-	func Where{{ $msg }}{{ $field | sToCml }}OrderBy(asc bool) Condition {
-	  return OrderCondition{Column: "{{ $field }}", Asc: asc}
+	// Where{{ $msg }}{{ $field.Name | sToCml }}OrderBy returns a condition that orders the query by the given column.
+	func Where{{ $msg }}{{ $field.Name | sToCml }}OrderBy(asc bool) Condition {
+	  return OrderCondition{Column: "{{ $field.Name }}", Asc: asc}
 	}
   {{ end }}
 {{ end }}
+
+// --------------------------------
+
+// DateAfterCondition represents the '>' condition for dates.
+type DateAfterCondition struct {
+	Field string
+	Date  time.Time
+}
+
+// Apply applies the condition to the query.
+func (c DateAfterCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s > $1", c.Field), c.Date))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c DateAfterCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s > $1", c.Field), c.Date))
+}
+
+// WhereDateAfter returns a condition that checks if the field is after the given date.
+func WhereDateAfter(field string, date time.Time) Condition {
+	return DateAfterCondition{Field: field, Date: date}
+}
+
+// DateBeforeCondition represents the '<' condition for dates.
+type DateBeforeCondition struct {
+	Field string
+	Date  time.Time
+}
+
+// Apply applies the condition to the query.
+func (c DateBeforeCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s < $1", c.Field), c.Date))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c DateBeforeCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s < $1", c.Field), c.Date))
+}
+
+// WhereDateBefore returns a condition that checks if the field is before the given date.
+func WhereDateBefore(field string, date time.Time) Condition {
+	return DateBeforeCondition{Field: field, Date: date}
+}
+
+{{ range $msg, $fields := .Messages }}
+  {{ range $field := $fields }}
+	{{ if or (eq $field.Type "time.Time") (eq $field.Type "*time.Time") }}
+		// Where{{ $msg }}{{ $field.Name | sToCml }}After returns a condition that checks if the field is after the given date.
+		func Where{{ $msg }}{{ $field.Name | sToCml }}After(date time.Time) Condition {
+			return DateAfterCondition{Field: "{{ $field.Name }}", Date: date}
+		}
+		// Where{{ $msg }}{{ $field.Name | sToCml }}Before returns a condition that checks if the field is before the given date.
+		func Where{{ $msg }}{{ $field.Name | sToCml }}Before(date time.Time) Condition {
+			return DateBeforeCondition{Field: "{{ $field.Name }}", Date: date}
+		}
+	{{ end }}
+  {{ end }}
+{{ end }}
+
+// --------------------------------
+// JSON
+// --------------------------------
+
+// JSONExistsCondition	exists condition.
+type JSONExistsCondition struct {
+	Field string
+	Key   string
+}
+
+// Apply applies the condition to the query.
+func (c JSONExistsCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s -> '%s' IS NOT NULL", c.Field, c.Key)))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c JSONExistsCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s -> '%s' IS NOT NULL", c.Field, c.Key)))
+}
+
+// JSONEqualsCondition equals condition.
+type JSONEqualsCondition struct {
+	Field string
+	Key   string
+	Value interface{}
+}
+
+// Apply applies the condition to the query.
+func (c JSONEqualsCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s ->> '%s' = ?", c.Field, c.Key), c.Value))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c JSONEqualsCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s ->> '%s' = ?", c.Field, c.Key), c.Value))
+}
+
+// JSONContainsCondition contains condition.
+type JSONContainsCondition struct {
+	Field string
+	Value string // This should be a JSON string
+}
+
+// Apply applies the condition to the query.
+func (c JSONContainsCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s @> ?", c.Field), c.Value))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c JSONContainsCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s @> ?", c.Field), c.Value))
+}
+
+// JSONContainedInCondition contained in condition.
+type JSONContainedInCondition struct {
+	Field string
+	Value string // This should be a JSON string
+}
+
+// Apply applies the condition to the query.
+func (c JSONContainedInCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s <@ ?", c.Field), c.Value))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c JSONContainedInCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s <@ ?", c.Field), c.Value))
+}
+
+// WhereJSONExists returns a condition that checks if the JSON field contains the given key.
+func WhereJSONExists(field string, key string) Condition {
+	return JSONExistsCondition{Field: field, Key: key}
+}
+
+// WhereJSONEquals returns a condition that checks if the JSON field's key equals to the given value.
+func WhereJSONEquals(field string, key string, value interface{}) Condition {
+	return JSONEqualsCondition{Field: field, Key: key, Value: value}
+}
+
+// WhereJSONContains returns a condition that checks if the JSON field contains the given JSON value.
+func WhereJSONContains(field string, value string) Condition {
+	return JSONContainsCondition{Field: field, Value: value}
+}
+
+// WhereJSONContainedIn returns a condition that checks if the JSON field is contained in the given JSON value.
+func WhereJSONContainedIn(field string, value string) Condition {
+	return JSONContainedInCondition{Field: field, Value: value}
+}
 `
 
 func (p *Plugin) BuildConditionsTemplate() string {
+	type field struct {
+		Name string
+		Type string
+	}
+
 	type TemplateData struct {
 		Plugin   *Plugin
-		Messages map[string][]string
+		Messages map[string][]field
 	}
 
 	data := TemplateData{
 		Plugin:   p,
-		Messages: map[string][]string{},
+		Messages: make(map[string][]field),
 	}
 
 	for _, m := range getMessages(p.req) {
 		for _, f := range m.GetField() {
-			if *f.Type != descriptor.FieldDescriptorProto_TYPE_MESSAGE {
-				data.Messages[m.GetName()] = append(data.Messages[m.GetName()], f.GetName())
+			if !checkIsRelation(f) {
+				data.Messages[m.GetName()] = append(data.Messages[m.GetName()], field{
+					Name: f.GetName(),
+					Type: convertType(f),
+				})
 			}
 		}
 	}

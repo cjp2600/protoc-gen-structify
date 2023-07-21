@@ -72,4 +72,5 @@ var (
 	ImportContext  = Import("context")
 	ImportStrconv  = Import("strconv")
 	ImportSync     = Import("sync")
+	ImportTime     = Import("time")
 )

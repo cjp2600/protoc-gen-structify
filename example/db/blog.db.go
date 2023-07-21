@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // BlogDBClientOptions are the options for the BlogDBClient.
@@ -143,6 +144,8 @@ type User struct {
 	LastName  string `db:"last_name"`
 	Settings  []*Setting
 	Addresses []*Address
+	CreatedAt time.Time `db:"created_at"`
+	UpdatedAt time.Time `db:"updated_at"`
 }
 
 // SacnRow scans a row into the struct fields.
@@ -154,6 +157,8 @@ func (u *UserStore) ScanRow(row *sql.Row) (*User, error) {
 		&model.Age,
 		&model.Email,
 		&model.LastName,
+		&model.CreatedAt,
+		&model.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan row: %w", err)
@@ -169,7 +174,7 @@ func (u *UserStore) TableName() string {
 
 // Columns returns the database columns for the table.
 func (u *UserStore) Columns() []string {
-	return []string{"users.id", "users.name", "users.age", "users.email", "users.last_name"}
+	return []string{"users.id", "users.name", "users.age", "users.email", "users.last_name", "users.created_at", "users.updated_at"}
 }
 
 // CreateTableSQL returns the SQL statement to create the table.
@@ -180,7 +185,9 @@ id UUID PRIMARY KEY NOT NULL DEFAULT uuid_generate_v4(),
 name TEXT NOT NULL,
 age INTEGER NOT NULL,
 email TEXT UNIQUE NOT NULL,
-last_name TEXT NOT NULL,);COMMENT ON TABLE users IS 'This is a comment of User';`
+last_name TEXT NOT NULL,
+created_at TIMESTAMP NOT NULL DEFAULT now(),
+updated_at TIMESTAMP NOT NULL);COMMENT ON TABLE users IS 'This is a comment of User';`
 }
 
 // FindById returns a single row by ID.
@@ -206,7 +213,7 @@ func (u *UserStore) FindOne(conditions ...Condition) (*User, error) {
 	}
 	row := u.db.QueryRow(sqlQuery, args...)
 	var model User
-	err = row.Scan(&model.Id, &model.Name, &model.Age, &model.Email, &model.LastName)
+	err = row.Scan(&model.Id, &model.Name, &model.Age, &model.Email, &model.LastName, &model.CreatedAt, &model.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrRowNotFound
@@ -214,6 +221,7 @@ func (u *UserStore) FindOne(conditions ...Condition) (*User, error) {
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
 
+	// relations
 	var wg sync.WaitGroup
 	var findRelationErr error
 	var mutex sync.Mutex
@@ -284,7 +292,7 @@ func (u *UserStore) FindMany(conditions ...Condition) ([]*User, error) {
 	var users []*User
 	for rows.Next() {
 		var model User
-		err = rows.Scan(&model.Id, &model.Name, &model.Age, &model.Email, &model.LastName)
+		err = rows.Scan(&model.Id, &model.Name, &model.Age, &model.Email, &model.LastName, &model.CreatedAt, &model.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
@@ -382,10 +390,12 @@ func (u *UserStore) DeleteWithTx(tx *sql.Tx, conditions ...Condition) (int64, er
 
 // UserUpdateRequest is the data required to update a row.
 type UserUpdateRequest struct {
-	Name     *string
-	Age      *int32
-	Email    *string
-	LastName *string
+	Name      *string
+	Age       *int32
+	Email     *string
+	LastName  *string
+	CreatedAt *time.Time
+	UpdatedAt *time.Time
 }
 
 // Update updates a row with the provided data.
@@ -404,6 +414,12 @@ func (u *UserStore) Update(ctx context.Context, id string, model *UserUpdateRequ
 	}
 	if model.LastName != nil {
 		query = query.Set("last_name", model.LastName)
+	}
+	if model.CreatedAt != nil {
+		query = query.Set("created_at", model.CreatedAt)
+	}
+	if model.UpdatedAt != nil {
+		query = query.Set("updated_at", model.UpdatedAt)
 	}
 
 	query = query.Where(sq.Eq{"id": id})
@@ -438,6 +454,12 @@ func (u *UserStore) UpdateWithTx(ctx context.Context, tx *sql.Tx, id string, mod
 	if model.LastName != nil {
 		query = query.Set("last_name", model.LastName)
 	}
+	if model.CreatedAt != nil {
+		query = query.Set("created_at", model.CreatedAt)
+	}
+	if model.UpdatedAt != nil {
+		query = query.Set("updated_at", model.UpdatedAt)
+	}
 
 	query = query.Where(sq.Eq{"id": id})
 
@@ -459,9 +481,9 @@ func (u *UserStore) Create(ctx context.Context, model *User) (string, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert(u.TableName()).
-		Columns("name", "age", "email", "last_name").
+		Columns("name", "age", "email", "last_name", "created_at", "updated_at").
 		Suffix("RETURNING \"id\"").
-		Values(model.Name, model.Age, model.Email, model.LastName)
+		Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt)
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -490,9 +512,9 @@ func (u *UserStore) CreateWithTx(tx *sql.Tx, model *User) (string, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert(u.TableName()).
-		Columns("name", "age", "email", "last_name").
+		Columns("name", "age", "email", "last_name", "created_at", "updated_at").
 		Suffix("RETURNING \"id\"").
-		Values(model.Name, model.Age, model.Email, model.LastName)
+		Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt)
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -517,10 +539,10 @@ func (u *UserStore) CreateMany(ctx context.Context, models []*User) ([]string, e
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert(u.TableName()).
-		Columns("name", "age", "email", "last_name")
+		Columns("name", "age", "email", "last_name", "created_at", "updated_at")
 
 	for _, model := range models {
-		query = query.Values(model.Name, model.Age, model.Email, model.LastName)
+		query = query.Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt)
 	}
 
 	query = query.Suffix("RETURNING \"id\"")
@@ -556,10 +578,10 @@ func (u *UserStore) CreateManyWithTx(ctx context.Context, tx *sql.Tx, models []*
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert(u.TableName()).
-		Columns("name", "age", "email", "last_name")
+		Columns("name", "age", "email", "last_name", "created_at", "updated_at")
 
 	for _, model := range models {
-		query = query.Values(model.Name, model.Age, model.Email, model.LastName)
+		query = query.Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt)
 	}
 
 	query = query.Suffix("RETURNING \"id\"")
@@ -670,6 +692,7 @@ func (s *SettingStore) FindOne(conditions ...Condition) (*Setting, error) {
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
 
+	// relations
 	var wg sync.WaitGroup
 	var findRelationErr error
 	var mutex sync.Mutex
@@ -1028,13 +1051,15 @@ type AddressStore struct {
 
 // Address is a struct for the "addresses" table.
 type Address struct {
-	Id     string `db:"id"`
-	Street string `db:"street"`
-	City   string `db:"city"`
-	State  int32  `db:"state"`
-	Zip    int64  `db:"zip"`
-	User   *User
-	UserId string `db:"user_id"`
+	Id        string `db:"id"`
+	Street    string `db:"street"`
+	City      string `db:"city"`
+	State     int32  `db:"state"`
+	Zip       int64  `db:"zip"`
+	User      *User
+	UserId    string    `db:"user_id"`
+	CreatedAt time.Time `db:"created_at"`
+	UpdatedAt time.Time `db:"updated_at"`
 }
 
 // SacnRow scans a row into the struct fields.
@@ -1047,6 +1072,8 @@ func (a *AddressStore) ScanRow(row *sql.Row) (*Address, error) {
 		&model.State,
 		&model.Zip,
 		&model.UserId,
+		&model.CreatedAt,
+		&model.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan row: %w", err)
@@ -1062,7 +1089,7 @@ func (a *AddressStore) TableName() string {
 
 // Columns returns the database columns for the table.
 func (a *AddressStore) Columns() []string {
-	return []string{"addresses.id", "addresses.street", "addresses.city", "addresses.state", "addresses.zip", "addresses.user_id"}
+	return []string{"addresses.id", "addresses.street", "addresses.city", "addresses.state", "addresses.zip", "addresses.user_id", "addresses.created_at", "addresses.updated_at"}
 }
 
 // CreateTableSQL returns the SQL statement to create the table.
@@ -1074,7 +1101,9 @@ street TEXT NOT NULL,
 city TEXT NOT NULL,
 state INTEGER NOT NULL,
 zip BIGINT NOT NULL,
-user_id UUID NOT NULL);`
+user_id UUID NOT NULL,
+created_at TIMESTAMP NOT NULL,
+updated_at TIMESTAMP NOT NULL);`
 }
 
 // FindById returns a single row by ID.
@@ -1100,7 +1129,7 @@ func (a *AddressStore) FindOne(conditions ...Condition) (*Address, error) {
 	}
 	row := a.db.QueryRow(sqlQuery, args...)
 	var model Address
-	err = row.Scan(&model.Id, &model.Street, &model.City, &model.State, &model.Zip, &model.UserId)
+	err = row.Scan(&model.Id, &model.Street, &model.City, &model.State, &model.Zip, &model.UserId, &model.CreatedAt, &model.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrRowNotFound
@@ -1108,6 +1137,7 @@ func (a *AddressStore) FindOne(conditions ...Condition) (*Address, error) {
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
 
+	// relations
 	var wg sync.WaitGroup
 	var findRelationErr error
 	var mutex sync.Mutex
@@ -1161,7 +1191,7 @@ func (a *AddressStore) FindMany(conditions ...Condition) ([]*Address, error) {
 	var addresses []*Address
 	for rows.Next() {
 		var model Address
-		err = rows.Scan(&model.Id, &model.Street, &model.City, &model.State, &model.Zip, &model.UserId)
+		err = rows.Scan(&model.Id, &model.Street, &model.City, &model.State, &model.Zip, &model.UserId, &model.CreatedAt, &model.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
@@ -1259,11 +1289,13 @@ func (a *AddressStore) DeleteWithTx(tx *sql.Tx, conditions ...Condition) (int64,
 
 // AddressUpdateRequest is the data required to update a row.
 type AddressUpdateRequest struct {
-	Street *string
-	City   *string
-	State  *int32
-	Zip    *int64
-	UserId *string
+	Street    *string
+	City      *string
+	State     *int32
+	Zip       *int64
+	UserId    *string
+	CreatedAt *time.Time
+	UpdatedAt *time.Time
 }
 
 // Update updates a row with the provided data.
@@ -1285,6 +1317,12 @@ func (a *AddressStore) Update(ctx context.Context, id string, model *AddressUpda
 	}
 	if model.UserId != nil {
 		query = query.Set("user_id", model.UserId)
+	}
+	if model.CreatedAt != nil {
+		query = query.Set("created_at", model.CreatedAt)
+	}
+	if model.UpdatedAt != nil {
+		query = query.Set("updated_at", model.UpdatedAt)
 	}
 
 	query = query.Where(sq.Eq{"id": id})
@@ -1322,6 +1360,12 @@ func (a *AddressStore) UpdateWithTx(ctx context.Context, tx *sql.Tx, id string, 
 	if model.UserId != nil {
 		query = query.Set("user_id", model.UserId)
 	}
+	if model.CreatedAt != nil {
+		query = query.Set("created_at", model.CreatedAt)
+	}
+	if model.UpdatedAt != nil {
+		query = query.Set("updated_at", model.UpdatedAt)
+	}
 
 	query = query.Where(sq.Eq{"id": id})
 
@@ -1343,9 +1387,9 @@ func (a *AddressStore) Create(ctx context.Context, model *Address) (string, erro
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert(a.TableName()).
-		Columns("street", "city", "state", "zip", "user_id").
+		Columns("street", "city", "state", "zip", "user_id", "created_at", "updated_at").
 		Suffix("RETURNING \"id\"").
-		Values(model.Street, model.City, model.State, model.Zip, model.UserId)
+		Values(model.Street, model.City, model.State, model.Zip, model.UserId, model.CreatedAt, model.UpdatedAt)
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -1374,9 +1418,9 @@ func (a *AddressStore) CreateWithTx(tx *sql.Tx, model *Address) (string, error) 
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert(a.TableName()).
-		Columns("street", "city", "state", "zip", "user_id").
+		Columns("street", "city", "state", "zip", "user_id", "created_at", "updated_at").
 		Suffix("RETURNING \"id\"").
-		Values(model.Street, model.City, model.State, model.Zip, model.UserId)
+		Values(model.Street, model.City, model.State, model.Zip, model.UserId, model.CreatedAt, model.UpdatedAt)
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -1401,10 +1445,10 @@ func (a *AddressStore) CreateMany(ctx context.Context, models []*Address) ([]str
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert(a.TableName()).
-		Columns("street", "city", "state", "zip", "user_id")
+		Columns("street", "city", "state", "zip", "user_id", "created_at", "updated_at")
 
 	for _, model := range models {
-		query = query.Values(model.Street, model.City, model.State, model.Zip, model.UserId)
+		query = query.Values(model.Street, model.City, model.State, model.Zip, model.UserId, model.CreatedAt, model.UpdatedAt)
 	}
 
 	query = query.Suffix("RETURNING \"id\"")
@@ -1440,10 +1484,10 @@ func (a *AddressStore) CreateManyWithTx(ctx context.Context, tx *sql.Tx, models 
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert(a.TableName()).
-		Columns("street", "city", "state", "zip", "user_id")
+		Columns("street", "city", "state", "zip", "user_id", "created_at", "updated_at")
 
 	for _, model := range models {
-		query = query.Values(model.Street, model.City, model.State, model.Zip, model.UserId)
+		query = query.Values(model.Street, model.City, model.State, model.Zip, model.UserId, model.CreatedAt, model.UpdatedAt)
 	}
 
 	query = query.Suffix("RETURNING \"id\"")
@@ -1679,6 +1723,16 @@ func WhereAddressUserIdEq(value interface{}) Condition {
 	return EqualsCondition{Field: "user_id", Value: value}
 }
 
+// WhereAddressCreatedAtEq returns a condition that checks if the field equals the value.
+func WhereAddressCreatedAtEq(value interface{}) Condition {
+	return EqualsCondition{Field: "created_at", Value: value}
+}
+
+// WhereAddressUpdatedAtEq returns a condition that checks if the field equals the value.
+func WhereAddressUpdatedAtEq(value interface{}) Condition {
+	return EqualsCondition{Field: "updated_at", Value: value}
+}
+
 // WhereSettingIdEq returns a condition that checks if the field equals the value.
 func WhereSettingIdEq(value interface{}) Condition {
 	return EqualsCondition{Field: "id", Value: value}
@@ -1722,6 +1776,16 @@ func WhereUserEmailEq(value interface{}) Condition {
 // WhereUserLastNameEq returns a condition that checks if the field equals the value.
 func WhereUserLastNameEq(value interface{}) Condition {
 	return EqualsCondition{Field: "last_name", Value: value}
+}
+
+// WhereUserCreatedAtEq returns a condition that checks if the field equals the value.
+func WhereUserCreatedAtEq(value interface{}) Condition {
+	return EqualsCondition{Field: "created_at", Value: value}
+}
+
+// WhereUserUpdatedAtEq returns a condition that checks if the field equals the value.
+func WhereUserUpdatedAtEq(value interface{}) Condition {
+	return EqualsCondition{Field: "updated_at", Value: value}
 }
 
 // ------------------------------
@@ -1777,6 +1841,16 @@ func WhereAddressUserIdNotEq(value interface{}) Condition {
 	return NotEqualsCondition{Field: "user_id", Value: value}
 }
 
+// WhereAddressCreatedAtNotEq returns a condition that checks if the field equals the value.
+func WhereAddressCreatedAtNotEq(value interface{}) Condition {
+	return NotEqualsCondition{Field: "created_at", Value: value}
+}
+
+// WhereAddressUpdatedAtNotEq returns a condition that checks if the field equals the value.
+func WhereAddressUpdatedAtNotEq(value interface{}) Condition {
+	return NotEqualsCondition{Field: "updated_at", Value: value}
+}
+
 // WhereSettingIdNotEq returns a condition that checks if the field equals the value.
 func WhereSettingIdNotEq(value interface{}) Condition {
 	return NotEqualsCondition{Field: "id", Value: value}
@@ -1820,6 +1894,16 @@ func WhereUserEmailNotEq(value interface{}) Condition {
 // WhereUserLastNameNotEq returns a condition that checks if the field equals the value.
 func WhereUserLastNameNotEq(value interface{}) Condition {
 	return NotEqualsCondition{Field: "last_name", Value: value}
+}
+
+// WhereUserCreatedAtNotEq returns a condition that checks if the field equals the value.
+func WhereUserCreatedAtNotEq(value interface{}) Condition {
+	return NotEqualsCondition{Field: "created_at", Value: value}
+}
+
+// WhereUserUpdatedAtNotEq returns a condition that checks if the field equals the value.
+func WhereUserUpdatedAtNotEq(value interface{}) Condition {
+	return NotEqualsCondition{Field: "updated_at", Value: value}
 }
 
 // --------------------------------
@@ -1875,6 +1959,16 @@ func WhereAddressUserIdGreaterThan(value interface{}) Condition {
 	return GreaterThanCondition{Field: "user_id", Value: value}
 }
 
+// WhereAddressCreatedAtGreaterThan returns a condition that checks if the field equals the value.
+func WhereAddressCreatedAtGreaterThan(value interface{}) Condition {
+	return GreaterThanCondition{Field: "created_at", Value: value}
+}
+
+// WhereAddressUpdatedAtGreaterThan returns a condition that checks if the field equals the value.
+func WhereAddressUpdatedAtGreaterThan(value interface{}) Condition {
+	return GreaterThanCondition{Field: "updated_at", Value: value}
+}
+
 // WhereSettingIdGreaterThan returns a condition that checks if the field equals the value.
 func WhereSettingIdGreaterThan(value interface{}) Condition {
 	return GreaterThanCondition{Field: "id", Value: value}
@@ -1918,6 +2012,16 @@ func WhereUserEmailGreaterThan(value interface{}) Condition {
 // WhereUserLastNameGreaterThan returns a condition that checks if the field equals the value.
 func WhereUserLastNameGreaterThan(value interface{}) Condition {
 	return GreaterThanCondition{Field: "last_name", Value: value}
+}
+
+// WhereUserCreatedAtGreaterThan returns a condition that checks if the field equals the value.
+func WhereUserCreatedAtGreaterThan(value interface{}) Condition {
+	return GreaterThanCondition{Field: "created_at", Value: value}
+}
+
+// WhereUserUpdatedAtGreaterThan returns a condition that checks if the field equals the value.
+func WhereUserUpdatedAtGreaterThan(value interface{}) Condition {
+	return GreaterThanCondition{Field: "updated_at", Value: value}
 }
 
 // --------------------------------
@@ -1973,6 +2077,16 @@ func WhereAddressUserIdLessThan(value interface{}) Condition {
 	return LessThanCondition{Field: "user_id", Value: value}
 }
 
+// WhereAddressCreatedAtLessThan returns a condition that checks if the field equals the value.
+func WhereAddressCreatedAtLessThan(value interface{}) Condition {
+	return LessThanCondition{Field: "created_at", Value: value}
+}
+
+// WhereAddressUpdatedAtLessThan returns a condition that checks if the field equals the value.
+func WhereAddressUpdatedAtLessThan(value interface{}) Condition {
+	return LessThanCondition{Field: "updated_at", Value: value}
+}
+
 // WhereSettingIdLessThan returns a condition that checks if the field equals the value.
 func WhereSettingIdLessThan(value interface{}) Condition {
 	return LessThanCondition{Field: "id", Value: value}
@@ -2016,6 +2130,16 @@ func WhereUserEmailLessThan(value interface{}) Condition {
 // WhereUserLastNameLessThan returns a condition that checks if the field equals the value.
 func WhereUserLastNameLessThan(value interface{}) Condition {
 	return LessThanCondition{Field: "last_name", Value: value}
+}
+
+// WhereUserCreatedAtLessThan returns a condition that checks if the field equals the value.
+func WhereUserCreatedAtLessThan(value interface{}) Condition {
+	return LessThanCondition{Field: "created_at", Value: value}
+}
+
+// WhereUserUpdatedAtLessThan returns a condition that checks if the field equals the value.
+func WhereUserUpdatedAtLessThan(value interface{}) Condition {
+	return LessThanCondition{Field: "updated_at", Value: value}
 }
 
 // --------------------------------
@@ -2071,6 +2195,16 @@ func WhereAddressUserIdGreaterThanOrEqual(value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: "user_id", Value: value}
 }
 
+// WhereAddressCreatedAtGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereAddressCreatedAtGreaterThanOrEqual(value interface{}) Condition {
+	return GreaterThanOrEqualCondition{Field: "created_at", Value: value}
+}
+
+// WhereAddressUpdatedAtGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereAddressUpdatedAtGreaterThanOrEqual(value interface{}) Condition {
+	return GreaterThanOrEqualCondition{Field: "updated_at", Value: value}
+}
+
 // WhereSettingIdGreaterThanOrEqual returns a condition that checks if the field equals the value.
 func WhereSettingIdGreaterThanOrEqual(value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: "id", Value: value}
@@ -2114,6 +2248,16 @@ func WhereUserEmailGreaterThanOrEqual(value interface{}) Condition {
 // WhereUserLastNameGreaterThanOrEqual returns a condition that checks if the field equals the value.
 func WhereUserLastNameGreaterThanOrEqual(value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: "last_name", Value: value}
+}
+
+// WhereUserCreatedAtGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserCreatedAtGreaterThanOrEqual(value interface{}) Condition {
+	return GreaterThanOrEqualCondition{Field: "created_at", Value: value}
+}
+
+// WhereUserUpdatedAtGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserUpdatedAtGreaterThanOrEqual(value interface{}) Condition {
+	return GreaterThanOrEqualCondition{Field: "updated_at", Value: value}
 }
 
 // --------------------------------
@@ -2169,6 +2313,16 @@ func WhereAddressUserIdLessThanOrEqual(value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: "user_id", Value: value}
 }
 
+// WhereAddressCreatedAtLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereAddressCreatedAtLessThanOrEqual(value interface{}) Condition {
+	return LessThanOrEqualCondition{Field: "created_at", Value: value}
+}
+
+// WhereAddressUpdatedAtLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereAddressUpdatedAtLessThanOrEqual(value interface{}) Condition {
+	return LessThanOrEqualCondition{Field: "updated_at", Value: value}
+}
+
 // WhereSettingIdLessThanOrEqual returns a condition that checks if the field equals the value.
 func WhereSettingIdLessThanOrEqual(value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: "id", Value: value}
@@ -2212,6 +2366,16 @@ func WhereUserEmailLessThanOrEqual(value interface{}) Condition {
 // WhereUserLastNameLessThanOrEqual returns a condition that checks if the field equals the value.
 func WhereUserLastNameLessThanOrEqual(value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: "last_name", Value: value}
+}
+
+// WhereUserCreatedAtLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserCreatedAtLessThanOrEqual(value interface{}) Condition {
+	return LessThanOrEqualCondition{Field: "created_at", Value: value}
+}
+
+// WhereUserUpdatedAtLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserUpdatedAtLessThanOrEqual(value interface{}) Condition {
+	return LessThanOrEqualCondition{Field: "updated_at", Value: value}
 }
 
 // --------------------------------
@@ -2267,6 +2431,16 @@ func WhereAddressUserIdLike(value interface{}) Condition {
 	return LikeCondition{Field: "user_id", Value: value}
 }
 
+// WhereAddressCreatedAtLike returns a condition that checks if the field equals the value.
+func WhereAddressCreatedAtLike(value interface{}) Condition {
+	return LikeCondition{Field: "created_at", Value: value}
+}
+
+// WhereAddressUpdatedAtLike returns a condition that checks if the field equals the value.
+func WhereAddressUpdatedAtLike(value interface{}) Condition {
+	return LikeCondition{Field: "updated_at", Value: value}
+}
+
 // WhereSettingIdLike returns a condition that checks if the field equals the value.
 func WhereSettingIdLike(value interface{}) Condition {
 	return LikeCondition{Field: "id", Value: value}
@@ -2310,6 +2484,16 @@ func WhereUserEmailLike(value interface{}) Condition {
 // WhereUserLastNameLike returns a condition that checks if the field equals the value.
 func WhereUserLastNameLike(value interface{}) Condition {
 	return LikeCondition{Field: "last_name", Value: value}
+}
+
+// WhereUserCreatedAtLike returns a condition that checks if the field equals the value.
+func WhereUserCreatedAtLike(value interface{}) Condition {
+	return LikeCondition{Field: "created_at", Value: value}
+}
+
+// WhereUserUpdatedAtLike returns a condition that checks if the field equals the value.
+func WhereUserUpdatedAtLike(value interface{}) Condition {
+	return LikeCondition{Field: "updated_at", Value: value}
 }
 
 // --------------------------------
@@ -2365,6 +2549,16 @@ func WhereAddressUserIdNotLike(value interface{}) Condition {
 	return NotLikeCondition{Field: "user_id", Value: value}
 }
 
+// WhereAddressCreatedAtNotLike returns a condition that checks if the field equals the value.
+func WhereAddressCreatedAtNotLike(value interface{}) Condition {
+	return NotLikeCondition{Field: "created_at", Value: value}
+}
+
+// WhereAddressUpdatedAtNotLike returns a condition that checks if the field equals the value.
+func WhereAddressUpdatedAtNotLike(value interface{}) Condition {
+	return NotLikeCondition{Field: "updated_at", Value: value}
+}
+
 // WhereSettingIdNotLike returns a condition that checks if the field equals the value.
 func WhereSettingIdNotLike(value interface{}) Condition {
 	return NotLikeCondition{Field: "id", Value: value}
@@ -2408,6 +2602,16 @@ func WhereUserEmailNotLike(value interface{}) Condition {
 // WhereUserLastNameNotLike returns a condition that checks if the field equals the value.
 func WhereUserLastNameNotLike(value interface{}) Condition {
 	return NotLikeCondition{Field: "last_name", Value: value}
+}
+
+// WhereUserCreatedAtNotLike returns a condition that checks if the field equals the value.
+func WhereUserCreatedAtNotLike(value interface{}) Condition {
+	return NotLikeCondition{Field: "created_at", Value: value}
+}
+
+// WhereUserUpdatedAtNotLike returns a condition that checks if the field equals the value.
+func WhereUserUpdatedAtNotLike(value interface{}) Condition {
+	return NotLikeCondition{Field: "updated_at", Value: value}
 }
 
 // --------------------------------
@@ -2462,6 +2666,16 @@ func WhereAddressUserIdIsNull() Condition {
 	return IsNullCondition{Field: "user_id"}
 }
 
+// WhereAddressCreatedAtIsNull returns a condition that checks if the field is null.
+func WhereAddressCreatedAtIsNull() Condition {
+	return IsNullCondition{Field: "created_at"}
+}
+
+// WhereAddressUpdatedAtIsNull returns a condition that checks if the field is null.
+func WhereAddressUpdatedAtIsNull() Condition {
+	return IsNullCondition{Field: "updated_at"}
+}
+
 // WhereSettingIdIsNull returns a condition that checks if the field is null.
 func WhereSettingIdIsNull() Condition {
 	return IsNullCondition{Field: "id"}
@@ -2505,6 +2719,16 @@ func WhereUserEmailIsNull() Condition {
 // WhereUserLastNameIsNull returns a condition that checks if the field is null.
 func WhereUserLastNameIsNull() Condition {
 	return IsNullCondition{Field: "last_name"}
+}
+
+// WhereUserCreatedAtIsNull returns a condition that checks if the field is null.
+func WhereUserCreatedAtIsNull() Condition {
+	return IsNullCondition{Field: "created_at"}
+}
+
+// WhereUserUpdatedAtIsNull returns a condition that checks if the field is null.
+func WhereUserUpdatedAtIsNull() Condition {
+	return IsNullCondition{Field: "updated_at"}
 }
 
 // --------------------------------
@@ -2559,6 +2783,16 @@ func WhereAddressUserIdIsNotNull() Condition {
 	return IsNotNullCondition{Field: "user_id"}
 }
 
+// WhereAddressCreatedAtIsNotNull returns a condition that checks if the field is not null.
+func WhereAddressCreatedAtIsNotNull() Condition {
+	return IsNotNullCondition{Field: "created_at"}
+}
+
+// WhereAddressUpdatedAtIsNotNull returns a condition that checks if the field is not null.
+func WhereAddressUpdatedAtIsNotNull() Condition {
+	return IsNotNullCondition{Field: "updated_at"}
+}
+
 // WhereSettingIdIsNotNull returns a condition that checks if the field is not null.
 func WhereSettingIdIsNotNull() Condition {
 	return IsNotNullCondition{Field: "id"}
@@ -2602,6 +2836,16 @@ func WhereUserEmailIsNotNull() Condition {
 // WhereUserLastNameIsNotNull returns a condition that checks if the field is not null.
 func WhereUserLastNameIsNotNull() Condition {
 	return IsNotNullCondition{Field: "last_name"}
+}
+
+// WhereUserCreatedAtIsNotNull returns a condition that checks if the field is not null.
+func WhereUserCreatedAtIsNotNull() Condition {
+	return IsNotNullCondition{Field: "created_at"}
+}
+
+// WhereUserUpdatedAtIsNotNull returns a condition that checks if the field is not null.
+func WhereUserUpdatedAtIsNotNull() Condition {
+	return IsNotNullCondition{Field: "updated_at"}
 }
 
 // --------------------------------
@@ -2657,6 +2901,16 @@ func WhereAddressUserIdIn(values ...interface{}) Condition {
 	return InCondition{Field: "user_id", Values: values}
 }
 
+// WhereAddressCreatedAtIn returns a condition that checks if the field is in the given values.
+func WhereAddressCreatedAtIn(values ...interface{}) Condition {
+	return InCondition{Field: "created_at", Values: values}
+}
+
+// WhereAddressUpdatedAtIn returns a condition that checks if the field is in the given values.
+func WhereAddressUpdatedAtIn(values ...interface{}) Condition {
+	return InCondition{Field: "updated_at", Values: values}
+}
+
 // WhereSettingIdIn returns a condition that checks if the field is in the given values.
 func WhereSettingIdIn(values ...interface{}) Condition {
 	return InCondition{Field: "id", Values: values}
@@ -2700,6 +2954,16 @@ func WhereUserEmailIn(values ...interface{}) Condition {
 // WhereUserLastNameIn returns a condition that checks if the field is in the given values.
 func WhereUserLastNameIn(values ...interface{}) Condition {
 	return InCondition{Field: "last_name", Values: values}
+}
+
+// WhereUserCreatedAtIn returns a condition that checks if the field is in the given values.
+func WhereUserCreatedAtIn(values ...interface{}) Condition {
+	return InCondition{Field: "created_at", Values: values}
+}
+
+// WhereUserUpdatedAtIn returns a condition that checks if the field is in the given values.
+func WhereUserUpdatedAtIn(values ...interface{}) Condition {
+	return InCondition{Field: "updated_at", Values: values}
 }
 
 // --------------------------------
@@ -2755,6 +3019,16 @@ func WhereAddressUserIdNotIn(values ...interface{}) Condition {
 	return NotInCondition{Field: "user_id", Values: values}
 }
 
+// WhereAddressCreatedAtNotIn returns a condition that checks if the field is not in the given values.
+func WhereAddressCreatedAtNotIn(values ...interface{}) Condition {
+	return NotInCondition{Field: "created_at", Values: values}
+}
+
+// WhereAddressUpdatedAtNotIn returns a condition that checks if the field is not in the given values.
+func WhereAddressUpdatedAtNotIn(values ...interface{}) Condition {
+	return NotInCondition{Field: "updated_at", Values: values}
+}
+
 // WhereSettingIdNotIn returns a condition that checks if the field is not in the given values.
 func WhereSettingIdNotIn(values ...interface{}) Condition {
 	return NotInCondition{Field: "id", Values: values}
@@ -2798,6 +3072,16 @@ func WhereUserEmailNotIn(values ...interface{}) Condition {
 // WhereUserLastNameNotIn returns a condition that checks if the field is not in the given values.
 func WhereUserLastNameNotIn(values ...interface{}) Condition {
 	return NotInCondition{Field: "last_name", Values: values}
+}
+
+// WhereUserCreatedAtNotIn returns a condition that checks if the field is not in the given values.
+func WhereUserCreatedAtNotIn(values ...interface{}) Condition {
+	return NotInCondition{Field: "created_at", Values: values}
+}
+
+// WhereUserUpdatedAtNotIn returns a condition that checks if the field is not in the given values.
+func WhereUserUpdatedAtNotIn(values ...interface{}) Condition {
+	return NotInCondition{Field: "updated_at", Values: values}
 }
 
 // --------------------------------
@@ -2854,6 +3138,16 @@ func WhereAddressUserIdBetween(from, to interface{}) Condition {
 	return BetweenCondition{Field: "user_id", From: from, To: to}
 }
 
+// WhereAddressCreatedAtBetween returns a condition that checks if the field is between the given values.
+func WhereAddressCreatedAtBetween(from, to interface{}) Condition {
+	return BetweenCondition{Field: "created_at", From: from, To: to}
+}
+
+// WhereAddressUpdatedAtBetween returns a condition that checks if the field is between the given values.
+func WhereAddressUpdatedAtBetween(from, to interface{}) Condition {
+	return BetweenCondition{Field: "updated_at", From: from, To: to}
+}
+
 // WhereSettingIdBetween returns a condition that checks if the field is between the given values.
 func WhereSettingIdBetween(from, to interface{}) Condition {
 	return BetweenCondition{Field: "id", From: from, To: to}
@@ -2897,6 +3191,16 @@ func WhereUserEmailBetween(from, to interface{}) Condition {
 // WhereUserLastNameBetween returns a condition that checks if the field is between the given values.
 func WhereUserLastNameBetween(from, to interface{}) Condition {
 	return BetweenCondition{Field: "last_name", From: from, To: to}
+}
+
+// WhereUserCreatedAtBetween returns a condition that checks if the field is between the given values.
+func WhereUserCreatedAtBetween(from, to interface{}) Condition {
+	return BetweenCondition{Field: "created_at", From: from, To: to}
+}
+
+// WhereUserUpdatedAtBetween returns a condition that checks if the field is between the given values.
+func WhereUserUpdatedAtBetween(from, to interface{}) Condition {
+	return BetweenCondition{Field: "updated_at", From: from, To: to}
 }
 
 // --------------------------------
@@ -2954,6 +3258,16 @@ func WhereAddressUserIdOrderBy(asc bool) Condition {
 	return OrderCondition{Column: "user_id", Asc: asc}
 }
 
+// WhereAddressCreatedAtOrderBy returns a condition that orders the query by the given column.
+func WhereAddressCreatedAtOrderBy(asc bool) Condition {
+	return OrderCondition{Column: "created_at", Asc: asc}
+}
+
+// WhereAddressUpdatedAtOrderBy returns a condition that orders the query by the given column.
+func WhereAddressUpdatedAtOrderBy(asc bool) Condition {
+	return OrderCondition{Column: "updated_at", Asc: asc}
+}
+
 // WhereSettingIdOrderBy returns a condition that orders the query by the given column.
 func WhereSettingIdOrderBy(asc bool) Condition {
 	return OrderCondition{Column: "id", Asc: asc}
@@ -2997,4 +3311,187 @@ func WhereUserEmailOrderBy(asc bool) Condition {
 // WhereUserLastNameOrderBy returns a condition that orders the query by the given column.
 func WhereUserLastNameOrderBy(asc bool) Condition {
 	return OrderCondition{Column: "last_name", Asc: asc}
+}
+
+// WhereUserCreatedAtOrderBy returns a condition that orders the query by the given column.
+func WhereUserCreatedAtOrderBy(asc bool) Condition {
+	return OrderCondition{Column: "created_at", Asc: asc}
+}
+
+// WhereUserUpdatedAtOrderBy returns a condition that orders the query by the given column.
+func WhereUserUpdatedAtOrderBy(asc bool) Condition {
+	return OrderCondition{Column: "updated_at", Asc: asc}
+}
+
+// --------------------------------
+
+// DateAfterCondition represents the '>' condition for dates.
+type DateAfterCondition struct {
+	Field string
+	Date  time.Time
+}
+
+// Apply applies the condition to the query.
+func (c DateAfterCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s > $1", c.Field), c.Date))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c DateAfterCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s > $1", c.Field), c.Date))
+}
+
+// WhereDateAfter returns a condition that checks if the field is after the given date.
+func WhereDateAfter(field string, date time.Time) Condition {
+	return DateAfterCondition{Field: field, Date: date}
+}
+
+// DateBeforeCondition represents the '<' condition for dates.
+type DateBeforeCondition struct {
+	Field string
+	Date  time.Time
+}
+
+// Apply applies the condition to the query.
+func (c DateBeforeCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s < $1", c.Field), c.Date))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c DateBeforeCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s < $1", c.Field), c.Date))
+}
+
+// WhereDateBefore returns a condition that checks if the field is before the given date.
+func WhereDateBefore(field string, date time.Time) Condition {
+	return DateBeforeCondition{Field: field, Date: date}
+}
+
+// WhereAddressCreatedAtAfter returns a condition that checks if the field is after the given date.
+func WhereAddressCreatedAtAfter(date time.Time) Condition {
+	return DateAfterCondition{Field: "created_at", Date: date}
+}
+
+// WhereAddressCreatedAtBefore returns a condition that checks if the field is before the given date.
+func WhereAddressCreatedAtBefore(date time.Time) Condition {
+	return DateBeforeCondition{Field: "created_at", Date: date}
+}
+
+// WhereAddressUpdatedAtAfter returns a condition that checks if the field is after the given date.
+func WhereAddressUpdatedAtAfter(date time.Time) Condition {
+	return DateAfterCondition{Field: "updated_at", Date: date}
+}
+
+// WhereAddressUpdatedAtBefore returns a condition that checks if the field is before the given date.
+func WhereAddressUpdatedAtBefore(date time.Time) Condition {
+	return DateBeforeCondition{Field: "updated_at", Date: date}
+}
+
+// WhereUserCreatedAtAfter returns a condition that checks if the field is after the given date.
+func WhereUserCreatedAtAfter(date time.Time) Condition {
+	return DateAfterCondition{Field: "created_at", Date: date}
+}
+
+// WhereUserCreatedAtBefore returns a condition that checks if the field is before the given date.
+func WhereUserCreatedAtBefore(date time.Time) Condition {
+	return DateBeforeCondition{Field: "created_at", Date: date}
+}
+
+// WhereUserUpdatedAtAfter returns a condition that checks if the field is after the given date.
+func WhereUserUpdatedAtAfter(date time.Time) Condition {
+	return DateAfterCondition{Field: "updated_at", Date: date}
+}
+
+// WhereUserUpdatedAtBefore returns a condition that checks if the field is before the given date.
+func WhereUserUpdatedAtBefore(date time.Time) Condition {
+	return DateBeforeCondition{Field: "updated_at", Date: date}
+}
+
+// --------------------------------
+// JSON
+// --------------------------------
+
+// JSONExistsCondition	exists condition.
+type JSONExistsCondition struct {
+	Field string
+	Key   string
+}
+
+// Apply applies the condition to the query.
+func (c JSONExistsCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s -> '%s' IS NOT NULL", c.Field, c.Key)))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c JSONExistsCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s -> '%s' IS NOT NULL", c.Field, c.Key)))
+}
+
+// JSONEqualsCondition equals condition.
+type JSONEqualsCondition struct {
+	Field string
+	Key   string
+	Value interface{}
+}
+
+// Apply applies the condition to the query.
+func (c JSONEqualsCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s ->> '%s' = ?", c.Field, c.Key), c.Value))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c JSONEqualsCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s ->> '%s' = ?", c.Field, c.Key), c.Value))
+}
+
+// JSONContainsCondition contains condition.
+type JSONContainsCondition struct {
+	Field string
+	Value string // This should be a JSON string
+}
+
+// Apply applies the condition to the query.
+func (c JSONContainsCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s @> ?", c.Field), c.Value))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c JSONContainsCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s @> ?", c.Field), c.Value))
+}
+
+// JSONContainedInCondition contained in condition.
+type JSONContainedInCondition struct {
+	Field string
+	Value string // This should be a JSON string
+}
+
+// Apply applies the condition to the query.
+func (c JSONContainedInCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s <@ ?", c.Field), c.Value))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c JSONContainedInCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s <@ ?", c.Field), c.Value))
+}
+
+// WhereJSONExists returns a condition that checks if the JSON field contains the given key.
+func WhereJSONExists(field string, key string) Condition {
+	return JSONExistsCondition{Field: field, Key: key}
+}
+
+// WhereJSONEquals returns a condition that checks if the JSON field's key equals to the given value.
+func WhereJSONEquals(field string, key string, value interface{}) Condition {
+	return JSONEqualsCondition{Field: field, Key: key, Value: value}
+}
+
+// WhereJSONContains returns a condition that checks if the JSON field contains the given JSON value.
+func WhereJSONContains(field string, value string) Condition {
+	return JSONContainsCondition{Field: field, Value: value}
+}
+
+// WhereJSONContainedIn returns a condition that checks if the JSON field is contained in the given JSON value.
+func WhereJSONContainedIn(field string, value string) Condition {
+	return JSONContainedInCondition{Field: field, Value: value}
 }

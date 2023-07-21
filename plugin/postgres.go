@@ -60,6 +60,10 @@ func createNewPostgresTableTemplate(d *descriptorpb.DescriptorProto, state *Stat
 			}
 		}
 
+		if isOptional(f) {
+			field.Options.Nullable = true
+		}
+
 		if options != nil {
 			field.Options.PrimaryKey = options.PrimaryKey
 			field.Options.Unique = options.Unique
@@ -172,7 +176,7 @@ func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) FindOne(conditions ...C
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
 
-	{{ if .HasRelations }}
+	{{ if .HasRelations }}// relations
 	var wg sync.WaitGroup
 	var findRelationErr error
 	var mutex sync.Mutex

@@ -119,16 +119,14 @@ func postgresType(goType string, options *structify.StructifyFieldOptions) strin
 	return t
 }
 
-// goTypeToPostgresType converts a Go type to a Postgres type.
 func goTypeToPostgresType(goType string) string {
+	goType = strings.TrimPrefix(goType, "*")
 	switch goType {
 	case "string":
 		return "TEXT"
 	case "bool":
 		return "BOOLEAN"
-	case "int":
-		return "INTEGER"
-	case "int32":
+	case "int", "int32":
 		return "INTEGER"
 	case "int64":
 		return "BIGINT"
@@ -136,11 +134,12 @@ func goTypeToPostgresType(goType string) string {
 		return "REAL"
 	case "float64":
 		return "DOUBLE PRECISION"
+	case "time.Time":
+		return "TIMESTAMP"
 	case "[]byte":
 		return "BYTEA"
+	// TODO: Add cases for other types as needed
 	default:
-		// This will handle all other types as TEXT
-		// You may want to expand this switch to handle other types correctly.
 		return "TEXT"
 	}
 }
@@ -173,7 +172,11 @@ func convertType(field *descriptor.FieldDescriptorProto) string {
 	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
 		parts := strings.Split(typ, ".")
 		typName := parts[len(parts)-1]
-		typ = "*" + sToCml(typName)
+		if typName == "Timestamp" && parts[len(parts)-2] == "protobuf" && parts[len(parts)-3] == "google" {
+			typ = "time.Time"
+		} else {
+			typ = "*" + sToCml(typName)
+		}
 	case descriptorpb.FieldDescriptorProto_TYPE_BYTES:
 		typ = "[]byte"
 	case descriptorpb.FieldDescriptorProto_TYPE_UINT32:
@@ -194,25 +197,13 @@ func convertType(field *descriptor.FieldDescriptorProto) string {
 		typ = "[]" + typ
 	}
 
-	return typ
-}
-
-// protoToPostgresType converts a protobuf type to a Postgres type.
-func protoToPostgresType(fieldType descriptorpb.FieldDescriptorProto_Type) string {
-	switch fieldType {
-	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE, descriptorpb.FieldDescriptorProto_TYPE_FLOAT:
-		return "REAL"
-	case descriptorpb.FieldDescriptorProto_TYPE_INT64, descriptorpb.FieldDescriptorProto_TYPE_UINT64:
-		return "BIGINT"
-	case descriptorpb.FieldDescriptorProto_TYPE_INT32, descriptorpb.FieldDescriptorProto_TYPE_UINT32:
-		return "INTEGER"
-	case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
-		return "BOOLEAN"
-	case descriptorpb.FieldDescriptorProto_TYPE_STRING, descriptorpb.FieldDescriptorProto_TYPE_BYTES:
-		return "TEXT"
-	default:
-		return "TEXT"
+	if isOptional(field) {
+		if !strings.Contains(typ, "*") {
+			typ = "*" + typ
+		}
 	}
+
+	return typ
 }
 
 // isRepeated returns true if the field is repeated.
@@ -221,8 +212,30 @@ func isRepeated(field *descriptor.FieldDescriptorProto) bool {
 }
 
 // Is this field optional?
+// isOptional returns true if the field is optional and not a string, bytes, int32, int64, float32, float64, bool, uint32, uint64 type or a Google Protobuf wrapper message.
 func isOptional(field *descriptor.FieldDescriptorProto) bool {
-	return field.Label != nil && *field.Label == descriptor.FieldDescriptorProto_LABEL_OPTIONAL
+	if field.Label != nil && *field.Label == descriptor.FieldDescriptorProto_LABEL_OPTIONAL {
+		switch *field.Type {
+		case descriptorpb.FieldDescriptorProto_TYPE_STRING,
+			descriptorpb.FieldDescriptorProto_TYPE_BYTES,
+			descriptorpb.FieldDescriptorProto_TYPE_INT32,
+			descriptorpb.FieldDescriptorProto_TYPE_INT64,
+			descriptorpb.FieldDescriptorProto_TYPE_DOUBLE,
+			descriptorpb.FieldDescriptorProto_TYPE_BOOL,
+			descriptorpb.FieldDescriptorProto_TYPE_UINT32,
+			descriptorpb.FieldDescriptorProto_TYPE_UINT64:
+			return false
+		case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
+			// Check if the type is a Google Protobuf wrapper message.
+			var typ = field.GetTypeName()
+			parts := strings.Split(typ, ".")
+			if parts[len(parts)-2] == "protobuf" && parts[len(parts)-3] == "google" {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // Is this field required?
@@ -303,5 +316,20 @@ func detectStructName(t string) string {
 }
 
 func checkIsRelation(f *descriptorpb.FieldDescriptorProto) bool {
-	return *f.Type == descriptorpb.FieldDescriptorProto_TYPE_MESSAGE
+	// Check if it is a message type
+	if *f.Type == descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
+		// If it is, check if it is a system message type
+		typ := f.GetTypeName()
+		parts := strings.Split(typ, ".")
+		typName := parts[len(parts)-1]
+
+		// Exclude system types such as google.protobuf.Timestamp
+		if typName == "Timestamp" && parts[len(parts)-2] == "protobuf" && parts[len(parts)-3] == "google" {
+			return false
+		}
+
+		return true
+	}
+
+	return false
 }

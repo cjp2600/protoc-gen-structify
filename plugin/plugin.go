@@ -131,6 +131,7 @@ func (p *Plugin) Run() {
 	// 	- import "strings"
 	//
 	p.state.FillImports(tables)
+	p.EnableDefaultImports()
 
 	// generate content
 	// 	- package name
@@ -166,6 +167,23 @@ func (p *Plugin) Run() {
 	// write to stdout
 	if _, err := os.Stdout.Write(data); err != nil {
 		log.Fatalf("Failed to write to stdout: %v", err)
+	}
+}
+
+func (p *Plugin) EnableDefaultImports() {
+	protoFile := p.getUserProtoFile()
+	for _, m := range protoFile.GetMessageType() {
+		for _, field := range m.GetField() {
+			var typ = field.GetTypeName()
+			switch *field.Type {
+			case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
+				parts := strings.Split(typ, ".")
+				typName := parts[len(parts)-1]
+				if typName == "Timestamp" && parts[len(parts)-2] == "protobuf" && parts[len(parts)-3] == "google" {
+					p.state.Imports.Enable(ImportTime)
+				}
+			}
+		}
 	}
 }
 
