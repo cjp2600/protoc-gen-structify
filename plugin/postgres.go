@@ -50,6 +50,7 @@ func createNewPostgresTableTemplate(d *descriptorpb.DescriptorProto, state *Stat
 			Type:       convertedType,
 			DBType:     postgresType(convertedType, options),
 			IsRelation: checkIsRelation(f),
+			Optional:   isOptional(f),
 		}
 
 		field.Options = Options{}
@@ -333,7 +334,7 @@ func ({{.Name | firstLetter}} *{{.Name | sToCml }}Store) DeleteWithTx(tx *sql.Tx
 // {{.Name}}UpdateRequest is the data required to update a row.
 type {{.Name}}UpdateRequest struct {
 {{- range .Fields}}{{- if and (not (eq (.Name | sToLowerCamel) ($.IdName | sToLowerCamel))) (not .IsRelation)}}
-	{{.Name}} *{{.Type}}{{- end}}{{- end}}
+	{{.Name}} {{- if not .Optional}}*{{end}}{{.Type}}{{- end}}{{- end}}
 }
 
 // Update updates a row with the provided data.

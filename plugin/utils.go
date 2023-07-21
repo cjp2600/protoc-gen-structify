@@ -214,6 +214,10 @@ func isRepeated(field *descriptor.FieldDescriptorProto) bool {
 // Is this field optional?
 // isOptional returns true if the field is optional and not a string, bytes, int32, int64, float32, float64, bool, uint32, uint64 type or a Google Protobuf wrapper message.
 func isOptional(field *descriptor.FieldDescriptorProto) bool {
+	if field.GetProto3Optional() {
+		return true
+	}
+
 	if field.Label != nil && *field.Label == descriptor.FieldDescriptorProto_LABEL_OPTIONAL {
 		switch *field.Type {
 		case descriptorpb.FieldDescriptorProto_TYPE_STRING,
@@ -276,24 +280,14 @@ func sliceToString(slice []string) template.HTML {
 	return template.HTML(fmt.Sprintf("[]string{%s}", strings.Join(quoted, ", ")))
 }
 
+// upperClientName returns the upperCamelCase name of the client.
 func upperClientName(name string) string {
 	return fmt.Sprintf("%sDBClient", sToCml(name))
 }
 
+// lowerClientName returns the lowerCamelCase name of the client.
 func lowerClientName(name string) string {
 	return fmt.Sprintf("%sDBClient", sToLowerCamel(name))
-}
-
-func dump(s interface{}) string {
-	jsonData, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		log.Fatalf("JSON marshaling failed: %s", err)
-	}
-	return string(jsonData)
-}
-
-func dumpP(s interface{}) {
-	panic(fmt.Sprintf("%+v", dump(s)))
 }
 
 // postgresType returns the postgres type for the given type.
@@ -303,18 +297,21 @@ func detectTableName(t string) string {
 	return lowerCasePlural(name)
 }
 
+// detectStoreName returns the postgres type for the given type.
 func detectStoreName(t string) string {
 	name := strings.ReplaceAll(t, "*", "")
 	name = strings.ReplaceAll(name, "[]", "")
 	return sToCml(name) + "Store"
 }
 
+// detectStructName returns the struct name for the given type.
 func detectStructName(t string) string {
 	name := strings.ReplaceAll(t, "*", "")
 	name = strings.ReplaceAll(name, "[]", "")
 	return sToCml(name)
 }
 
+// checkIsRelation checks if the field is a relation.
 func checkIsRelation(f *descriptorpb.FieldDescriptorProto) bool {
 	// Check if it is a message type
 	if *f.Type == descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
@@ -332,4 +329,25 @@ func checkIsRelation(f *descriptorpb.FieldDescriptorProto) bool {
 	}
 
 	return false
+}
+
+// checkProtoSyntax checks if the syntax of the file is proto3.
+func checkProtoSyntax(file *descriptor.FileDescriptorProto) error {
+	if file.GetSyntax() != "proto3" {
+		return fmt.Errorf("unsupported protobuf syntax: %s, only 'proto3' is supported", file.GetSyntax())
+	}
+
+	return nil
+}
+
+func dump(s interface{}) string {
+	jsonData, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		log.Fatalf("JSON marshaling failed: %s", err)
+	}
+	return string(jsonData)
+}
+
+func dumpP(s interface{}) {
+	panic(fmt.Sprintf("%+v", dump(s)))
 }

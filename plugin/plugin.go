@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -73,13 +74,20 @@ func NewPlugin() *Plugin {
 // Run handles the input/output of the plugin.
 // It reads the request from stdin and writes the response to stdout.
 func (p *Plugin) Run() {
+	// read from stdin
 	data, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		log.Fatalf("Failed to read from stdin: %v", err)
 	}
 
+	// unmarshal protobuf from stdin to request struct and check for errors
 	if err := proto.Unmarshal(data, p.req); err != nil {
 		log.Fatalf("Failed to unmarshal protobuf: %v", err)
+	}
+
+	// check protobuf version
+	if err := p.checkProtobufVersion(); err != nil {
+		log.Fatalf("Failed to check protobuf version: %v", err)
 	}
 
 	if len(p.getUserProtoFiles()) == 0 {
@@ -148,6 +156,9 @@ func (p *Plugin) Run() {
 			Content: proto.String(content),
 		})
 	}
+
+	// set supported features
+	p.res.SupportedFeatures = proto.Uint64(uint64(plugingo.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL))
 
 	// format Go code and marshal protobuf
 	//
@@ -377,8 +388,10 @@ func (p *Plugin) fillRelation(state *State) *State {
 					}
 				}
 
-				// Add the relation to the map of relations
-				state.Relations[msg.GetName()+"::"+relation.StructName] = relation
+				if checkIsRelation(field) {
+					// Add the relation to the map of relations
+					state.Relations[msg.GetName()+"::"+relation.StructName] = relation
+				}
 			}
 		}
 	}
@@ -397,4 +410,21 @@ func (p *Plugin) fillRelation(state *State) *State {
 	}
 
 	return state
+}
+
+// checkProtobufVersion checks that the protobuf version is supported.
+func (p *Plugin) checkProtobufVersion() error {
+	ver := p.req.GetCompilerVersion()
+
+	// check protobuf version is supported (3.12.0 or later)
+	if ver.GetMajor() < 3 || (ver.GetMajor() == 3 && ver.GetMinor() < 12) {
+		return fmt.Errorf("unsupported protobuf version: %s, please upgrade to 3.12.0 or later", ver.String())
+	}
+
+	// check protobuf syntax is supported (proto3)
+	if err := checkProtoSyntax(p.getUserProtoFile()); err != nil {
+		return fmt.Errorf("unsupported protobuf syntax: %s, only 'proto3' is supported", p.getUserProtoFile().GetSyntax())
+	}
+
+	return nil
 }

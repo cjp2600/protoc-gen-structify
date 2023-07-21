@@ -137,11 +137,11 @@ type UserStore struct {
 
 // User is a struct for the "users" table.
 type User struct {
-	Id        string `db:"id"`
-	Name      string `db:"name"`
-	Age       int32  `db:"age"`
-	Email     string `db:"email"`
-	LastName  string `db:"last_name"`
+	Id        string  `db:"id"`
+	Name      string  `db:"name"`
+	Age       int32   `db:"age"`
+	Email     string  `db:"email"`
+	LastName  *string `db:"last_name"`
 	Settings  []*Setting
 	Addresses []*Address
 	CreatedAt time.Time `db:"created_at"`
@@ -185,7 +185,7 @@ id UUID PRIMARY KEY NOT NULL DEFAULT uuid_generate_v4(),
 name TEXT NOT NULL,
 age INTEGER NOT NULL,
 email TEXT UNIQUE NOT NULL,
-last_name TEXT NOT NULL,
+last_name TEXT,
 created_at TIMESTAMP NOT NULL DEFAULT now(),
 updated_at TIMESTAMP NOT NULL);COMMENT ON TABLE users IS 'This is a comment of User';`
 }

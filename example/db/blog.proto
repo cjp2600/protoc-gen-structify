@@ -20,7 +20,7 @@ message User {
   string name = 2 [(structify.field) = {index: true}];
   int32 age = 3;
   string email = 4 [(structify.field) = {unique: true}];
-  string last_name = 5;
+  optional string last_name = 5;
 
   repeated Setting settings = 7;
   repeated Address addresses = 6 [(structify.field) = {relation: { limit: 3 } }];
