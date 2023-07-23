@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -21,21 +22,49 @@ func main() {
 
 	var userStore = client.User() // UserStore is a generated struct from the User table
 
+	var val = "Doey"
+	id, err := userStore.Create(context.Background(), &store.User{
+		Name:     "John",
+		LastName: &val,
+		Age:      20,
+		Email:    "cjp2601@gmail.com",
+		Phones:   store.NewUserPhones([]string{"1234567890", "0987654321"}),
+		Balls:    store.NewUserBalls([]int32{1, 2, 3, 4, 5, 6}),
+		NotificationSettings: &store.JSONUserNotificationSettings{
+			RegistrationEmail: true,
+			OrderEmail:        false,
+		},
+	})
+	if err != nil {
+		log.Fatalf("failed to create user: %s", err)
+	}
+	fmt.Println(id)
+
+	/*	err = userStore.Update(context.Background(), "c68e47a5-56c1-4c54-a7ce-2b401a66f134", &store.UserUpdateRequest{
+			NotificationSettings: &store.JSONUserNotificationSettings{
+				RegistrationEmail: false,
+				OrderEmail:        false,
+			},
+		})
+		if err != nil {
+			log.Fatalf("failed to update user: %s", err)
+		}*/
+
 	// get all users from the database where age is between 0 and 10 and between 20 and 30
 	// and order by created_at in ascending order
-	users, err := userStore.FindMany(
-		store.Or(
-			store.WhereUserAgeBetween(0, 10),
-			store.WhereUserAgeBetween(20, 30),
-		),
-		store.Limit(10),
-		store.WhereUserCreatedAtOrderBy(true),
-	)
-	if err != nil {
-		log.Fatalf("failed to find users: %s", err)
-	}
+	/*	users, err := userStore.FindMany(
+			store.Or(
+				store.WhereUserAgeBetween(0, 10),
+				store.WhereUserAgeBetween(20, 30),
+			),
+			store.Limit(10),
+			store.WhereUserCreatedAtOrderBy(true),
+		)
+		if err != nil {
+			log.Fatalf("failed to find users: %s", err)
+		}
 
-	fmt.Println(dump(users))
+		fmt.Println(dump(users))*/
 }
 
 // connect is a helper function to connect to the database.

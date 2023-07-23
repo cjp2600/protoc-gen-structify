@@ -757,6 +757,7 @@ func WhereJSONContainedIn(field string, value string) Condition {
 }
 `
 
+// BuildConditionsTemplate builds the conditions template.
 func (p *Plugin) BuildConditionsTemplate() string {
 	type field struct {
 		Name string
@@ -773,7 +774,7 @@ func (p *Plugin) BuildConditionsTemplate() string {
 		Messages: make(map[string][]field),
 	}
 
-	for _, m := range getMessages(p.req) {
+	for _, m := range p.state.Tables {
 		for _, f := range m.GetField() {
 			if !checkIsRelation(f) {
 				data.Messages[m.GetName()] = append(data.Messages[m.GetName()], field{

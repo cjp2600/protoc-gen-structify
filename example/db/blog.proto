@@ -16,6 +16,13 @@ option (structify.db) = {
   * @structify.field primary_key: true, uuid: true, default: "uuid_generate_v4()"
  */
 message User {
+
+  // @structify field
+  message NotificationSettings {
+    bool registration_email = 1;
+    bool order_email = 2;
+  }
+
   string id = 1 [(structify.field) = {primary_key: true, uuid: true, default: "uuid_generate_v4()"}];
   string name = 2 [(structify.field) = {index: true}];
   int32 age = 3;
@@ -26,7 +33,12 @@ message User {
   repeated Address addresses = 6 [(structify.field) = {relation: { limit: 3 } }];
 
   google.protobuf.Timestamp created_at = 8 [(structify.field) = {default: "now()"}];
-  google.protobuf.Timestamp updated_at = 9;
+  optional google.protobuf.Timestamp updated_at = 9;
+
+  // json fields
+  NotificationSettings notification_settings = 10; // json field
+  repeated string phones = 11; // json field
+  repeated int32 balls = 12; // json field
 
   option (structify.opts) = {
     table: "users"
@@ -59,6 +71,6 @@ message Address {
   User user = 6 [(structify.field) = {relation: { field: "user_id", reference: "id" } }];
   string user_id = 7 [(structify.field) = {index: true, uuid: true}];
 
-  google.protobuf.Timestamp created_at = 8;
-  google.protobuf.Timestamp updated_at = 9;
+  google.protobuf.Timestamp created_at = 8 [(structify.field) = {default: "now()"}];
+  optional google.protobuf.Timestamp updated_at = 9;
 }

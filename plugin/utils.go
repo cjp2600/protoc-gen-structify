@@ -19,6 +19,8 @@ import (
 	structify "github.com/cjp2600/structify/plugin/options"
 )
 
+type DescriptorMList map[string]*descriptorpb.DescriptorProto
+
 func getFieldOptions(f *descriptorpb.FieldDescriptorProto) *structify.StructifyFieldOptions {
 	opts := f.GetOptions()
 	if opts != nil {
@@ -62,20 +64,93 @@ func getDBOptions(f *descriptorpb.FileDescriptorProto) *structify.StructifyDBOpt
 	return nil
 }
 
-// getMessages returns all the messages in the request. It filters out google.protobuf and structify messages.
-func getMessages(req *plugingo.CodeGeneratorRequest) []*descriptorpb.DescriptorProto {
+// getMessages returns the messages and nested messages.
+func getMessages(req *plugingo.CodeGeneratorRequest) ([]*descriptorpb.DescriptorProto, []*descriptorpb.DescriptorProto) {
+	var messages []*descriptorpb.DescriptorProto
+	var nestedMessages []*descriptorpb.DescriptorProto
+
+	var parentPrefix = "JSON"
+	f := getUserProtoFile(req)
+	for _, m := range f.GetMessageType() {
+		if !isUserMessage(f, m) {
+			continue
+		}
+		messages = append(messages, m)
+
+		// Add nested messages to the separate list
+		nestedMessages = append(nestedMessages, getNestedMessages(f, m.GetNestedType(), parentPrefix+m.GetName())...)
+	}
+
+	return messages, nestedMessages
+}
+
+// getNestedMessages returns the nested messages.
+func getNestedMessages(file *descriptorpb.FileDescriptorProto, descriptors []*descriptorpb.DescriptorProto, parentPrefix string) []*descriptorpb.DescriptorProto {
 	var messages []*descriptorpb.DescriptorProto
 
-	for _, f := range req.GetProtoFile() {
-		for _, m := range f.GetMessageType() {
-			if !isUserMessage(f, m) {
-				continue
-			}
-			messages = append(messages, m)
+	for _, m := range descriptors {
+		if !isUserMessage(file, m) {
+			continue
 		}
+
+		// Add prefix to message name
+		m.Name = proto.String(parentPrefix + m.GetName())
+
+		// Add this message to the list
+		messages = append(messages, m)
+
+		// Recursively add nested messages of this message
+		messages = append(messages, getNestedMessages(file, m.GetNestedType(), *m.Name+"")...)
 	}
 
 	return messages
+}
+
+func (d *DescriptorMList) exists(name string) bool {
+	_, ok := (*d)[name]
+	return ok
+}
+
+func (d *DescriptorMList) getDescriptor(name string) *descriptorpb.DescriptorProto {
+	return (*d)[name]
+}
+
+func (d *DescriptorMList) getDescriptorByType(typ string) *descriptorpb.DescriptorProto {
+	for _, v := range *d {
+		if v.GetName() == typ {
+			return v
+		}
+	}
+	return nil
+}
+
+func (d *DescriptorMList) getDescriptorByField(field string) *descriptorpb.DescriptorProto {
+	for _, v := range *d {
+		for _, f := range v.GetField() {
+			if f.GetName() == field {
+				return v
+			}
+		}
+	}
+	return nil
+}
+
+func descriptorToMap(descriptors []*descriptorpb.DescriptorProto) DescriptorMList {
+	m := make(map[string]*descriptorpb.DescriptorProto)
+	for _, d := range descriptors {
+		m[*d.Name] = d
+		if len(d.GetNestedType()) > 0 {
+			m = mergeDescriptors(m, descriptorToMap(d.GetNestedType()))
+		}
+	}
+	return m
+}
+
+func mergeDescriptors(m1, m2 map[string]*descriptorpb.DescriptorProto) map[string]*descriptorpb.DescriptorProto {
+	for k, v := range m2 {
+		m1[k] = v
+	}
+	return m1
 }
 
 // isUserMessage returns true if the message is not a google.protobuf or structify message.
@@ -110,9 +185,13 @@ func lowerCasePlural(name string) string {
 func postgresType(goType string, options *structify.StructifyFieldOptions) string {
 	t := goTypeToPostgresType(goType)
 
+	// Check if it is a JSON/UUID field
 	if options != nil {
 		if options.Uuid {
 			return "UUID"
+		}
+		if options.Json {
+			return "JSONB"
 		}
 	}
 
@@ -350,4 +429,70 @@ func dump(s interface{}) string {
 
 func dumpP(s interface{}) {
 	panic(fmt.Sprintf("%+v", dump(s)))
+}
+
+func dumpF(s interface{}) {
+	fmt.Println("")
+	fmt.Println(fmt.Sprintf("%+v", dump(s)))
+	fmt.Println("")
+	fmt.Println("//------------------------")
+}
+
+// getUserProtoFiles returns the user proto files.
+func getUserProtoFiles(req *plugingo.CodeGeneratorRequest) []*descriptorpb.FileDescriptorProto {
+	var userProtoFiles []*descriptorpb.FileDescriptorProto
+	filesToGenerate := make(map[string]bool)
+	for _, fileName := range req.GetFileToGenerate() {
+		filesToGenerate[fileName] = true
+	}
+
+	for _, protoFile := range req.GetProtoFile() {
+		if _, ok := filesToGenerate[*protoFile.Name]; ok {
+			userProtoFiles = append(userProtoFiles, protoFile)
+		}
+	}
+
+	return userProtoFiles
+}
+
+func isContainsStar(s string) bool {
+	return strings.Contains(s, "*")
+}
+
+// getUserProtoFile returns the first user proto file.
+func getUserProtoFile(req *plugingo.CodeGeneratorRequest) *descriptorpb.FileDescriptorProto {
+	return getUserProtoFiles(req)[0]
+}
+
+// isJSON returns true if the field is a JSON field.
+func isJSON(f *descriptorpb.FieldDescriptorProto, state *State) bool {
+	convertedType := convertType(f)
+	if _, ok := state.NestedTableStructMapping[convertedType]; ok {
+		return true
+	}
+
+	if detectMany(convertedType) && !checkIsRelation(f) {
+		return true
+	}
+
+	return false
+}
+
+// detectMany returns true if the field is a many relation.
+func detectMany(t string) bool {
+	return strings.Contains(t, "[]")
+}
+
+// detectReference returns the reference field name.
+func detectReference(structName string) string {
+	return lowerCase(structName) + "_id"
+}
+
+// detectField returns the field name.
+func detectField(structName string) string {
+	return "id"
+}
+
+func buildJSONTypeName(parentName string, typeName string) string {
+	return "JSON" + sToCml(parentName) + sToCml(typeName)
 }

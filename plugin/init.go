@@ -2,9 +2,11 @@ package plugin
 
 import (
 	"bytes"
+	"fmt"
 	"text/template"
 )
 
+// InitFunctionsTemplate is the template for the init functions.
 const InitFunctionsTemplate = `
 // {{ .Plugin.FileNameWithoutExt | upperClientName }}Options are the options for the {{ .Plugin.FileNameWithoutExt | upperClientName }}.
 type {{ .Plugin.FileNameWithoutExt | upperClientName }}Options struct {
@@ -98,25 +100,65 @@ var ErrRowNotFound = errors.New("row not found")
 
 // ErrNoTransaction is returned when the transaction is nil.
 var ErrNoTransaction = errors.New("no transaction provided")
+
+{{ range $key, $value := .JSONTypes }}
+// {{ $key }} is a JSON type.
+{{$value.Template}}
+
+// New{{ $value.StructureName }}{{$value.FieldName | sToCml}} returns a new {{$key}}.
+func New{{ $value.StructureName }}{{ $value.FieldName | sToCml}}(val {{$value.FieldType}}) *{{$key}} {
+	value := {{$key}}(val)
+	return &value
+}
+
+// Scan implements the sql.Scanner interface for MyJSONType
+func (m *{{$key}}) Scan(src interface{}) error {
+	if bytes, ok := src.([]byte); ok {
+		return json.Unmarshal(bytes, m)
+	}
+
+	return fmt.Errorf("can't convert %T to JSONUserPhones", src)
+}
+
+// Value implements the driver.Valuer interface for {{$key}}
+func (m *{{$key}}) Value() (driver.Value, error) {
+	if m == nil {
+		m = New{{ $value.StructureName }}{{ $value.FieldName | sToCml}}({{$value.FieldType}}{})
+	}
+	return json.Marshal(m)
+}
+{{ end }}
 `
 
 // BuildInitFunctionTemplate builds the init function template.
 func (p *Plugin) BuildInitFunctionTemplate() string {
 	type TemplateData struct {
-		Plugin   *Plugin
-		ExtraVar string
-		Storages map[string]string
-		Messages []string
+		Plugin    *Plugin
+		ExtraVar  string
+		Storages  map[string]string
+		Messages  []string
+		JSONTypes map[string]JSONType
 	}
 
+	// create the template data
 	data := TemplateData{
-		Plugin:   p,
-		ExtraVar: "extra value",
-		Storages: make(map[string]string),
+		Plugin:    p,
+		ExtraVar:  "extra value",
+		Storages:  make(map[string]string),
+		JSONTypes: make(map[string]JSONType),
+	}
+
+	// add to state
+	for _, jsonType := range p.state.JSONTypes {
+		data.JSONTypes[jsonType.TypeName] = jsonType
+	}
+
+	if len(data.JSONTypes) > 0 {
+		p.state.Imports.Enable(ImportJson, ImportSQLDriver)
 	}
 
 	// get the messages
-	for _, m := range getMessages(p.req) {
+	for _, m := range p.state.Tables {
 		data.Messages = append(data.Messages, m.GetName())
 		data.Storages[sToLowerCamel(m.GetName())+"Store"] = sToCml(m.GetName()) + "Store"
 	}
@@ -132,11 +174,13 @@ func (p *Plugin) BuildInitFunctionTemplate() string {
 	// parse the template
 	tmpl, err := template.New("goFile").Funcs(funcs).Parse(InitFunctionsTemplate)
 	if err != nil {
+		fmt.Println(err)
 		return ""
 	}
 
 	// execute the template
 	if err = tmpl.Execute(&output, data); err != nil {
+		fmt.Println(err)
 		return ""
 	}
 

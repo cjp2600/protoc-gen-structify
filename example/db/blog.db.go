@@ -6,6 +6,8 @@ package db
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
+	"encoding/json"
 	"errors"
 	"fmt"
 	sq "github.com/Masterminds/squirrel"
@@ -131,21 +133,96 @@ var ErrRowNotFound = errors.New("row not found")
 // ErrNoTransaction is returned when the transaction is nil.
 var ErrNoTransaction = errors.New("no transaction provided")
 
+// JSONUserBalls is a JSON type.
+type JSONUserBalls []int32
+
+// NewUserBalls returns a new JSONUserBalls.
+func NewUserBalls(val []int32) *JSONUserBalls {
+	value := JSONUserBalls(val)
+	return &value
+}
+
+// Scan implements the sql.Scanner interface for MyJSONType
+func (m *JSONUserBalls) Scan(src interface{}) error {
+	if bytes, ok := src.([]byte); ok {
+		return json.Unmarshal(bytes, m)
+	}
+
+	return fmt.Errorf("can't convert %T to JSONUserPhones", src)
+}
+
+// Value implements the driver.Valuer interface for JSONUserBalls
+func (m *JSONUserBalls) Value() (driver.Value, error) {
+	if m == nil {
+		m = NewUserBalls([]int32{})
+	}
+	return json.Marshal(m)
+}
+
+// JSONUserPhones is a JSON type.
+type JSONUserPhones []string
+
+// NewUserPhones returns a new JSONUserPhones.
+func NewUserPhones(val []string) *JSONUserPhones {
+	value := JSONUserPhones(val)
+	return &value
+}
+
+// Scan implements the sql.Scanner interface for MyJSONType
+func (m *JSONUserPhones) Scan(src interface{}) error {
+	if bytes, ok := src.([]byte); ok {
+		return json.Unmarshal(bytes, m)
+	}
+
+	return fmt.Errorf("can't convert %T to JSONUserPhones", src)
+}
+
+// Value implements the driver.Valuer interface for JSONUserPhones
+func (m *JSONUserPhones) Value() (driver.Value, error) {
+	if m == nil {
+		m = NewUserPhones([]string{})
+	}
+	return json.Marshal(m)
+}
+
+// JSONUserNotificationSettings is a nested table.
+type JSONUserNotificationSettings struct {
+	RegistrationEmail bool `json:"registration_email"`
+	OrderEmail        bool `json:"order_email"`
+}
+
+// Scan implements the sql.Scanner interface for MyJSONType
+func (m *JSONUserNotificationSettings) Scan(src interface{}) error {
+	if bytes, ok := src.([]byte); ok {
+		return json.Unmarshal(bytes, m)
+	}
+
+	return fmt.Errorf("can't convert %T to JSONUserNotificationSettings", src)
+}
+
+// Value implements the driver.Valuer interface for JSONUserNotificationSettings
+func (m *JSONUserNotificationSettings) Value() (driver.Value, error) {
+	return json.Marshal(m)
+}
+
 type UserStore struct {
 	db *sql.DB
 }
 
 // User is a struct for the "users" table.
 type User struct {
-	Id        string  `db:"id"`
-	Name      string  `db:"name"`
-	Age       int32   `db:"age"`
-	Email     string  `db:"email"`
-	LastName  *string `db:"last_name"`
-	Settings  []*Setting
-	Addresses []*Address
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+	Id                   string  `db:"id"`
+	Name                 string  `db:"name"`
+	Age                  int32   `db:"age"`
+	Email                string  `db:"email"`
+	LastName             *string `db:"last_name"`
+	Settings             []*Setting
+	Addresses            []*Address
+	CreatedAt            time.Time                     `db:"created_at"`
+	UpdatedAt            *time.Time                    `db:"updated_at"`
+	NotificationSettings *JSONUserNotificationSettings `db:"notification_settings"`
+	Phones               *JSONUserPhones               `db:"phones"`
+	Balls                *JSONUserBalls                `db:"balls"`
 }
 
 // SacnRow scans a row into the struct fields.
@@ -159,6 +236,9 @@ func (u *UserStore) ScanRow(row *sql.Row) (*User, error) {
 		&model.LastName,
 		&model.CreatedAt,
 		&model.UpdatedAt,
+		&model.NotificationSettings,
+		&model.Phones,
+		&model.Balls,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan row: %w", err)
@@ -174,7 +254,7 @@ func (u *UserStore) TableName() string {
 
 // Columns returns the database columns for the table.
 func (u *UserStore) Columns() []string {
-	return []string{"users.id", "users.name", "users.age", "users.email", "users.last_name", "users.created_at", "users.updated_at"}
+	return []string{"users.id", "users.name", "users.age", "users.email", "users.last_name", "users.created_at", "users.updated_at", "users.notification_settings", "users.phones", "users.balls"}
 }
 
 // CreateTableSQL returns the SQL statement to create the table.
@@ -187,7 +267,10 @@ age INTEGER NOT NULL,
 email TEXT UNIQUE NOT NULL,
 last_name TEXT,
 created_at TIMESTAMP NOT NULL DEFAULT now(),
-updated_at TIMESTAMP NOT NULL);COMMENT ON TABLE users IS 'This is a comment of User';`
+updated_at TIMESTAMP,
+notification_settings JSONB,
+phones JSONB NOT NULL,
+balls JSONB NOT NULL);COMMENT ON TABLE users IS 'This is a comment of User';`
 }
 
 // FindById returns a single row by ID.
@@ -213,7 +296,7 @@ func (u *UserStore) FindOne(conditions ...Condition) (*User, error) {
 	}
 	row := u.db.QueryRow(sqlQuery, args...)
 	var model User
-	err = row.Scan(&model.Id, &model.Name, &model.Age, &model.Email, &model.LastName, &model.CreatedAt, &model.UpdatedAt)
+	err = row.Scan(&model.Id, &model.Name, &model.Age, &model.Email, &model.LastName, &model.CreatedAt, &model.UpdatedAt, &model.NotificationSettings, &model.Phones, &model.Balls)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrRowNotFound
@@ -292,7 +375,7 @@ func (u *UserStore) FindMany(conditions ...Condition) ([]*User, error) {
 	var users []*User
 	for rows.Next() {
 		var model User
-		err = rows.Scan(&model.Id, &model.Name, &model.Age, &model.Email, &model.LastName, &model.CreatedAt, &model.UpdatedAt)
+		err = rows.Scan(&model.Id, &model.Name, &model.Age, &model.Email, &model.LastName, &model.CreatedAt, &model.UpdatedAt, &model.NotificationSettings, &model.Phones, &model.Balls)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
@@ -390,12 +473,15 @@ func (u *UserStore) DeleteWithTx(tx *sql.Tx, conditions ...Condition) (int64, er
 
 // UserUpdateRequest is the data required to update a row.
 type UserUpdateRequest struct {
-	Name      *string
-	Age       *int32
-	Email     *string
-	LastName  *string
-	CreatedAt *time.Time
-	UpdatedAt *time.Time
+	Name                 *string
+	Age                  *int32
+	Email                *string
+	LastName             *string
+	CreatedAt            *time.Time
+	UpdatedAt            *time.Time
+	NotificationSettings *JSONUserNotificationSettings
+	Phones               *JSONUserPhones
+	Balls                *JSONUserBalls
 }
 
 // Update updates a row with the provided data.
@@ -420,6 +506,15 @@ func (u *UserStore) Update(ctx context.Context, id string, model *UserUpdateRequ
 	}
 	if model.UpdatedAt != nil {
 		query = query.Set("updated_at", model.UpdatedAt)
+	}
+	if model.NotificationSettings != nil {
+		query = query.Set("notification_settings", model.NotificationSettings)
+	}
+	if model.Phones != nil {
+		query = query.Set("phones", model.Phones)
+	}
+	if model.Balls != nil {
+		query = query.Set("balls", model.Balls)
 	}
 
 	query = query.Where(sq.Eq{"id": id})
@@ -460,6 +555,15 @@ func (u *UserStore) UpdateWithTx(ctx context.Context, tx *sql.Tx, id string, mod
 	if model.UpdatedAt != nil {
 		query = query.Set("updated_at", model.UpdatedAt)
 	}
+	if model.NotificationSettings != nil {
+		query = query.Set("notification_settings", model.NotificationSettings)
+	}
+	if model.Phones != nil {
+		query = query.Set("phones", model.Phones)
+	}
+	if model.Balls != nil {
+		query = query.Set("balls", model.Balls)
+	}
 
 	query = query.Where(sq.Eq{"id": id})
 
@@ -481,9 +585,9 @@ func (u *UserStore) Create(ctx context.Context, model *User) (string, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert(u.TableName()).
-		Columns("name", "age", "email", "last_name", "created_at", "updated_at").
+		Columns("name", "age", "email", "last_name", "created_at", "updated_at", "notification_settings", "phones", "balls").
 		Suffix("RETURNING \"id\"").
-		Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt)
+		Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt, model.NotificationSettings, model.Phones, model.Balls)
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -512,9 +616,9 @@ func (u *UserStore) CreateWithTx(tx *sql.Tx, model *User) (string, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert(u.TableName()).
-		Columns("name", "age", "email", "last_name", "created_at", "updated_at").
+		Columns("name", "age", "email", "last_name", "created_at", "updated_at", "notification_settings", "phones", "balls").
 		Suffix("RETURNING \"id\"").
-		Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt)
+		Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt, model.NotificationSettings, model.Phones, model.Balls)
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -539,10 +643,10 @@ func (u *UserStore) CreateMany(ctx context.Context, models []*User) ([]string, e
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert(u.TableName()).
-		Columns("name", "age", "email", "last_name", "created_at", "updated_at")
+		Columns("name", "age", "email", "last_name", "created_at", "updated_at", "notification_settings", "phones", "balls")
 
 	for _, model := range models {
-		query = query.Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt)
+		query = query.Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt, model.NotificationSettings, model.Phones, model.Balls)
 	}
 
 	query = query.Suffix("RETURNING \"id\"")
@@ -578,10 +682,10 @@ func (u *UserStore) CreateManyWithTx(ctx context.Context, tx *sql.Tx, models []*
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert(u.TableName()).
-		Columns("name", "age", "email", "last_name", "created_at", "updated_at")
+		Columns("name", "age", "email", "last_name", "created_at", "updated_at", "notification_settings", "phones", "balls")
 
 	for _, model := range models {
-		query = query.Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt)
+		query = query.Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt, model.NotificationSettings, model.Phones, model.Balls)
 	}
 
 	query = query.Suffix("RETURNING \"id\"")
@@ -1057,9 +1161,9 @@ type Address struct {
 	State     int32  `db:"state"`
 	Zip       int64  `db:"zip"`
 	User      *User
-	UserId    string    `db:"user_id"`
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+	UserId    string     `db:"user_id"`
+	CreatedAt time.Time  `db:"created_at"`
+	UpdatedAt *time.Time `db:"updated_at"`
 }
 
 // SacnRow scans a row into the struct fields.
@@ -1102,8 +1206,8 @@ city TEXT NOT NULL,
 state INTEGER NOT NULL,
 zip BIGINT NOT NULL,
 user_id UUID NOT NULL,
-created_at TIMESTAMP NOT NULL,
-updated_at TIMESTAMP NOT NULL);`
+created_at TIMESTAMP NOT NULL DEFAULT now(),
+updated_at TIMESTAMP);`
 }
 
 // FindById returns a single row by ID.
@@ -1788,6 +1892,16 @@ func WhereUserUpdatedAtEq(value interface{}) Condition {
 	return EqualsCondition{Field: "updated_at", Value: value}
 }
 
+// WhereUserPhonesEq returns a condition that checks if the field equals the value.
+func WhereUserPhonesEq(value interface{}) Condition {
+	return EqualsCondition{Field: "phones", Value: value}
+}
+
+// WhereUserBallsEq returns a condition that checks if the field equals the value.
+func WhereUserBallsEq(value interface{}) Condition {
+	return EqualsCondition{Field: "balls", Value: value}
+}
+
 // ------------------------------
 
 // NotEqualsCondition not equals condition.
@@ -1904,6 +2018,16 @@ func WhereUserCreatedAtNotEq(value interface{}) Condition {
 // WhereUserUpdatedAtNotEq returns a condition that checks if the field equals the value.
 func WhereUserUpdatedAtNotEq(value interface{}) Condition {
 	return NotEqualsCondition{Field: "updated_at", Value: value}
+}
+
+// WhereUserPhonesNotEq returns a condition that checks if the field equals the value.
+func WhereUserPhonesNotEq(value interface{}) Condition {
+	return NotEqualsCondition{Field: "phones", Value: value}
+}
+
+// WhereUserBallsNotEq returns a condition that checks if the field equals the value.
+func WhereUserBallsNotEq(value interface{}) Condition {
+	return NotEqualsCondition{Field: "balls", Value: value}
 }
 
 // --------------------------------
@@ -2024,6 +2148,16 @@ func WhereUserUpdatedAtGreaterThan(value interface{}) Condition {
 	return GreaterThanCondition{Field: "updated_at", Value: value}
 }
 
+// WhereUserPhonesGreaterThan returns a condition that checks if the field equals the value.
+func WhereUserPhonesGreaterThan(value interface{}) Condition {
+	return GreaterThanCondition{Field: "phones", Value: value}
+}
+
+// WhereUserBallsGreaterThan returns a condition that checks if the field equals the value.
+func WhereUserBallsGreaterThan(value interface{}) Condition {
+	return GreaterThanCondition{Field: "balls", Value: value}
+}
+
 // --------------------------------
 
 // LessThanCondition less than condition.
@@ -2140,6 +2274,16 @@ func WhereUserCreatedAtLessThan(value interface{}) Condition {
 // WhereUserUpdatedAtLessThan returns a condition that checks if the field equals the value.
 func WhereUserUpdatedAtLessThan(value interface{}) Condition {
 	return LessThanCondition{Field: "updated_at", Value: value}
+}
+
+// WhereUserPhonesLessThan returns a condition that checks if the field equals the value.
+func WhereUserPhonesLessThan(value interface{}) Condition {
+	return LessThanCondition{Field: "phones", Value: value}
+}
+
+// WhereUserBallsLessThan returns a condition that checks if the field equals the value.
+func WhereUserBallsLessThan(value interface{}) Condition {
+	return LessThanCondition{Field: "balls", Value: value}
 }
 
 // --------------------------------
@@ -2260,6 +2404,16 @@ func WhereUserUpdatedAtGreaterThanOrEqual(value interface{}) Condition {
 	return GreaterThanOrEqualCondition{Field: "updated_at", Value: value}
 }
 
+// WhereUserPhonesGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserPhonesGreaterThanOrEqual(value interface{}) Condition {
+	return GreaterThanOrEqualCondition{Field: "phones", Value: value}
+}
+
+// WhereUserBallsGreaterThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserBallsGreaterThanOrEqual(value interface{}) Condition {
+	return GreaterThanOrEqualCondition{Field: "balls", Value: value}
+}
+
 // --------------------------------
 
 // LessThanOrEqualCondition less than or equal condition.
@@ -2376,6 +2530,16 @@ func WhereUserCreatedAtLessThanOrEqual(value interface{}) Condition {
 // WhereUserUpdatedAtLessThanOrEqual returns a condition that checks if the field equals the value.
 func WhereUserUpdatedAtLessThanOrEqual(value interface{}) Condition {
 	return LessThanOrEqualCondition{Field: "updated_at", Value: value}
+}
+
+// WhereUserPhonesLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserPhonesLessThanOrEqual(value interface{}) Condition {
+	return LessThanOrEqualCondition{Field: "phones", Value: value}
+}
+
+// WhereUserBallsLessThanOrEqual returns a condition that checks if the field equals the value.
+func WhereUserBallsLessThanOrEqual(value interface{}) Condition {
+	return LessThanOrEqualCondition{Field: "balls", Value: value}
 }
 
 // --------------------------------
@@ -2496,6 +2660,16 @@ func WhereUserUpdatedAtLike(value interface{}) Condition {
 	return LikeCondition{Field: "updated_at", Value: value}
 }
 
+// WhereUserPhonesLike returns a condition that checks if the field equals the value.
+func WhereUserPhonesLike(value interface{}) Condition {
+	return LikeCondition{Field: "phones", Value: value}
+}
+
+// WhereUserBallsLike returns a condition that checks if the field equals the value.
+func WhereUserBallsLike(value interface{}) Condition {
+	return LikeCondition{Field: "balls", Value: value}
+}
+
 // --------------------------------
 
 // NotLikeCondition not like condition.
@@ -2612,6 +2786,16 @@ func WhereUserCreatedAtNotLike(value interface{}) Condition {
 // WhereUserUpdatedAtNotLike returns a condition that checks if the field equals the value.
 func WhereUserUpdatedAtNotLike(value interface{}) Condition {
 	return NotLikeCondition{Field: "updated_at", Value: value}
+}
+
+// WhereUserPhonesNotLike returns a condition that checks if the field equals the value.
+func WhereUserPhonesNotLike(value interface{}) Condition {
+	return NotLikeCondition{Field: "phones", Value: value}
+}
+
+// WhereUserBallsNotLike returns a condition that checks if the field equals the value.
+func WhereUserBallsNotLike(value interface{}) Condition {
+	return NotLikeCondition{Field: "balls", Value: value}
 }
 
 // --------------------------------
@@ -2731,6 +2915,16 @@ func WhereUserUpdatedAtIsNull() Condition {
 	return IsNullCondition{Field: "updated_at"}
 }
 
+// WhereUserPhonesIsNull returns a condition that checks if the field is null.
+func WhereUserPhonesIsNull() Condition {
+	return IsNullCondition{Field: "phones"}
+}
+
+// WhereUserBallsIsNull returns a condition that checks if the field is null.
+func WhereUserBallsIsNull() Condition {
+	return IsNullCondition{Field: "balls"}
+}
+
 // --------------------------------
 
 // IsNotNullCondition represents the IS NOT NULL condition.
@@ -2846,6 +3040,16 @@ func WhereUserCreatedAtIsNotNull() Condition {
 // WhereUserUpdatedAtIsNotNull returns a condition that checks if the field is not null.
 func WhereUserUpdatedAtIsNotNull() Condition {
 	return IsNotNullCondition{Field: "updated_at"}
+}
+
+// WhereUserPhonesIsNotNull returns a condition that checks if the field is not null.
+func WhereUserPhonesIsNotNull() Condition {
+	return IsNotNullCondition{Field: "phones"}
+}
+
+// WhereUserBallsIsNotNull returns a condition that checks if the field is not null.
+func WhereUserBallsIsNotNull() Condition {
+	return IsNotNullCondition{Field: "balls"}
 }
 
 // --------------------------------
@@ -2966,6 +3170,16 @@ func WhereUserUpdatedAtIn(values ...interface{}) Condition {
 	return InCondition{Field: "updated_at", Values: values}
 }
 
+// WhereUserPhonesIn returns a condition that checks if the field is in the given values.
+func WhereUserPhonesIn(values ...interface{}) Condition {
+	return InCondition{Field: "phones", Values: values}
+}
+
+// WhereUserBallsIn returns a condition that checks if the field is in the given values.
+func WhereUserBallsIn(values ...interface{}) Condition {
+	return InCondition{Field: "balls", Values: values}
+}
+
 // --------------------------------
 
 // NotInCondition represents the NOT IN condition.
@@ -3082,6 +3296,16 @@ func WhereUserCreatedAtNotIn(values ...interface{}) Condition {
 // WhereUserUpdatedAtNotIn returns a condition that checks if the field is not in the given values.
 func WhereUserUpdatedAtNotIn(values ...interface{}) Condition {
 	return NotInCondition{Field: "updated_at", Values: values}
+}
+
+// WhereUserPhonesNotIn returns a condition that checks if the field is not in the given values.
+func WhereUserPhonesNotIn(values ...interface{}) Condition {
+	return NotInCondition{Field: "phones", Values: values}
+}
+
+// WhereUserBallsNotIn returns a condition that checks if the field is not in the given values.
+func WhereUserBallsNotIn(values ...interface{}) Condition {
+	return NotInCondition{Field: "balls", Values: values}
 }
 
 // --------------------------------
@@ -3203,6 +3427,16 @@ func WhereUserUpdatedAtBetween(from, to interface{}) Condition {
 	return BetweenCondition{Field: "updated_at", From: from, To: to}
 }
 
+// WhereUserPhonesBetween returns a condition that checks if the field is between the given values.
+func WhereUserPhonesBetween(from, to interface{}) Condition {
+	return BetweenCondition{Field: "phones", From: from, To: to}
+}
+
+// WhereUserBallsBetween returns a condition that checks if the field is between the given values.
+func WhereUserBallsBetween(from, to interface{}) Condition {
+	return BetweenCondition{Field: "balls", From: from, To: to}
+}
+
 // --------------------------------
 
 // OrderCondition represents the ORDER BY condition.
@@ -3321,6 +3555,16 @@ func WhereUserCreatedAtOrderBy(asc bool) Condition {
 // WhereUserUpdatedAtOrderBy returns a condition that orders the query by the given column.
 func WhereUserUpdatedAtOrderBy(asc bool) Condition {
 	return OrderCondition{Column: "updated_at", Asc: asc}
+}
+
+// WhereUserPhonesOrderBy returns a condition that orders the query by the given column.
+func WhereUserPhonesOrderBy(asc bool) Condition {
+	return OrderCondition{Column: "phones", Asc: asc}
+}
+
+// WhereUserBallsOrderBy returns a condition that orders the query by the given column.
+func WhereUserBallsOrderBy(asc bool) Condition {
+	return OrderCondition{Column: "balls", Asc: asc}
 }
 
 // --------------------------------

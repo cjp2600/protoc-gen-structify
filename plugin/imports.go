@@ -45,32 +45,31 @@ func (i ImportSet) Enable(imports ...Import) {
 }
 
 // Import is a type for how to generate import paths.
-type Import string
+type Import struct {
+	path string
+	sub  string
+}
 
 func (i Import) String() string {
-	return fmt.Sprintf("import %s \"%s\"\n", i.alias(), string(i))
+	return fmt.Sprintf("import %s \"%s\"\n", i.alias(), i.path)
 }
 
 func (i Import) alias() string {
-	switch i {
-	case ImportLibPQ:
-		return "_"
-	case ImportSquirrel:
-		return "sq"
-	default:
-		return ""
-	}
+	return i.sub
 }
 
 var (
-	ImportDb       = Import("database/sql")
-	ImportLibPQ    = Import("github.com/lib/pq")
-	ImportStrings  = Import("strings")
-	ImportSquirrel = Import("github.com/Masterminds/squirrel")
-	ImportFMT      = Import("fmt")
-	ImportErrors   = Import("errors")
-	ImportContext  = Import("context")
-	ImportStrconv  = Import("strconv")
-	ImportSync     = Import("sync")
-	ImportTime     = Import("time")
+	ImportDb           = Import{"database/sql", ""}
+	ImportLibPQ        = Import{"github.com/lib/pq", "_"}
+	ImportLibPQWOAlias = Import{"github.com/lib/pq", ""}
+	ImportStrings      = Import{"strings", ""}
+	ImportSquirrel     = Import{"github.com/Masterminds/squirrel", "sq"}
+	ImportFMT          = Import{"fmt", ""}
+	ImportErrors       = Import{"errors", ""}
+	ImportContext      = Import{"context", ""}
+	ImportStrconv      = Import{"strconv", ""}
+	ImportSync         = Import{"sync", ""}
+	ImportTime         = Import{"time", ""}
+	ImportJson         = Import{"encoding/json", ""}
+	ImportSQLDriver    = Import{"database/sql/driver", ""}
 )

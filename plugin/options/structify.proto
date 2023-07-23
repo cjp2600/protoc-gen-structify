@@ -39,6 +39,7 @@ message StructifyFieldOptions {
   bool nullable = 7;
   string default = 8;
   Relation relation = 9;
+  bool json = 10;
 }
 
 message Relation {
