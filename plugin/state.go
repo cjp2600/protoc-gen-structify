@@ -20,12 +20,22 @@ type State struct {
 	JSONTypes map[string]JSONType
 }
 
+func (s *State) IsExistInNestedTables(name string) bool {
+	for _, t := range s.NestedTables {
+		if t.GetName() == name {
+			return true
+		}
+	}
+	return false
+}
+
 type JSONType struct {
 	StructureName string
 	FieldName     string
 	FieldType     string
 	TypeName      string
 	Template      string
+	Repeated      bool
 }
 
 type NestedTableVal struct {

@@ -159,6 +159,58 @@ func (m *JSONUserBalls) Value() (driver.Value, error) {
 	return json.Marshal(m)
 }
 
+// JSONUserComment is a JSON type.
+type JSONUserCommentRepeated []*JSONUserComment
+
+// NewUserCommentsRepeated returns a new JSONUserCommentRepeated.
+func NewUserCommentsRepeated(val []*JSONUserComment) *JSONUserCommentRepeated {
+	value := JSONUserCommentRepeated(val)
+	return &value
+}
+
+// Scan implements the sql.Scanner interface for MyJSONType
+func (m *JSONUserCommentRepeated) Scan(src interface{}) error {
+	if bytes, ok := src.([]byte); ok {
+		return json.Unmarshal(bytes, m)
+	}
+
+	return fmt.Errorf("can't convert %T to JSONUserPhones", src)
+}
+
+// Value implements the driver.Valuer interface for JSONUserCommentRepeated
+func (m *JSONUserCommentRepeated) Value() (driver.Value, error) {
+	if m == nil {
+		m = NewUserCommentsRepeated([]*JSONUserComment{})
+	}
+	return json.Marshal(m)
+}
+
+// JSONUserNumr is a JSON type.
+type JSONUserNumrRepeated []*JSONUserNumr
+
+// NewUserNumrsRepeated returns a new JSONUserNumrRepeated.
+func NewUserNumrsRepeated(val []*JSONUserNumr) *JSONUserNumrRepeated {
+	value := JSONUserNumrRepeated(val)
+	return &value
+}
+
+// Scan implements the sql.Scanner interface for MyJSONType
+func (m *JSONUserNumrRepeated) Scan(src interface{}) error {
+	if bytes, ok := src.([]byte); ok {
+		return json.Unmarshal(bytes, m)
+	}
+
+	return fmt.Errorf("can't convert %T to JSONUserPhones", src)
+}
+
+// Value implements the driver.Valuer interface for JSONUserNumrRepeated
+func (m *JSONUserNumrRepeated) Value() (driver.Value, error) {
+	if m == nil {
+		m = NewUserNumrsRepeated([]*JSONUserNumr{})
+	}
+	return json.Marshal(m)
+}
+
 // JSONUserPhones is a JSON type.
 type JSONUserPhones []string
 
@@ -185,23 +237,64 @@ func (m *JSONUserPhones) Value() (driver.Value, error) {
 	return json.Marshal(m)
 }
 
-// JSONUserNotificationSettings is a nested table.
-type JSONUserNotificationSettings struct {
+// JSONUserNotificationSetting is a nested table.
+type JSONUserNotificationSetting struct {
 	RegistrationEmail bool `json:"registration_email"`
 	OrderEmail        bool `json:"order_email"`
 }
 
 // Scan implements the sql.Scanner interface for MyJSONType
-func (m *JSONUserNotificationSettings) Scan(src interface{}) error {
+func (m *JSONUserNotificationSetting) Scan(src interface{}) error {
 	if bytes, ok := src.([]byte); ok {
 		return json.Unmarshal(bytes, m)
 	}
 
-	return fmt.Errorf("can't convert %T to JSONUserNotificationSettings", src)
+	return fmt.Errorf("can't convert %T to JSONUserNotificationSetting", src)
 }
 
-// Value implements the driver.Valuer interface for JSONUserNotificationSettings
-func (m *JSONUserNotificationSettings) Value() (driver.Value, error) {
+// Value implements the driver.Valuer interface for JSONUserNotificationSetting
+func (m *JSONUserNotificationSetting) Value() (driver.Value, error) {
+	return json.Marshal(m)
+}
+
+// JSONUserNumr is a nested table.
+type JSONUserNumr struct {
+	Street string `json:"street"`
+	City   string `json:"city"`
+	State  int32  `json:"state"`
+	Zip    int64  `json:"zip"`
+}
+
+// Scan implements the sql.Scanner interface for MyJSONType
+func (m *JSONUserNumr) Scan(src interface{}) error {
+	if bytes, ok := src.([]byte); ok {
+		return json.Unmarshal(bytes, m)
+	}
+
+	return fmt.Errorf("can't convert %T to JSONUserNumr", src)
+}
+
+// Value implements the driver.Valuer interface for JSONUserNumr
+func (m *JSONUserNumr) Value() (driver.Value, error) {
+	return json.Marshal(m)
+}
+
+// JSONUserComment is a nested table.
+type JSONUserComment struct {
+	Name string `json:"name"`
+}
+
+// Scan implements the sql.Scanner interface for MyJSONType
+func (m *JSONUserComment) Scan(src interface{}) error {
+	if bytes, ok := src.([]byte); ok {
+		return json.Unmarshal(bytes, m)
+	}
+
+	return fmt.Errorf("can't convert %T to JSONUserComment", src)
+}
+
+// Value implements the driver.Valuer interface for JSONUserComment
+func (m *JSONUserComment) Value() (driver.Value, error) {
 	return json.Marshal(m)
 }
 
@@ -218,11 +311,13 @@ type User struct {
 	LastName             *string `db:"last_name"`
 	Settings             []*Setting
 	Addresses            []*Address
-	CreatedAt            time.Time                     `db:"created_at"`
-	UpdatedAt            *time.Time                    `db:"updated_at"`
-	NotificationSettings *JSONUserNotificationSettings `db:"notification_settings"`
-	Phones               *JSONUserPhones               `db:"phones"`
-	Balls                *JSONUserBalls                `db:"balls"`
+	CreatedAt            time.Time                    `db:"created_at"`
+	UpdatedAt            *time.Time                   `db:"updated_at"`
+	NotificationSettings *JSONUserNotificationSetting `db:"notification_settings"`
+	Phones               *JSONUserPhones              `db:"phones"`
+	Balls                *JSONUserBalls               `db:"balls"`
+	Numrs                *JSONUserNumrRepeated        `db:"numrs"`
+	Comments             *JSONUserCommentRepeated     `db:"comments"`
 }
 
 // SacnRow scans a row into the struct fields.
@@ -239,6 +334,8 @@ func (u *UserStore) ScanRow(row *sql.Row) (*User, error) {
 		&model.NotificationSettings,
 		&model.Phones,
 		&model.Balls,
+		&model.Numrs,
+		&model.Comments,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan row: %w", err)
@@ -254,7 +351,7 @@ func (u *UserStore) TableName() string {
 
 // Columns returns the database columns for the table.
 func (u *UserStore) Columns() []string {
-	return []string{"users.id", "users.name", "users.age", "users.email", "users.last_name", "users.created_at", "users.updated_at", "users.notification_settings", "users.phones", "users.balls"}
+	return []string{"users.id", "users.name", "users.age", "users.email", "users.last_name", "users.created_at", "users.updated_at", "users.notification_settings", "users.phones", "users.balls", "users.numrs", "users.comments"}
 }
 
 // CreateTableSQL returns the SQL statement to create the table.
@@ -270,7 +367,9 @@ created_at TIMESTAMP NOT NULL DEFAULT now(),
 updated_at TIMESTAMP,
 notification_settings JSONB,
 phones JSONB NOT NULL,
-balls JSONB NOT NULL);COMMENT ON TABLE users IS 'This is a comment of User';`
+balls JSONB NOT NULL,
+numrs JSONB NOT NULL,
+comments JSONB NOT NULL);COMMENT ON TABLE users IS 'This is a comment of User';`
 }
 
 // FindById returns a single row by ID.
@@ -296,7 +395,7 @@ func (u *UserStore) FindOne(conditions ...Condition) (*User, error) {
 	}
 	row := u.db.QueryRow(sqlQuery, args...)
 	var model User
-	err = row.Scan(&model.Id, &model.Name, &model.Age, &model.Email, &model.LastName, &model.CreatedAt, &model.UpdatedAt, &model.NotificationSettings, &model.Phones, &model.Balls)
+	err = row.Scan(&model.Id, &model.Name, &model.Age, &model.Email, &model.LastName, &model.CreatedAt, &model.UpdatedAt, &model.NotificationSettings, &model.Phones, &model.Balls, &model.Numrs, &model.Comments)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrRowNotFound
@@ -375,7 +474,7 @@ func (u *UserStore) FindMany(conditions ...Condition) ([]*User, error) {
 	var users []*User
 	for rows.Next() {
 		var model User
-		err = rows.Scan(&model.Id, &model.Name, &model.Age, &model.Email, &model.LastName, &model.CreatedAt, &model.UpdatedAt, &model.NotificationSettings, &model.Phones, &model.Balls)
+		err = rows.Scan(&model.Id, &model.Name, &model.Age, &model.Email, &model.LastName, &model.CreatedAt, &model.UpdatedAt, &model.NotificationSettings, &model.Phones, &model.Balls, &model.Numrs, &model.Comments)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
@@ -479,9 +578,11 @@ type UserUpdateRequest struct {
 	LastName             *string
 	CreatedAt            *time.Time
 	UpdatedAt            *time.Time
-	NotificationSettings *JSONUserNotificationSettings
+	NotificationSettings *JSONUserNotificationSetting
 	Phones               *JSONUserPhones
 	Balls                *JSONUserBalls
+	Numrs                *JSONUserNumrRepeated
+	Comments             *JSONUserCommentRepeated
 }
 
 // Update updates a row with the provided data.
@@ -515,6 +616,12 @@ func (u *UserStore) Update(ctx context.Context, id string, model *UserUpdateRequ
 	}
 	if model.Balls != nil {
 		query = query.Set("balls", model.Balls)
+	}
+	if model.Numrs != nil {
+		query = query.Set("numrs", model.Numrs)
+	}
+	if model.Comments != nil {
+		query = query.Set("comments", model.Comments)
 	}
 
 	query = query.Where(sq.Eq{"id": id})
@@ -564,6 +671,12 @@ func (u *UserStore) UpdateWithTx(ctx context.Context, tx *sql.Tx, id string, mod
 	if model.Balls != nil {
 		query = query.Set("balls", model.Balls)
 	}
+	if model.Numrs != nil {
+		query = query.Set("numrs", model.Numrs)
+	}
+	if model.Comments != nil {
+		query = query.Set("comments", model.Comments)
+	}
 
 	query = query.Where(sq.Eq{"id": id})
 
@@ -585,9 +698,9 @@ func (u *UserStore) Create(ctx context.Context, model *User) (string, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert(u.TableName()).
-		Columns("name", "age", "email", "last_name", "created_at", "updated_at", "notification_settings", "phones", "balls").
+		Columns("name", "age", "email", "last_name", "created_at", "updated_at", "notification_settings", "phones", "balls", "numrs", "comments").
 		Suffix("RETURNING \"id\"").
-		Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt, model.NotificationSettings, model.Phones, model.Balls)
+		Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt, model.NotificationSettings, model.Phones, model.Balls, model.Numrs, model.Comments)
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -616,9 +729,9 @@ func (u *UserStore) CreateWithTx(tx *sql.Tx, model *User) (string, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert(u.TableName()).
-		Columns("name", "age", "email", "last_name", "created_at", "updated_at", "notification_settings", "phones", "balls").
+		Columns("name", "age", "email", "last_name", "created_at", "updated_at", "notification_settings", "phones", "balls", "numrs", "comments").
 		Suffix("RETURNING \"id\"").
-		Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt, model.NotificationSettings, model.Phones, model.Balls)
+		Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt, model.NotificationSettings, model.Phones, model.Balls, model.Numrs, model.Comments)
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -643,10 +756,10 @@ func (u *UserStore) CreateMany(ctx context.Context, models []*User) ([]string, e
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert(u.TableName()).
-		Columns("name", "age", "email", "last_name", "created_at", "updated_at", "notification_settings", "phones", "balls")
+		Columns("name", "age", "email", "last_name", "created_at", "updated_at", "notification_settings", "phones", "balls", "numrs", "comments")
 
 	for _, model := range models {
-		query = query.Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt, model.NotificationSettings, model.Phones, model.Balls)
+		query = query.Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt, model.NotificationSettings, model.Phones, model.Balls, model.Numrs, model.Comments)
 	}
 
 	query = query.Suffix("RETURNING \"id\"")
@@ -682,10 +795,10 @@ func (u *UserStore) CreateManyWithTx(ctx context.Context, tx *sql.Tx, models []*
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	query := psql.Insert(u.TableName()).
-		Columns("name", "age", "email", "last_name", "created_at", "updated_at", "notification_settings", "phones", "balls")
+		Columns("name", "age", "email", "last_name", "created_at", "updated_at", "notification_settings", "phones", "balls", "numrs", "comments")
 
 	for _, model := range models {
-		query = query.Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt, model.NotificationSettings, model.Phones, model.Balls)
+		query = query.Values(model.Name, model.Age, model.Email, model.LastName, model.CreatedAt, model.UpdatedAt, model.NotificationSettings, model.Phones, model.Balls, model.Numrs, model.Comments)
 	}
 
 	query = query.Suffix("RETURNING \"id\"")

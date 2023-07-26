@@ -6,6 +6,7 @@ import (
 	"go/format"
 	"html/template"
 	"log"
+	"reflect"
 	"strings"
 	"unicode"
 
@@ -427,8 +428,19 @@ func dump(s interface{}) string {
 	return string(jsonData)
 }
 
-func dumpP(s interface{}) {
-	panic(fmt.Sprintf("%+v", dump(s)))
+func dumpP(values ...interface{}) {
+	var resp strings.Builder
+	resp.WriteString("\n")
+	resp.WriteString("\n")
+	for _, v := range values {
+		resp.WriteString("\n")
+		t := reflect.TypeOf(v)
+		resp.WriteString(fmt.Sprintf("=== Name: %s, Type: %s\n", t.Name(), t.String()))
+		resp.WriteString(fmt.Sprintf("%+v\n", dump(v)))
+		resp.WriteString("===\n")
+		resp.WriteString("\n")
+	}
+	panic(resp.String())
 }
 
 func dumpF(s interface{}) {
@@ -462,6 +474,20 @@ func isContainsStar(s string) bool {
 // getUserProtoFile returns the first user proto file.
 func getUserProtoFile(req *plugingo.CodeGeneratorRequest) *descriptorpb.FileDescriptorProto {
 	return getUserProtoFiles(req)[0]
+}
+
+// isRepeatedObjectField returns true if the message is a nested message.
+func isRepeatedObjectField(f *descriptorpb.FieldDescriptorProto, field Field, state *State) bool {
+	if field.Options.JSON {
+		if f.GetLabel() == descriptorpb.FieldDescriptorProto_LABEL_REPEATED {
+			for _, t := range state.NestedTables {
+				if t.GetName() == strings.ReplaceAll(field.Type, "*", "") {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // isJSON returns true if the field is a JSON field.

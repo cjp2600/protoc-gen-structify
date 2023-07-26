@@ -105,14 +105,14 @@ var ErrNoTransaction = errors.New("no transaction provided")
 // {{ $key }} is a JSON type.
 {{$value.Template}}
 
-// New{{ $value.StructureName }}{{$value.FieldName | sToCml}} returns a new {{$key}}.
-func New{{ $value.StructureName }}{{ $value.FieldName | sToCml}}(val {{$value.FieldType}}) *{{$key}} {
-	value := {{$key}}(val)
+// New{{ $value.StructureName }}{{$value.FieldName | sToCml}} returns a new {{$value.TypeName}}.
+func New{{ $value.StructureName }}{{ $value.FieldName | sToCml}}(val {{$value.FieldType}}) *{{$value.TypeName}} {
+	value := {{$value.TypeName}}(val)
 	return &value
 }
 
 // Scan implements the sql.Scanner interface for MyJSONType
-func (m *{{$key}}) Scan(src interface{}) error {
+func (m *{{$value.TypeName}}) Scan(src interface{}) error {
 	if bytes, ok := src.([]byte); ok {
 		return json.Unmarshal(bytes, m)
 	}
@@ -120,8 +120,8 @@ func (m *{{$key}}) Scan(src interface{}) error {
 	return fmt.Errorf("can't convert %T to JSONUserPhones", src)
 }
 
-// Value implements the driver.Valuer interface for {{$key}}
-func (m *{{$key}}) Value() (driver.Value, error) {
+// Value implements the driver.Valuer interface for {{$value.TypeName}}
+func (m *{{$value.TypeName}}) Value() (driver.Value, error) {
 	if m == nil {
 		m = New{{ $value.StructureName }}{{ $value.FieldName | sToCml}}({{$value.FieldType}}{})
 	}
@@ -137,7 +137,7 @@ func (p *Plugin) BuildInitFunctionTemplate() string {
 		ExtraVar  string
 		Storages  map[string]string
 		Messages  []string
-		JSONTypes map[string]JSONType
+		JSONTypes map[string]*JSONType
 	}
 
 	// create the template data
@@ -145,16 +145,26 @@ func (p *Plugin) BuildInitFunctionTemplate() string {
 		Plugin:    p,
 		ExtraVar:  "extra value",
 		Storages:  make(map[string]string),
-		JSONTypes: make(map[string]JSONType),
+		JSONTypes: make(map[string]*JSONType),
 	}
 
 	// add to state
 	for _, jsonType := range p.state.JSONTypes {
-		data.JSONTypes[jsonType.TypeName] = jsonType
+		v := jsonType
+		data.JSONTypes[jsonType.TypeName] = &v
 	}
 
 	if len(data.JSONTypes) > 0 {
 		p.state.Imports.Enable(ImportJson, ImportSQLDriver)
+	}
+
+	if len(data.JSONTypes) > 0 {
+		for k, jsonType := range data.JSONTypes {
+			if jsonType.Repeated {
+				jsonType.FieldType = "[]*" + k
+				jsonType.TypeName = jsonType.TypeName + "Repeated"
+			}
+		}
 	}
 
 	// get the messages

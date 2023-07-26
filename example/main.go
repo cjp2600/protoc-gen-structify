@@ -30,7 +30,24 @@ func main() {
 		Email:    "cjp2601@gmail.com",
 		Phones:   store.NewUserPhones([]string{"1234567890", "0987654321"}),
 		Balls:    store.NewUserBalls([]int32{1, 2, 3, 4, 5, 6}),
-		NotificationSettings: &store.JSONUserNotificationSettings{
+		Numrs: &store.JSONUserNumrRepeated{
+			{
+				State:  21,
+				Street: "street 1",
+				Zip:    123,
+			},
+			{
+				State:  22,
+				Street: "street 3",
+				Zip:    223,
+			},
+			{
+				State:  33,
+				Street: "street 4",
+				Zip:    555,
+			},
+		},
+		NotificationSettings: &store.JSONUserNotificationSetting{
 			RegistrationEmail: true,
 			OrderEmail:        false,
 		},

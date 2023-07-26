@@ -40,6 +40,7 @@ func createNewPostgresTableTemplate(d *descriptorpb.DescriptorProto, state *Stat
 				options.PrimaryKey = true
 			}
 
+			// remove relation if exist
 			table.IdType = convertedType
 			table.IdName = sourceName
 			table.IsIdUUID = postgresType(convertedType, options) == "UUID"
@@ -94,6 +95,11 @@ func createNewPostgresTableTemplate(d *descriptorpb.DescriptorProto, state *Stat
 			field.Type = "*" + v.TypeName
 		}
 
+		// detect repeated objects field and change type
+		if isRepeatedObjectField(f, *field, state) {
+			field.Type = field.Type + "Repeated"
+		}
+
 		// detect uuid field and change type
 		if options != nil {
 			field.Options.PrimaryKey = options.PrimaryKey
@@ -105,6 +111,7 @@ func createNewPostgresTableTemplate(d *descriptorpb.DescriptorProto, state *Stat
 			field.Options.JSON = options.Json
 		}
 
+		// add to table
 		table.Fields = append(table.Fields, field)
 	}
 

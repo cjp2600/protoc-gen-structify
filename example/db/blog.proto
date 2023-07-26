@@ -18,9 +18,20 @@ option (structify.db) = {
 message User {
 
   // @structify field
-  message NotificationSettings {
+  message NotificationSetting {
     bool registration_email = 1;
     bool order_email = 2;
+  }
+
+  message Numr {
+    string street = 1;
+    string city = 2;
+    int32 state = 3;
+    int64 zip = 4;
+  }
+
+  message Comment {
+    string name = 1;
   }
 
   string id = 1 [(structify.field) = {primary_key: true, uuid: true, default: "uuid_generate_v4()"}];
@@ -36,9 +47,11 @@ message User {
   optional google.protobuf.Timestamp updated_at = 9;
 
   // json fields
-  NotificationSettings notification_settings = 10; // json field
+  NotificationSetting notification_settings = 10; // json field
   repeated string phones = 11; // json field
   repeated int32 balls = 12; // json field
+  repeated Numr numrs = 13; // json field
+  repeated Comment comments = 14; // json field
 
   option (structify.opts) = {
     table: "users"

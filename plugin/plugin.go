@@ -459,11 +459,10 @@ func (p *Plugin) checkProtobufVersion() error {
 
 // fillNestedTableStructMapping fills the nested table struct mapping.
 func (p *Plugin) fillNestedTableStructMapping(state *State) *State {
-	f := getUserProtoFile(p.req)
-
 	state.NestedTableStructMapping = make(map[string]NestedTableVal)
-	for _, m := range f.GetMessageType() {
+	for _, m := range getUserProtoFile(p.req).GetMessageType() {
 		for _, f := range m.GetField() {
+
 			if f.GetType() == descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
 				convertedType := convertType(f)
 				if len(m.GetNestedType()) > 0 {
@@ -475,12 +474,25 @@ func (p *Plugin) fillNestedTableStructMapping(state *State) *State {
 						}
 					}
 				}
-
 			}
 		}
 	}
 
 	return state
+}
+
+func (p *Plugin) checkInNests(state *State, nests DescriptorMList, m *descriptorpb.DescriptorProto, convertedType string) {
+	if _, ok := nests["JSON"+m.GetName()+detectStructName(convertedType)]; ok {
+		state.NestedTableStructMapping[convertedType] = NestedTableVal{
+			StructureName: "JSON" + m.GetName() + detectStructName(convertedType),
+			HasType:       true,
+		}
+		/*		if len(m.GetNestedType()) > 0 {
+				for _, n := range m.GetNestedType() {
+					p.checkInNests(state, nests, n, convertedType)
+				}
+			}*/
+	}
 }
 
 // fillJSONTypes fills the json types.
@@ -493,16 +505,46 @@ func (p *Plugin) fillJSONTypes(state *State) *State {
 			if field.GetLabel() == descriptor.FieldDescriptorProto_LABEL_REPEATED {
 				convertedType := convertType(field)
 				if isJSON(field, state) {
+
+					// skip nested tables
+					var repeated bool
+					if _, ok := state.NestedTableStructMapping[convertedType]; ok {
+						repeated = true
+					}
+
+					fieldName := field.GetName()
+					{
+						if repeated {
+							fieldName = fieldName + "Repeated"
+						}
+					}
+					fieldType := convertedType
+
+					linkedStructName := buildJSONTypeName(m.GetName(), field.GetName())
+					if val, ok := p.state.NestedTableStructMapping[fieldType]; ok {
+						linkedStructName = val.StructureName
+					}
+
+					template := fmt.Sprintf(`type %s %s`+"\n", linkedStructName, convertedType)
+					{
+						if repeated {
+							convertedType = "[]*" + linkedStructName
+							template = fmt.Sprintf(`type %s %s`+"\n", linkedStructName+"Repeated", convertedType)
+						}
+					}
+
 					// Note that the field type might not be a string in every case.
 					// Consider using a switch statement on field.GetType() if you need more specific types.
-					p.state.JSONTypes[m.GetName()+"::"+field.GetName()] = JSONType{
+					jp := &JSONType{
 						StructureName: m.GetName(),
-						FieldName:     field.GetName(),
-						FieldType:     convertedType,
-						TypeName:      buildJSONTypeName(m.GetName(), field.GetName()),
-						//Template:      fmt.Sprintf(``+`type %s %s`+"\n", buildJSONTypeName(m.GetName(), field.GetName()), convertedType),
-						Template: fmt.Sprintf(`type %s %s`+"\n", buildJSONTypeName(m.GetName(), field.GetName()), convertedType),
+						FieldName:     fieldName,
+						FieldType:     fieldType,
+						TypeName:      linkedStructName,
+						Template:      template,
+						Repeated:      repeated,
 					}
+
+					p.state.JSONTypes[m.GetName()+"::"+field.GetName()] = *jp
 				}
 			}
 		}

@@ -65,6 +65,7 @@ func (n NestedTable) Imports() ImportSet {
 }
 
 // createNewNestedTemplate creates a new nested template.
+// It returns a new nested template.
 func createNewNestedTemplate(d *descriptorpb.DescriptorProto, state *State) Templater {
 	table := &NestedTable{
 		Name: d.GetName(),
