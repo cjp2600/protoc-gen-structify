@@ -33,6 +33,12 @@ const InitStatementTemplate = `
 //
 
 {{ template "errors" . }}
+
+//
+// Transaction manager.
+//
+
+{{ template "transaction" . }}
 `
 
 // ConnectionTemplate is the template for the connection functions.
@@ -149,6 +155,7 @@ const StorageTemplate = `
 // {{ storageName | lowerCamelCase }} is a map of provider to init function.
 type {{ storageName | lowerCamelCase }} struct {
 	db *sql.DB // The database connection.
+	tx *TxManager // The transaction manager.
 {{ range $key, $value := storages }}
 {{ $key }} {{ $value }}{{ end }}
 }
@@ -157,6 +164,8 @@ type {{ storageName | lowerCamelCase }} struct {
 type {{ storageName }} interface { {{ range $key, $value := storages }}
 	// Get{{ $value }} returns the {{ $value }} store.
 	Get{{ $value }}() {{ $value }}{{ end }}
+	// TxManager returns the transaction manager.
+	TxManager() *TxManager
 	// CreateTables creates the tables for all the stores.
 	CreateTables() error
 	// DropTables drops the tables for all the stores.
@@ -171,9 +180,15 @@ type {{ storageName }} interface { {{ range $key, $value := storages }}
 func New{{ storageName }}(db *sql.DB) {{ storageName }} {
 	return &{{ storageName | lowerCamelCase }}{
 		db: db,
+		tx: NewTxManager(db),
 {{ range $key, $value := storages }}
 {{ $key }}: New{{ $value }}(db),{{ end }}
 	}
+}
+
+// TxManager returns the transaction manager.
+func (c *{{ storageName | lowerCamelCase }}) TxManager() *TxManager {
+	return c.tx
 }
 
 {{ range $key, $value := storages }}
@@ -309,6 +324,107 @@ func (m *{{ $field.FieldType }}) String() string {
 }
 
 {{ end }}
+`
+
+const TransactionManagerTemplate = `
+// txKey is the key used to store the transaction in the context.
+type txKey struct{}
+
+// TxFromContext returns the transaction from the context.
+func TxFromContext(ctx context.Context) (*sql.Tx, bool) {
+	tx, ok := ctx.Value(txKey{}).(*sql.Tx)
+	return tx, ok
+}
+
+// TxManager is a transaction manager.
+type TxManager struct {
+	db *sql.DB
+}
+
+// NewTxManager creates a new transaction manager.
+func NewTxManager(db *sql.DB) *TxManager {
+	return &TxManager{
+		db: db,
+	}
+}
+
+// Begin begins a transaction.
+func (m *TxManager) Begin(ctx context.Context) (context.Context, error) {
+	if _, ok := TxFromContext(ctx); ok {
+		return ctx, nil
+	}
+
+	tx, err := m.db.Begin()
+	if err != nil {
+		return ctx, fmt.Errorf("could not begin transaction: %w", err)
+	}
+
+	// store the transaction in the context.
+	return context.WithValue(ctx, txKey{}, tx), nil
+}
+
+// IsTxOpen returns true if a transaction is open.
+func (m *TxManager) Commit(ctx context.Context) error {
+	tx, ok := TxFromContext(ctx)
+	if !ok {
+		return errors.New("transactions wasn't opened")
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("could not commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// Rollback rolls back a transaction.
+func (m *TxManager) Rollback(ctx context.Context) error {
+	if tx, ok := TxFromContext(ctx); ok {
+		err := tx.Rollback()
+		if err != nil && !errors.Is(err, sql.ErrTxDone) {
+			return err
+		}
+	}
+	return nil
+}
+
+// ExecFuncWithTx executes a function with a transaction.
+func (m *TxManager) ExecFuncWithTx(ctx context.Context, f func(context.Context) error) error {
+	// if a transaction is already open, just execute the function.
+	if m.IsTxOpen(ctx) {
+		return f(ctx)
+	}
+
+	ctx, err := m.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	// rollback the transaction if there is an error.
+	defer func() { _ = m.Rollback(ctx) }()
+
+	if err := f(ctx); err != nil {
+		return err
+	}
+
+	// commit the transaction.
+	if err := m.Commit(ctx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// IsTxOpen returns true if a transaction is open.
+func (m *TxManager) IsTxOpen(ctx context.Context) bool {
+	_, ok := TxFromContext(ctx)
+	return ok
+}
+
+// QueryExecer is an interface that can execute queries.
+type QueryExecer interface {
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+	Exec(query string, args ...interface{}) (sql.Result, error)
+}
 `
 
 // ErrorsTemplate is the template for the errors.

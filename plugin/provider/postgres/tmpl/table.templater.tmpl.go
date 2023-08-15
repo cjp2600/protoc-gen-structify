@@ -31,6 +31,16 @@ func New{{ storageName }}(db *sql.DB) {{ storageName }} {
 	}
 }
 
+// DB returns the underlying sql.DB. This is useful for doing transactions.
+func (t *{{ storageName | lowerCamelCase }}) DB(ctx context.Context) QueryExecer {
+	var db QueryExecer = t.db
+	if tx, ok := TxFromContext(ctx); ok {
+		db = tx
+	}
+
+	return db
+}
+
 // createTable creates the table.
 func (t *{{ storageName | lowerCamelCase }}) CreateTable() error {
 	sqlQuery := ` + "`" + `

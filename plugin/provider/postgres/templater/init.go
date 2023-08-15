@@ -57,6 +57,10 @@ func (i *initTemplater) BuildTemplate() string {
 			Name: "repeatedTypes",
 			Body: tmplpkg.SingleRepeatedTypesTemplate,
 		},
+		helperpkg.IncludeTemplate{
+			Name: "transaction",
+			Body: tmplpkg.TransactionManagerTemplate,
+		},
 	)
 	if err != nil {
 		log.Fatalf("failed to execute template: %v", err)
