@@ -10,6 +10,7 @@ option (structify.db) = {
   provider: "postgres"
   url_env: "DATABASE_URL"
 };
+
 /**
   * @structify.table users
   * @structify.comment This is a comment of User
@@ -31,7 +32,13 @@ message User {
   }
 
   message Comment {
+    message Meta {
+      string ip = 1;
+      string browser = 2;
+      string os = 3;
+    }
     string name = 1;
+    Meta meta = 2;
   }
 
   string id = 1 [(structify.field) = {primary_key: true, uuid: true, default: "uuid_generate_v4()"}];

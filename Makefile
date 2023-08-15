@@ -4,6 +4,10 @@ DATE             := $(shell date +%FT%T%z)
 GIT_COMMIT       := $(shell git rev-parse HEAD)
 GIT_BRANCH       := $(shell git rev-parse --abbrev-ref HEAD)
 GOBIN			 = $(CURDIR)/bin
+LDFLAGS          = -ldflags "-X 'github.com/cjp2600/structify/plugin/pkg/version.Version=$(VERSION)' \
+                             -X 'github.com/cjp2600/structify/plugin/pkg/version.Revision=$(GIT_COMMIT)' \
+                             -X 'github.com/cjp2600/structify/plugin/pkg/version.Branch=$(GIT_BRANCH)' \
+                             -X 'github.com/cjp2600/structify/plugin/pkg/version.BuildDate=$(DATE)'"
 
 PROTOC_VER := 3.15.8
 PROTOC_ZIP := protoc-$(PROTOC_VER)-osx-x86_64.zip
@@ -20,7 +24,7 @@ endif
 	@$(PROTOC) -I/usr/local/include -I.  \
 	-I$(GOPATH)/src   \
 	--plugin=protoc-gen-structify=$(GOBIN)/structify \
-	--structify_out=. --structify_opt=paths=source_relative \
+	--structify_out=. --structify_opt=paths=source_relative,include_connection=true \
 	$(f)
 
 .PHONY: install-protoc
@@ -66,7 +70,7 @@ clean: ## Clean up
 
 .PHONY: build
 build: ## Build the binary file
-	@$(GO) build -o bin/structify
+	@$(GO) build $(LDFLAGS) -o bin/structify
 
 help:                   ##Show this help.
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
