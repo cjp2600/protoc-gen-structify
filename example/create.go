@@ -21,9 +21,11 @@ func main() {
 	}
 	defer connection.Close()
 
+	ctx := context.Background()
+
 	store := db.NewBlogStorages(connection)
 	{
-		err := store.CreateTables()
+		err := store.CreateTables(ctx)
 		if err != nil {
 			panic(err)
 		}

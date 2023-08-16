@@ -167,13 +167,13 @@ type {{ storageName }} interface { {{ range $key, $value := storages }}
 	// TxManager returns the transaction manager.
 	TxManager() *TxManager
 	// CreateTables creates the tables for all the stores.
-	CreateTables() error
+	CreateTables(ctx context.Context) error
 	// DropTables drops the tables for all the stores.
-	DropTables() error
+	DropTables(ctx context.Context) error
 	// TruncateTables truncates the tables for all the stores.
-	TruncateTables() error
+	TruncateTables(ctx context.Context) error
 	// UpgradeTables upgrades the tables for all the stores.
-	UpgradeTables() error
+	UpgradeTables(ctx context.Context) error
 }
 
 // New{{ storageName }} returns a new {{ storageName }}.
@@ -200,11 +200,11 @@ func (c *{{ storageName | lowerCamelCase }}) Get{{ $value }}() {{ $value }} {
 
 // CreateTables creates the tables for all the stores.
 // This is idempotent and safe to run multiple times.
-func (c *{{ storageName | lowerCamelCase }}) CreateTables() error {
+func (c *{{ storageName | lowerCamelCase }}) CreateTables(ctx context.Context) error {
 	var err error
 {{ range $key, $value := storages }}
 	// create the {{ $value }} table.
-	err = c.{{ $key }}.CreateTable()
+	err = c.{{ $key }}.CreateTable(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create table: %w", err)
 	}
@@ -214,11 +214,11 @@ func (c *{{ storageName | lowerCamelCase }}) CreateTables() error {
 
 // DropTables drops the tables for all the stores.
 // This is idempotent and safe to run multiple times.
-func (c *{{ storageName | lowerCamelCase }}) DropTables() error {
+func (c *{{ storageName | lowerCamelCase }}) DropTables(ctx context.Context) error {
 	var err error
 {{ range $key, $value := storages }}
 	// drop the {{ $value }} table.
-	err = c.{{ $key }}.DropTable()
+	err = c.{{ $key }}.DropTable(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to drop table: %w", err)
 	}
@@ -228,11 +228,11 @@ func (c *{{ storageName | lowerCamelCase }}) DropTables() error {
 
 // TruncateTables truncates the tables for all the stores.
 // This is idempotent and safe to run multiple times.
-func (c *{{ storageName | lowerCamelCase }}) TruncateTables() error {
+func (c *{{ storageName | lowerCamelCase }}) TruncateTables(ctx context.Context) error {
 	var err error
 {{ range $key, $value := storages }}
 	// truncate the {{ $value }} table.
-	err = c.{{ $key }}.TruncateTable()
+	err = c.{{ $key }}.TruncateTable(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to truncate table: %w", err)
 	}
@@ -242,11 +242,11 @@ func (c *{{ storageName | lowerCamelCase }}) TruncateTables() error {
 
 // UpgradeTables runs the database upgrades for all the stores.
 // This is idempotent and safe to run multiple times.
-func (c *{{ storageName | lowerCamelCase }}) UpgradeTables() error {
+func (c *{{ storageName | lowerCamelCase }}) UpgradeTables(ctx context.Context) error {
 	var err error
 {{ range $key, $value := storages }}
 	// run the {{ $value }} upgrade.
-	err = c.{{ $key }}.UpgradeTable()
+	err = c.{{ $key }}.UpgradeTable(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to upgrade: %w", err)
 	}
@@ -416,9 +416,9 @@ func (m *TxManager) IsTxOpen(ctx context.Context) bool {
 
 // QueryExecer is an interface that can execute queries.
 type QueryExecer interface {
-	Query(query string, args ...interface{}) (*sql.Rows, error)
-	Exec(query string, args ...interface{}) (sql.Result, error)
-	QueryRow(query string, args ...interface{}) *sql.Row
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
 }
 
 // IsPgCheckViolation returns true if the error is a postgres check violation.

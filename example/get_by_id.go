@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/cjp2600/structify/example/db"
 )
 
@@ -30,16 +31,10 @@ func main() {
 		}
 	}
 
-	newName := "Ivan"
+	user, err := store.GetUserStorage().GetById(ctx, "d0e628b8-3266-480b-bb65-cfc356121b29")
+	if err != nil {
+		panic(err)
+	}
 
-	// Create Transaction Manager for store
-	err = store.TxManager().ExecFuncWithTx(context.Background(), func(ctx context.Context) error {
-		err := store.GetUserStorage().Update(ctx, "d0e628b8-3266-480b-bb65-cfc356121b29", &db.UserUpdate{
-			Name: &newName,
-		})
-		if err != nil {
-			return err
-		}
-		return nil
-	})
+	fmt.Println(fmt.Sprintf("User: %+v", user))
 }

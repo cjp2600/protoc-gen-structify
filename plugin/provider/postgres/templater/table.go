@@ -50,6 +50,14 @@ func (t *tableTemplater) BuildTemplate() string {
 			Name: "update_method",
 			Body: tmplpkg.TableUpdateMethodTemplate,
 		},
+		helperpkg.IncludeTemplate{
+			Name: "delete_method",
+			Body: tmplpkg.TableDeleteMethodTemplate,
+		},
+		helperpkg.IncludeTemplate{
+			Name: "get_by_id_method",
+			Body: tmplpkg.TableGetByIDMethodTemplate,
+		},
 	)
 	if err != nil {
 		log.Fatalf("failed to execute template: %v", err)
@@ -141,6 +149,28 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			return false
 		},
 
+		"hasPrimaryKey": func() bool {
+			for _, f := range t.message.GetField() {
+				if opts := helperpkg.GetFieldOptions(f); opts != nil {
+					if opts.GetPrimaryKey() {
+						return true
+					}
+				}
+			}
+			return false
+		},
+
+		"getPrimaryKey": func() *descriptorpb.FieldDescriptorProto {
+			for _, f := range t.message.GetField() {
+				if opts := helperpkg.GetFieldOptions(f); opts != nil {
+					if opts.GetPrimaryKey() {
+						return f
+					}
+				}
+			}
+			return nil
+		},
+
 		// isPointer returns true if the field is pointer.
 		"findPointer": func(f *descriptorpb.FieldDescriptorProto) bool {
 			return helperpkg.IsOptional(f)
@@ -212,9 +242,24 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			return helperpkg.UpperCamelCase(f.GetName())
 		},
 
+		// relationAllowSubDeleting returns true if the relation allows sub deleting.
+		"relationAllowSubDeleting": func(f *descriptorpb.FieldDescriptorProto) bool {
+			return true
+		},
+
 		// isRelation returns the field type.
 		"isRelation": func(f *descriptorpb.FieldDescriptorProto) bool {
 			return t.state.Relations.IsExist(f) && !t.state.NestedMessages.IsJSON(f)
+		},
+
+		// hasRelation returns true if the message has relation.
+		"hasRelation": func() bool {
+			for _, f := range t.message.GetField() {
+				if t.state.Relations.IsExist(f) && !t.state.NestedMessages.IsJSON(f) {
+					return true
+				}
+			}
+			return false
 		},
 
 		// relation returns the relation.

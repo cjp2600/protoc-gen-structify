@@ -5,6 +5,58 @@ const TableTemplate = `
 {{ template "structure" . }}
 {{ template "create_method" . }}
 {{ template "update_method" . }}
+{{ template "delete_method" . }}
+{{- if (hasPrimaryKey) }}
+{{ template "get_by_id_method" . }}
+{{- end }}
+`
+
+const TableGetByIDMethodTemplate = `
+// GetBy{{ getPrimaryKey.GetName | camelCase }} retrieves a {{ structureName }} by its {{ getPrimaryKey.GetName }}.
+func (t *{{ storageName | lowerCamelCase }}) GetBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}) (*{{ structureName }}, error) {
+	query := t.queryBuilder.Select(
+		{{- range $index, $field := fields }}
+		{{- if not ($field | isRelation) }}
+		"{{ $field | sourceName }}",
+		{{- end}}
+		{{- end}}
+	).From("{{ tableName }}").Where("{{ getPrimaryKey.GetName }} = ?", id)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	row := t.DB(ctx).QueryRowContext(ctx,sqlQuery, args...)
+	model := &{{ structureName }}{}
+	if err := model.ScanRow(row); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrRowNotFound
+		}
+		return nil, fmt.Errorf("failed to get {{ structureName }}: %w", err)
+	}
+
+	return model, nil
+}
+`
+
+const TableDeleteMethodTemplate = `
+// Delete removes an existing {{ structureName }} by its ID.
+func (t *{{ storageName | lowerCamelCase }}) Delete(ctx context.Context, id {{IDType}}) error {
+	query := t.queryBuilder.Delete("{{ tableName }}").Where("id = ?", id)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = t.DB(ctx).ExecContext(ctx,sqlQuery, args...)
+	if err != nil {
+		return fmt.Errorf("failed to delete {{ structureName }}: %w", err)
+	}
+
+	return nil
+}
 `
 
 const TableUpdateMethodTemplate = `
@@ -56,7 +108,7 @@ func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{ID
 		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	_, err = t.DB(ctx).Exec(sqlQuery, args...)
+	_, err = t.DB(ctx).ExecContext(ctx,sqlQuery, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update {{ structureName }}: %w", err)
 	}
@@ -122,7 +174,7 @@ const TableCreateMethodTemplate = `
 	}
 
 	{{ if (hasID) }}var id {{IDType}}
-	err = t.DB(ctx).QueryRow(sqlQuery, args...).Scan(&id) {{ else }} _, err = t.DB(ctx).Exec(sqlQuery, args...) {{ end }}
+	err = t.DB(ctx).QueryRowContext(ctx,sqlQuery, args...).Scan(&id) {{ else }} _, err = t.DB(ctx).ExecContext(ctx,sqlQuery, args...) {{ end }}
 	if err != nil {
 		if IsPgUniqueViolation(err) {
 			{{ if (hasID) }}return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error()) {{ else }}return errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error()) {{ end }}
@@ -166,13 +218,13 @@ type {{ storageName | lowerCamelCase }} struct {
 
 type {{ storageName }} interface {
 	// CreateTable creates the table.
-	CreateTable() error
+	CreateTable(ctx context.Context) error
 	// DropTable drops the table.
-	DropTable() error
+	DropTable(ctx context.Context) error
 	// TruncateTable truncates the table.
-	TruncateTable() error
+	TruncateTable(ctx context.Context) error
 	// UpgradeTable upgrades the table.
-	UpgradeTable() error
+	UpgradeTable(ctx context.Context) error
 	// Create creates a new {{ structureName }}.
 	{{- if (hasID) }}
 	Create(ctx context.Context, model *{{structureName}}) (*{{IDType}}, error)
@@ -181,6 +233,12 @@ type {{ storageName }} interface {
 	{{- end }}
 	// Update updates an existing {{ structureName }}.
 	Update(ctx context.Context, id {{IDType}}, updateData *{{structureName}}Update) error
+	// Delete removes an existing {{ structureName }} by its ID.
+	Delete(ctx context.Context, id {{IDType}}) error
+	{{- if (hasPrimaryKey) }}
+	// GetBy{{ getPrimaryKey.GetName | camelCase }} retrieves a {{ structureName }} by its {{ getPrimaryKey.GetName }}.
+	GetBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}) (*{{ structureName }}, error)
+	{{- end }}
 }
 
 // New{{ storageName }} returns a new {{ storageName | lowerCamelCase }}.
@@ -202,7 +260,7 @@ func (t *{{ storageName | lowerCamelCase }}) DB(ctx context.Context) QueryExecer
 }
 
 // createTable creates the table.
-func (t *{{ storageName | lowerCamelCase }}) CreateTable() error {
+func (t *{{ storageName | lowerCamelCase }}) CreateTable(ctx context.Context) error {
 	sqlQuery := ` + "`" + `
 		{{- range $index, $field := fields }}
 		{{- if ($field | isDefaultUUID ) }}
@@ -219,32 +277,32 @@ func (t *{{ storageName | lowerCamelCase }}) CreateTable() error {
 		{{if (comment) }}COMMENT ON TABLE {{ tableName }} IS '{{ comment }}';{{end}}
 	` + "`" + `
 
-	_, err := t.db.Exec(sqlQuery)
+	_, err := t.db.ExecContext(ctx,sqlQuery)
 	return err
 }
 
 // DropTable drops the table.
-func (t *{{ storageName | lowerCamelCase }}) DropTable() error {
+func (t *{{ storageName | lowerCamelCase }}) DropTable(ctx context.Context) error {
 	sqlQuery := ` + "`" + `
 		DROP TABLE IF EXISTS {{ tableName }};
 	` + "`" + `
 
-	_, err := t.db.Exec(sqlQuery)
+	_, err := t.db.ExecContext(ctx,sqlQuery)
 	return err
 }
 
 // TruncateTable truncates the table.
-func (t *{{ storageName | lowerCamelCase }}) TruncateTable() error {
+func (t *{{ storageName | lowerCamelCase }}) TruncateTable(ctx context.Context) error {
 	sqlQuery := ` + "`" + `
 		TRUNCATE TABLE {{ tableName }};
 	` + "`" + `
 
-	_, err := t.db.Exec(sqlQuery)
+	_, err := t.db.ExecContext(ctx,sqlQuery)
 	return err
 }
 
 // UpgradeTable upgrades the table.
-func (t *{{ storageName | lowerCamelCase }}) UpgradeTable() error {
+func (t *{{ storageName | lowerCamelCase }}) UpgradeTable(ctx context.Context) error {
 	return nil
 }
 `
