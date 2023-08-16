@@ -42,6 +42,14 @@ func (t *tableTemplater) BuildTemplate() string {
 			Name: "structure",
 			Body: tmplpkg.StructureTemplate,
 		},
+		helperpkg.IncludeTemplate{
+			Name: "create_method",
+			Body: tmplpkg.TableCreateMethodTemplate,
+		},
+		helperpkg.IncludeTemplate{
+			Name: "update_method",
+			Body: tmplpkg.TableUpdateMethodTemplate,
+		},
 	)
 	if err != nil {
 		log.Fatalf("failed to execute template: %v", err)
@@ -127,6 +135,19 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 
 		// isPrimaryKey returns true if the field is primary key.
 		"isPrimaryKey": func(f *descriptorpb.FieldDescriptorProto) bool {
+			if opts := helperpkg.GetFieldOptions(f); opts != nil {
+				return opts.GetPrimaryKey()
+			}
+			return false
+		},
+
+		// isPointer returns true if the field is pointer.
+		"findPointer": func(f *descriptorpb.FieldDescriptorProto) bool {
+			return helperpkg.IsOptional(f)
+		},
+
+		// isPrimaryKey returns true if the field is primary key.
+		"isPrimary": func(f *descriptorpb.FieldDescriptorProto) bool {
 			if opts := helperpkg.GetFieldOptions(f); opts != nil {
 				return opts.GetPrimaryKey()
 			}
