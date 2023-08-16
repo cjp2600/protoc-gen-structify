@@ -59,9 +59,9 @@ func main() {
 				RegistrationEmail: true,
 				OrderEmail:        false,
 			},
-			Phones: *db.NewPhonesField([]string{"+7 999 999 99 99", "+7 999 999 99 98"}),
-			Balls:  *db.NewBallsField([]int32{1, 2, 3, 4, 5}),
-			Numrs: *db.NewNumrsField([]db.UserNumr{
+			Phones: db.NewPhonesField([]string{"+7 999 999 99 99", "+7 999 999 99 98"}),
+			Balls:  db.NewBallsField([]int32{1, 2, 3, 4, 5}),
+			Numrs: db.NewNumrsField([]db.UserNumr{
 				{
 					Street: "Lenina",
 					State:  12,
@@ -73,7 +73,7 @@ func main() {
 					State:  112,
 				},
 			}),
-			Comments: *db.NewCommentsField([]db.UserComment{
+			Comments: db.NewCommentsField([]db.UserComment{
 				{
 					Name: "John",
 					Meta: &db.CommentMeta{

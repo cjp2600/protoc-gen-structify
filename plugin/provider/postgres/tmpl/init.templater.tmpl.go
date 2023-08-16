@@ -286,15 +286,11 @@ func (m *{{ $field.StructureName }}) Value() (driver.Value, error) {
 const SingleRepeatedTypesTemplate = `
 {{ range $field := singleTypes }}
 // {{ $field.FieldType }} is a JSON type nested in another message.
-type {{ $field.FieldType }} struct {
-	{{ $field.SourceName | camelCase }} {{ $field.Descriptor | fieldType }} ` + "`json:\"{{ $field.SourceName }}\"`" + `
-}
+type {{ $field.FieldType }} {{ $field.Descriptor | fieldType }}
 
 // New{{ $field.SourceName | camelCase }}Field returns a new {{ $field.FieldType }}.
-func New{{ $field.SourceName | camelCase }}Field (v {{ $field.Descriptor | fieldType }}) *{{ $field.FieldType }} {
-	return &{{ $field.FieldType }}{
-		{{ $field.SourceName | camelCase }}: v,
-	}
+func New{{ $field.SourceName | camelCase }}Field (v {{ $field.Descriptor | fieldType }}) {{ $field.FieldType }} {
+	return v
 }
 
 // Scan implements the sql.Scanner interface for JSON.
@@ -307,16 +303,13 @@ func (m *{{ $field.FieldType }}) Scan(src interface{}) error  {
 }
 
 // Value implements the driver.Valuer interface for JSON.
-func (m *{{ $field.FieldType }}) Value() (driver.Value, error) {
-	if m == nil {
-		m = &{{ $field.FieldType }}{}
-	}
+func (m {{ $field.FieldType }}) Value() (driver.Value, error) {
 	return json.Marshal(m)
 }
 
 // Get returns the value of the field.
-func (m *{{ $field.FieldType }}) Get() {{ $field.Descriptor | fieldType }} {
-	return m.{{ $field.SourceName | camelCase }}
+func (m {{ $field.FieldType }}) Get() {{ $field.Descriptor | fieldType }} {
+	return m
 }
 
 func (m *{{ $field.FieldType }}) String() string {
