@@ -65,7 +65,7 @@ var (
 	ImportStrings      = Import{"strings", ""}
 	ImportSquirrel     = Import{"github.com/Masterminds/squirrel", "sq"}
 	ImportFMT          = Import{"fmt", ""}
-	ImportErrors       = Import{"errors", ""}
+	ImportErrors       = Import{"github.com/pkg/errors", ""}
 	ImportContext      = Import{"context", ""}
 	ImportStrconv      = Import{"strconv", ""}
 	ImportSync         = Import{"sync", ""}

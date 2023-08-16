@@ -417,7 +417,7 @@ func DetectTableName(t string) string {
 func DetectStoreName(t string) string {
 	name := strings.ReplaceAll(t, "*", "")
 	name = strings.ReplaceAll(name, "[]", "")
-	return UpperCamelCase(name) + "Store"
+	return UpperCamelCase(name) + "Storage"
 }
 
 // DetectStructName returns the struct name for the given type.

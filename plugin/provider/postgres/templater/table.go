@@ -70,6 +70,11 @@ func (t *tableTemplater) Imports() importpkg.ImportSet {
 func (t *tableTemplater) Funcs() map[string]interface{} {
 	return template.FuncMap{
 
+		// isRepeated returns true if the field is repeated.
+		"isRepeated": func(f *descriptorpb.FieldDescriptorProto) bool {
+			return helperpkg.IsRepeated(f)
+		},
+
 		// fieldType returns the field type.
 		"fieldType": func(f *descriptorpb.FieldDescriptorProto) string {
 			// if the field is a single type, return the single type.
@@ -144,6 +149,16 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			return false
 		},
 
+		// isDefaultUUID returns true if the field is default uuid.
+		"isDefaultUUID": func(f *descriptorpb.FieldDescriptorProto) bool {
+			if opts := helperpkg.GetFieldOptions(f); opts != nil {
+				if strings.Contains(opts.GetDefault(), "uuid_generate") {
+					return true
+				}
+			}
+			return false
+		},
+
 		// isAutoIncrement returns true if the field is auto increment.
 		"isAutoIncrement": func(f *descriptorpb.FieldDescriptorProto) bool {
 			if opts := helperpkg.GetFieldOptions(f); opts != nil {
@@ -178,7 +193,73 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 
 		// isRelation returns the field type.
 		"isRelation": func(f *descriptorpb.FieldDescriptorProto) bool {
-			return t.state.NestedMessages.CheckIsRelation(f)
+			return t.state.Relations.IsExist(f) && !t.state.NestedMessages.IsJSON(f)
+		},
+
+		// relation returns the relation.
+		"relation": func(f *descriptorpb.FieldDescriptorProto) *statepkg.Relation {
+			return t.state.Relations.GetByFieldDescriptor(f)
+		},
+
+		// relationName returns the relation name.
+		"relationStorageName": func(f *descriptorpb.FieldDescriptorProto) string {
+			if t.state.Relations.IsExist(f) {
+				return t.state.Relations.GetByFieldDescriptor(f).Store
+			}
+			return ""
+		},
+
+		// relationName returns the relation name.
+		"hasIDFromRelation": func(f *descriptorpb.FieldDescriptorProto) bool {
+			if t.state.Relations.IsExist(f) {
+				rd := t.state.Relations.GetByFieldDescriptor(f).RelationDescriptor
+				for _, f := range rd.GetField() {
+					if f.GetName() == "id" {
+						return true
+					}
+				}
+			}
+			return false
+		},
+
+		"relationIDFieldName": func(fl *descriptorpb.FieldDescriptorProto) string {
+			if t.state.Relations.IsExist(fl) {
+				rd := t.state.Relations.GetByFieldDescriptor(fl).RelationDescriptor
+				pd := t.state.Relations.GetByFieldDescriptor(fl).ParentDescriptor
+				for _, f := range rd.GetField() {
+					if f.GetName() == strings.ToLower(pd.GetName())+"_id" {
+						return helperpkg.UpperCamelCase(f.GetName())
+					}
+				}
+			}
+			return ""
+		},
+
+		// relationName returns the relation name.
+		"hasID": func() bool {
+			for _, f := range t.message.GetField() {
+				if f.GetName() == "id" {
+					return true
+				}
+			}
+			return false
+		},
+
+		"IDType": func() string {
+			for _, f := range t.message.GetField() {
+				if f.GetName() == "id" {
+					return helperpkg.ConvertType(f)
+				}
+			}
+			return "int64"
+		},
+
+		// relationAllowSubCreating returns true if the relation allows sub creating.
+		"relationAllowSubCreating": func(f *descriptorpb.FieldDescriptorProto) bool {
+			if t.state.Relations.IsExist(f) {
+				return t.state.Relations.GetByFieldDescriptor(f).AllowSubCreating
+			}
+			return false
 		},
 
 		// sourceName returns the source name.

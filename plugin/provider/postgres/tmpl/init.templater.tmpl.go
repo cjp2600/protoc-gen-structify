@@ -385,6 +385,7 @@ func (m *TxManager) Rollback(ctx context.Context) error {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -424,7 +425,48 @@ func (m *TxManager) IsTxOpen(ctx context.Context) bool {
 type QueryExecer interface {
 	Query(query string, args ...interface{}) (*sql.Rows, error)
 	Exec(query string, args ...interface{}) (sql.Result, error)
+	QueryRow(query string, args ...interface{}) *sql.Row
 }
+
+// IsPgCheckViolation returns true if the error is a postgres check violation.
+func IsPgUniqueViolation(err error) bool {
+	pgErr, ok := err.(*pq.Error)
+	if !ok {
+		return false
+	}
+
+	return pgErr.Code == errPgUniqueViolationError
+}
+
+// IsPgCheckViolation returns true if the error is a postgres check violation.
+func IsPgViolationError(err error) bool {
+	pgErr, ok := err.(*pq.Error)
+	if !ok {
+		return false
+	}
+	
+	return pgErr.Code == errPgCheckViolation ||
+		pgErr.Code == errPgNotNullViolation ||
+		pgErr.Code == errPgForeignKeyViolation ||
+		pgErr.Code == errPgUniqueViolationError
+}
+
+// PgPrettyErr returns a pretty postgres error.
+func PgPrettyErr(err error) error {
+	if pgErr, ok := err.(*pq.Error); ok {
+		return errors.New(pgErr.Detail)
+	}
+	return err
+}
+
+// errors for postgres.
+// https://www.postgresql.org/docs/9.3/errcodes-appendix.html
+const (
+	errPgCheckViolation       = "23514"
+	errPgNotNullViolation     = "23502"
+	errPgForeignKeyViolation  = "23503"
+	errPgUniqueViolationError = "23505"
+)
 `
 
 // ErrorsTemplate is the template for the errors.
@@ -435,5 +477,7 @@ var (
 	ErrRowNotFound = errors.New("row not found")
 	// ErrNoTransaction is returned when a transaction is not provided.
 	ErrNoTransaction = errors.New("no transaction provided")
+	// ErrRowAlreadyExist is returned when a row already exist.
+	ErrRowAlreadyExist    = errors.New("row already exist")
 )
 `

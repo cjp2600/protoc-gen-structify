@@ -11,6 +11,14 @@ option (structify.db) = {
   url_env: "DATABASE_URL"
 };
 
+// table without id
+message Device {
+  string name = 1;
+  string value = 3;
+  string user_id = 4
+  [(structify.field) = {index: true, uuid: true}];
+}
+
 /**
   * @structify.table users
   * @structify.comment This is a comment of User
@@ -47,7 +55,10 @@ message User {
   string email = 4 [(structify.field) = {unique: true}];
   optional string last_name = 5;
 
-  repeated Setting settings = 7;
+
+  Device device = 15 [(structify.field) = {relation: { field: "user_id", reference: "id" } }];
+
+  Setting settings = 7;
   repeated Address addresses = 6 [(structify.field) = {relation: { limit: 3 } }];
 
   google.protobuf.Timestamp created_at = 8 [(structify.field) = {default: "now()"}];
@@ -71,7 +82,7 @@ message User {
   * @structify.field primary_key: true, uuid: true, default: "uuid_generate_v4()"
  */
 message Setting {
-  string id = 1 [(structify.field) = {primary_key: true, uuid: true, default: "uuid_generate_v4()"}];
+  int32 id = 1 [(structify.field) = {primary_key: true, auto_increment: true}];
   string name = 2 [(structify.field) = {index: true}];
   string value = 3;
   User user = 4 [(structify.field) = {relation: { field: "user_id", reference: "id" } }];

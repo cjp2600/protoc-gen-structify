@@ -81,6 +81,7 @@ func (i *initTemplater) Imports() importpkg.ImportSet {
 		importpkg.ImportErrors,
 		importpkg.ImportJson,
 		importpkg.ImportSQLDriver,
+		importpkg.ImportLibPQWOAlias,
 	)
 
 	return is

@@ -89,6 +89,32 @@ func defaultImports(request *plugingo.CodeGeneratorRequest) importpkg.ImportSet 
 	return imports
 }
 
+// parseFileName returns the file name of the plugin.
+func isAllowSubCreating(request *plugingo.CodeGeneratorRequest, msg *descriptor.DescriptorProto, field *descriptor.FieldDescriptorProto) bool {
+	ref := helperpkg.DetectReference(msg.GetName())
+	relateDesc := findRelatedDescriptor(request, field)
+	if relateDesc != nil {
+		for _, f := range relateDesc.GetField() {
+			if strings.EqualFold(f.GetName(), ref) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func findRelatedDescriptor(request *plugingo.CodeGeneratorRequest, field *descriptor.FieldDescriptorProto) *descriptor.DescriptorProto {
+	protoFile := helperpkg.GetUserProtoFile(request)
+	convertedType := helperpkg.ConvertType(field)
+	for _, msg := range protoFile.GetMessageType() {
+		if msg.GetName() == helperpkg.ClearPointer(convertedType) {
+			return msg
+		}
+	}
+	return nil
+}
+
 // getRelation fills the Relations map in the state struct.
 func getRelations(request *plugingo.CodeGeneratorRequest, nestSet NestedMessages) Relations {
 	protoFile := helperpkg.GetUserProtoFile(request)
@@ -100,13 +126,17 @@ func getRelations(request *plugingo.CodeGeneratorRequest, nestSet NestedMessages
 				convertedType := helperpkg.ConvertType(field)
 
 				relation := &Relation{
-					Field:      helperpkg.DetectField(helperpkg.DetectStructName(convertedType)),
-					Reference:  helperpkg.DetectReference(msg.GetName()),
-					TableName:  helperpkg.DetectTableName(convertedType),  // Assuming msg.GetName() is the table name
-					StructName: helperpkg.DetectStructName(convertedType), // Assuming field.GetName() is the struct name
-					Store:      helperpkg.DetectStoreName(convertedType),  // Fill this with the proper value
-					Many:       helperpkg.DetectMany(convertedType),       // As the field is repeated, it means there are many Relations
-					Limit:      100,                                       // default relation limit
+					ParentDescriptor:   msg,
+					Descriptor:         field,
+					RelationDescriptor: findRelatedDescriptor(request, field),
+					Field:              helperpkg.DetectField(helperpkg.DetectStructName(convertedType)),
+					Reference:          helperpkg.DetectReference(msg.GetName()),
+					TableName:          helperpkg.DetectTableName(convertedType),  // Assuming msg.GetName() is the table name
+					StructName:         helperpkg.DetectStructName(convertedType), // Assuming field.GetName() is the struct name
+					Store:              helperpkg.DetectStoreName(convertedType),  // Fill this with the proper value
+					Many:               helperpkg.DetectMany(convertedType),       // As the field is repeated, it means there are many Relations
+					AllowSubCreating:   isAllowSubCreating(request, msg, field),   // default allow sub creating
+					Limit:              100,                                       // default relation limit
 				}
 
 				options := helperpkg.GetFieldOptions(field)
@@ -330,6 +360,49 @@ func (r Relations) Get(name string) (*Relation, bool) {
 	return val, ok
 }
 
+// IsExist checks if the given name exists in the Messages.
+func (r Relations) IsExist(f *descriptorpb.FieldDescriptorProto) bool {
+	for k, v := range r {
+		for _, n := range []string{
+			f.GetName(),
+			f.GetTypeName(),
+			helperpkg.CamelCaseSlice(strings.Split(f.GetTypeName(), ".")),
+			helperpkg.DetectStructName(helperpkg.ConvertType(f)),
+			helperpkg.ConvertType(f),
+		} {
+			if strings.EqualFold(v.Descriptor.GetName(), n) {
+				return true
+			}
+			if strings.EqualFold(k.String(), n) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// GetByFieldDescriptor returns the Relation by the given FieldDescriptorProto.
+func (r Relations) GetByFieldDescriptor(f *descriptorpb.FieldDescriptorProto) *Relation {
+	for k, v := range r {
+		for _, n := range []string{
+			f.GetName(),
+			f.GetTypeName(),
+			helperpkg.CamelCaseSlice(strings.Split(f.GetTypeName(), ".")),
+			helperpkg.DetectStructName(helperpkg.ConvertType(f)),
+			helperpkg.ConvertType(f),
+		} {
+			if strings.EqualFold(v.Descriptor.GetName(), n) {
+				return v
+			}
+			if strings.EqualFold(k.String(), n) {
+				return v
+			}
+		}
+	}
+
+	return nil
+}
+
 type Messages []*descriptorpb.DescriptorProto
 
 func (t Messages) String() string {
@@ -549,13 +622,17 @@ type NestedTableVal struct {
 }
 
 type Relation struct {
-	Field      string
-	Reference  string
-	TableName  string
-	StructName string
-	Store      string
-	Limit      uint64
-	Many       bool
+	RelationDescriptor *descriptor.DescriptorProto
+	ParentDescriptor   *descriptor.DescriptorProto
+	Descriptor         *descriptor.FieldDescriptorProto
+	Field              string
+	Reference          string
+	TableName          string
+	StructName         string
+	Store              string
+	Limit              uint64
+	Many               bool
+	AllowSubCreating   bool
 }
 
 type RelationType string
