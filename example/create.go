@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/cjp2600/structify/example/db"
 )
 
@@ -21,19 +23,22 @@ func main() {
 	}
 	defer connection.Close()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
 
 	store := db.NewBlogStorages(connection)
+	userStorage := store.GetUserStorage()
 	{
-		err := store.CreateTables(ctx)
-		if err != nil {
+		if err := store.CreateTables(ctx); err != nil {
 			panic(err)
 		}
 	}
 
 	// Create Transaction Manager for store
-	err = store.TxManager().ExecFuncWithTx(context.Background(), func(ctx context.Context) error {
-		id, err := store.GetUserStorage().Create(ctx, &db.User{
+	err = store.TxManager().ExecFuncWithTx(ctx, func(ctx context.Context) error {
+
+		// Create user with all fields and relations
+		id, err := userStorage.Create(ctx, &db.User{
 			Name:  "John",
 			Age:   21,
 			Email: "example@mail.com",
@@ -91,7 +96,6 @@ func main() {
 		}
 
 		fmt.Printf("User id: %s \n", *id)
-
 		return nil
 	})
 	if err != nil {

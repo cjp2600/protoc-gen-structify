@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"time"
+
 	"github.com/cjp2600/structify/example/db"
 )
 
@@ -20,21 +22,18 @@ func main() {
 	}
 	defer connection.Close()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
 
 	store := db.NewBlogStorages(connection)
-	{
-		err := store.CreateTables(ctx)
-		if err != nil {
-			panic(err)
-		}
-	}
+	userStorage := store.GetUserStorage()
 
 	newName := "Ivan"
 
 	// Create Transaction Manager for store
-	err = store.TxManager().ExecFuncWithTx(context.Background(), func(ctx context.Context) error {
-		err := store.GetUserStorage().Update(ctx, "d0e628b8-3266-480b-bb65-cfc356121b29", &db.UserUpdate{
+	err = store.TxManager().ExecFuncWithTx(ctx, func(ctx context.Context) error {
+		// Update user name
+		err := userStorage.Update(ctx, "d0e628b8-3266-480b-bb65-cfc356121b29", &db.UserUpdate{
 			Name: &newName,
 		})
 		if err != nil {
