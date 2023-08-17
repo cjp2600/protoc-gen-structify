@@ -61,6 +61,14 @@ func (i *initTemplater) BuildTemplate() string {
 			Name: "transaction",
 			Body: tmplpkg.TransactionManagerTemplate,
 		},
+		helperpkg.IncludeTemplate{
+			Name: "options",
+			Body: tmplpkg.OptionsTemplate,
+		},
+		helperpkg.IncludeTemplate{
+			Name: "conditions",
+			Body: tmplpkg.TableConditionsTemplate,
+		},
 	)
 	if err != nil {
 		log.Fatalf("failed to execute template: %v", err)
@@ -82,6 +90,7 @@ func (i *initTemplater) Imports() importpkg.ImportSet {
 		importpkg.ImportJson,
 		importpkg.ImportSQLDriver,
 		importpkg.ImportLibPQWOAlias,
+		importpkg.ImportStrings,
 	)
 
 	return is
@@ -136,15 +145,29 @@ func (i *initTemplater) Funcs() map[string]interface{} {
 			return i.state.NestedMessages
 		},
 
+		// messages returns the messages.
+		"messages": func() statepkg.Messages {
+			return i.state.Messages
+		},
+
 		// singleTypes returns the single types.
 		"singleTypes": func() statepkg.SingleTypes {
-			//helperpkg.DumpPrint(i.state.SingleTypes)
 			return i.state.SingleTypes
 		},
 
 		// fieldName returns the upper camel case field name.
 		"fieldName": func(f *descriptorpb.FieldDescriptorProto) string {
 			return helperpkg.UpperCamelCase(f.GetName())
+		},
+
+		// isRelation returns the field type.
+		"isRelation": func(f *descriptorpb.FieldDescriptorProto) bool {
+			return i.state.Relations.IsExist(f) && !i.state.NestedMessages.IsJSON(f)
+		},
+
+		// isJSON returns the field type.
+		"isJSON": func(f *descriptorpb.FieldDescriptorProto) bool {
+			return i.state.NestedMessages.IsJSON(f)
 		},
 
 		// fieldType returns the field type.

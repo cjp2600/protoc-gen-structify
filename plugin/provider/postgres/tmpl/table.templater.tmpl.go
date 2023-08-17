@@ -5,22 +5,79 @@ const TableTemplate = `
 {{ template "structure" . }}
 {{ template "create_method" . }}
 {{ template "update_method" . }}
+{{- if (hasPrimaryKey) }}
 {{ template "delete_method" . }}
+{{- end }}
 {{- if (hasPrimaryKey) }}
 {{ template "get_by_id_method" . }}
 {{- end }}
+{{ template "find_many_method" . }}
+`
+
+const TableFindManyMethodTemplate = `
+// findMany finds multiple {{ structureName }} based on the provided options.
+func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, builders ...*QueryBuilder) ([]*{{structureName}}, error) {
+	// build query
+	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName())
+
+ 	// apply options from builder
+	for _, builder := range builders {
+		if builder == nil {
+			continue
+		}
+
+		// apply filter options
+		for _, option := range builder.filterOptions {
+			query = option.Apply(query)
+		}
+		// apply pagination
+		if builder.pagination != nil {
+			if builder.pagination.limit != nil {
+				query = query.Limit(*builder.pagination.limit)
+			}
+			if builder.pagination.offset != nil {
+				query = query.Offset(*builder.pagination.offset)
+			}
+		}
+		// apply sorting
+		// ...
+	}
+
+	// execute query
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	rows, err := t.DB(ctx).QueryContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find {{ structureName }}: %w", err)
+	}
+	defer rows.Close()
+	
+	var results []*{{structureName}}
+	for rows.Next() {
+		model := &{{structureName}}{}
+		if err := model.ScanRows(rows); err != nil {
+			return nil, fmt.Errorf("failed to scan {{ structureName }}: %w", err)
+		}
+		results = append(results, model)
+	}
+	
+	return results, nil
+}
 `
 
 const TableGetByIDMethodTemplate = `
 // GetBy{{ getPrimaryKey.GetName | camelCase }} retrieves a {{ structureName }} by its {{ getPrimaryKey.GetName }}.
-func (t *{{ storageName | lowerCamelCase }}) GetBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}) (*{{ structureName }}, error) {
-	query := t.queryBuilder.Select(
-		{{- range $index, $field := fields }}
-		{{- if not ($field | isRelation) }}
-		"{{ $field | sourceName }}",
-		{{- end}}
-		{{- end}}
-	).From("{{ tableName }}").Where("{{ getPrimaryKey.GetName }} = ?", id)
+func (t *{{ storageName | lowerCamelCase }}) GetBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}, opts ...Option) (*{{ structureName }}, error) {
+	// set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName()).Where("{{ getPrimaryKey.GetName }} = ?", id)
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -42,7 +99,13 @@ func (t *{{ storageName | lowerCamelCase }}) GetBy{{ getPrimaryKey.GetName | cam
 
 const TableDeleteMethodTemplate = `
 // Delete removes an existing {{ structureName }} by its ID.
-func (t *{{ storageName | lowerCamelCase }}) Delete(ctx context.Context, id {{IDType}}) error {
+func (t *{{ storageName | lowerCamelCase }}) DeleteBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, {{getPrimaryKey.GetName}} {{IDType}}, opts ...Option) error {
+	// set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
 	query := t.queryBuilder.Delete("{{ tableName }}").Where("id = ?", id)
 
 	sqlQuery, args, err := query.ToSql()
@@ -119,9 +182,15 @@ func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{ID
 
 const TableCreateMethodTemplate = `
 // Create creates a new {{ structureName }}.
-{{ if (hasID) }} func (t *{{ storageName | lowerCamelCase }}) Create(ctx context.Context, model *{{structureName}}) (*{{IDType}}, error) { {{ else }} func (t *{{ storageName | lowerCamelCase }}) Create(ctx context.Context, model *{{structureName}}) error { {{ end }}
+{{ if (hasID) }} func (t *{{ storageName | lowerCamelCase }}) Create(ctx context.Context, model *{{structureName}}, opts ...Option) (*{{IDType}}, error) { {{ else }} func (t *{{ storageName | lowerCamelCase }}) Create(ctx context.Context, model *{{structureName}}, opts ...Option) error { {{ end }}
 	if model == nil {
 		{{ if (hasID) }}return nil, errors.New("model is nil") {{ else }}return errors.New("model is nil") {{ end }}
+	}
+
+	// set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
 	}
 
 	{{- range $index, $field := fields }}
@@ -186,7 +255,7 @@ const TableCreateMethodTemplate = `
 	{{ if (hasID) }}
 	{{- range $index, $field := fields }}
 	{{- if and ($field | isRelation) ($field | relationAllowSubCreating) }}
-	    if model.{{ $field | fieldName }} != nil { {{ if ($field | isRepeated) }}
+	    if options.relations && model.{{ $field | fieldName }} != nil { {{ if ($field | isRepeated) }}
 			for _, item := range model.{{ $field | fieldName }} {
 				item.{{ $field | relationIDFieldName }} = id
 				s := New{{ $field | relationStorageName }}(t.db)
@@ -227,18 +296,23 @@ type {{ storageName }} interface {
 	UpgradeTable(ctx context.Context) error
 	// Create creates a new {{ structureName }}.
 	{{- if (hasID) }}
-	Create(ctx context.Context, model *{{structureName}}) (*{{IDType}}, error)
+	Create(ctx context.Context, model *{{structureName}}, opts ...Option) (*{{IDType}}, error)
 	{{- else }} 
-	Create(ctx context.Context, model *{{structureName}}) error
+	Create(ctx context.Context, model *{{structureName}}, opts ...Option) error
 	{{- end }}
 	// Update updates an existing {{ structureName }}.
 	Update(ctx context.Context, id {{IDType}}, updateData *{{structureName}}Update) error
+
+	{{- if (hasPrimaryKey) }}
 	// Delete removes an existing {{ structureName }} by its ID.
-	Delete(ctx context.Context, id {{IDType}}) error
+	DeleteBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, {{getPrimaryKey.GetName}} {{IDType}}, opts ...Option) error
+	{{- end }}
 	{{- if (hasPrimaryKey) }}
 	// GetBy{{ getPrimaryKey.GetName | camelCase }} retrieves a {{ structureName }} by its {{ getPrimaryKey.GetName }}.
-	GetBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}) (*{{ structureName }}, error)
+	GetBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}, opts ...Option) (*{{ structureName }}, error)
 	{{- end }}
+	// FindMany finds multiple {{ structureName }} based on the provided options.
+	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*{{structureName}}, error)
 }
 
 // New{{ storageName }} returns a new {{ storageName | lowerCamelCase }}.
@@ -246,6 +320,18 @@ func New{{ storageName }}(db *sql.DB) {{ storageName }} {
 	return &{{ storageName | lowerCamelCase }}{
 		db: db,
 		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
+	}
+}
+
+// TableName returns the table name.
+func (t *{{ storageName | lowerCamelCase }}) TableName() string {
+	return "{{ tableName }}"
+}
+
+// Columns returns the columns for the table.
+func (t *{{ storageName | lowerCamelCase }}) Columns() []string {
+	return []string{
+		{{ range $field := fields }}{{if not ($field | isRelation) }}"{{ $field | sourceName }}",{{ end }}{{ end }}
 	}
 }
 
@@ -319,15 +405,14 @@ func (t *{{ structureName }}) ScanRow(r *sql.Row) error {
 	return r.Scan({{ range $field := fields }} {{if not ($field | isRelation) }} &t.{{ $field | fieldName }}, {{ end }}{{ end }})
 }
 
-// TableName returns the table name.
-func (t *{{ structureName }}) TableName() string {
-	return "{{ tableName }}"
-}
-
-// Columns returns the columns for the table.
-func (t *{{ structureName }}) Columns() []string {
-	return []string{
-		{{ range $field := fields }}{{if not ($field | isRelation) }}"{{ $field | sourceName }}",{{ end }}{{ end }}
-	}
+// ScanRow scans a single row into the {{ structureName }}.
+func (t *{{ structureName }}) ScanRows(r *sql.Rows) error {
+	return r.Scan(
+		{{- range $index, $field := fields }}
+		{{- if not ($field | isRelation) }}
+		&t.{{ $field | fieldName }},
+		{{- end}}
+		{{- end }}
+	)
 }
 `

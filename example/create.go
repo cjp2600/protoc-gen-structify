@@ -90,7 +90,7 @@ func main() {
 					},
 				},
 			}),
-		})
+		}, db.WithRelations())
 		if err != nil {
 			return err
 		}

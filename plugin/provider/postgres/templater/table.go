@@ -58,6 +58,10 @@ func (t *tableTemplater) BuildTemplate() string {
 			Name: "get_by_id_method",
 			Body: tmplpkg.TableGetByIDMethodTemplate,
 		},
+		helperpkg.IncludeTemplate{
+			Name: "find_many_method",
+			Body: tmplpkg.TableFindManyMethodTemplate,
+		},
 	)
 	if err != nil {
 		log.Fatalf("failed to execute template: %v", err)
