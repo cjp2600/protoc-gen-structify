@@ -274,6 +274,17 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			return t.state.Relations.IsExist(f) && !t.state.NestedMessages.IsJSON(f)
 		},
 
+		// hasRelationOptions returns true if the field has relation options.
+		"hasRelationOptions": func(f *descriptorpb.FieldDescriptorProto) bool {
+			if t.state.Relations.IsExist(f) {
+				opts := helperpkg.GetFieldOptions(f)
+				if opts != nil {
+					return opts.Relation != nil
+				}
+			}
+			return false
+		},
+
 		// hasRelation returns true if the message has relation.
 		"hasRelation": func() bool {
 			for _, f := range t.message.GetField() {
@@ -297,6 +308,13 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			return ""
 		},
 
+		"relationStructureName": func(f *descriptorpb.FieldDescriptorProto) string {
+			if t.state.Relations.IsExist(f) {
+				return t.state.Relations.GetByFieldDescriptor(f).StructName
+			}
+			return ""
+		},
+
 		// relationName returns the relation name.
 		"hasIDFromRelation": func(f *descriptorpb.FieldDescriptorProto) bool {
 			if t.state.Relations.IsExist(f) {
@@ -310,13 +328,47 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			return false
 		},
 
+		"parentRelationIDFieldName": func(fl *descriptorpb.FieldDescriptorProto) string {
+			if t.state.Relations.IsExist(fl) {
+				relation := t.state.Relations.GetByFieldDescriptor(fl)
+				rd := relation.RelationDescriptor
+				pd := relation.ParentDescriptor
+
+				var currentPrimaryKey string
+				for _, f := range pd.GetField() {
+					if opts := helperpkg.GetFieldOptions(f); opts != nil {
+						if opts.GetPrimaryKey() {
+							currentPrimaryKey = helperpkg.UpperCamelCase(f.GetName())
+						}
+					}
+				}
+
+				if helperpkg.DetermineRelationDirection(rd, pd) == "child-to-parent" {
+					return currentPrimaryKey
+				} else {
+					return helperpkg.UpperCamelCase(strings.ToLower(rd.GetName()) + "_id")
+				}
+			}
+			return ""
+		},
+
 		"relationIDFieldName": func(fl *descriptorpb.FieldDescriptorProto) string {
 			if t.state.Relations.IsExist(fl) {
-				rd := t.state.Relations.GetByFieldDescriptor(fl).RelationDescriptor
-				pd := t.state.Relations.GetByFieldDescriptor(fl).ParentDescriptor
-				for _, f := range rd.GetField() {
-					if f.GetName() == strings.ToLower(pd.GetName())+"_id" {
-						return helperpkg.UpperCamelCase(f.GetName())
+				relation := t.state.Relations.GetByFieldDescriptor(fl)
+				rd := relation.RelationDescriptor
+				pd := relation.ParentDescriptor
+
+				if helperpkg.DetermineRelationDirection(rd, pd) == "child-to-parent" {
+					for _, f := range rd.GetField() {
+						if f.GetName() == strings.ToLower(pd.GetName())+"_id" {
+							return helperpkg.UpperCamelCase(f.GetName())
+						}
+					}
+				} else {
+					for _, f := range rd.GetField() {
+						if f.GetName() == "id" {
+							return helperpkg.UpperCamelCase(f.GetName())
+						}
 					}
 				}
 			}
@@ -368,6 +420,13 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 				}
 			}
 			return helperpkg.Plural(t.message.GetName())
+		},
+
+		"pluralFieldName": func(f *descriptorpb.FieldDescriptorProto) string {
+			if helperpkg.IsRepeated(f) {
+				return helperpkg.UpperCamelCase(helperpkg.Plural(f.GetName()))
+			}
+			return helperpkg.UpperCamelCase(f.GetName())
 		},
 
 		// tableComment returns the table comment.

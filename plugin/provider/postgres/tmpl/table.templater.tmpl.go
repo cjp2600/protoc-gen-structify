@@ -264,6 +264,30 @@ func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{ID
 }
 `
 
+const StructureTemplate = `
+// {{ structureName }} is a struct for the "{{ tableName }}" table.
+type {{ structureName }} struct {
+{{ range $field := fields }}
+	{{ $field | fieldName }} {{ $field | fieldType }}{{if not ($field | isRelation) }}` + " `db:\"{{ $field | sourceName }}\"`" + `{{end}}{{end}}
+}
+
+// ScanRow scans a row into a {{ structureName }}.
+func (t *{{ structureName }}) ScanRow(r *sql.Row) error {
+	return r.Scan({{ range $field := fields }} {{if not ($field | isRelation) }} &t.{{ $field | fieldName }}, {{ end }}{{ end }})
+}
+
+// ScanRow scans a single row into the {{ structureName }}.
+func (t *{{ structureName }}) ScanRows(r *sql.Rows) error {
+	return r.Scan(
+		{{- range $index, $field := fields }}
+		{{- if not ($field | isRelation) }}
+		&t.{{ $field | fieldName }},
+		{{- end}}
+		{{- end }}
+	)
+}
+`
+
 const TableCreateMethodTemplate = `
 // Create creates a new {{ structureName }}.
 {{ if (hasID) }} func (t *{{ storageName | lowerCamelCase }}) Create(ctx context.Context, model *{{structureName}}, opts ...Option) (*{{IDType}}, error) { {{ else }} func (t *{{ storageName | lowerCamelCase }}) Create(ctx context.Context, model *{{structureName}}, opts ...Option) error { {{ end }}
@@ -402,6 +426,17 @@ type {{ storageName }} interface {
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
 	// FindManyWithPagination finds multiple {{ structureName }} with pagination support.
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*{{structureName}}, *Paginator, error)
+	
+	//
+	// Lazy load relations methods 
+	//
+
+	{{- range $index, $field := fields }}
+	{{- if and ($field | isRelation) }}
+	// Load{{ $field | pluralFieldName }} loads the {{ $field | pluralFieldName }} relation.
+	Load{{ $field | pluralFieldName }} (ctx context.Context, model *{{structureName}}) error
+	{{- end }}
+	{{- end }}
 }
 
 // New{{ storageName }} returns a new {{ storageName | lowerCamelCase }}.
@@ -477,31 +512,33 @@ func (t *{{ storageName | lowerCamelCase }}) TruncateTable(ctx context.Context) 
 }
 
 // UpgradeTable upgrades the table.
+// todo: delete this method 
 func (t *{{ storageName | lowerCamelCase }}) UpgradeTable(ctx context.Context) error {
 	return nil
 }
-`
 
-const StructureTemplate = `
-// {{ structureName }} is a struct for the "{{ tableName }}" table.
-type {{ structureName }} struct {
-{{ range $field := fields }}
-	{{ $field | fieldName }} {{ $field | fieldType }}{{if not ($field | isRelation) }}` + " `db:\"{{ $field | sourceName }}\"`" + `{{end}}{{end}}
-}
+{{- range $index, $field := fields }}
+{{- if and ($field | isRelation) }}
+// Load{{ $field | pluralFieldName }} loads the {{ $field | pluralFieldName }} relation.
+func (t *{{ storageName | lowerCamelCase }}) Load{{ $field | pluralFieldName }} (ctx context.Context, model *{{structureName}}) error {
+	s := New{{ $field | relationStorageName }}(t.db)
+	{{- if ($field | isRepeated) }}
+		relationModels, err := s.FindMany(ctx, FilterBuilder({{ $field | relationStructureName  }}{{ $field | relationIDFieldName }}Eq(model.{{ $field | parentRelationIDFieldName }})))
+		if err != nil {
+			return fmt.Errorf("failed to find many {{ $field | relationStorageName }}: %w", err)
+		}
 
-// ScanRow scans a row into a {{ structureName }}.
-func (t *{{ structureName }}) ScanRow(r *sql.Row) error {
-	return r.Scan({{ range $field := fields }} {{if not ($field | isRelation) }} &t.{{ $field | fieldName }}, {{ end }}{{ end }})
-}
+		model.{{ $field | fieldName }} = relationModels
+	{{- else }}
+		relationModel, err := s.FindOne(ctx, FilterBuilder({{ $field | relationStructureName  }}{{ $field | relationIDFieldName }}Eq(model.{{ $field | parentRelationIDFieldName }})))
+		if err != nil {
+			return fmt.Errorf("failed to find {{ $field | relationStorageName }}: %w", err)
+		}
 
-// ScanRow scans a single row into the {{ structureName }}.
-func (t *{{ structureName }}) ScanRows(r *sql.Rows) error {
-	return r.Scan(
-		{{- range $index, $field := fields }}
-		{{- if not ($field | isRelation) }}
-		&t.{{ $field | fieldName }},
-		{{- end}}
-		{{- end }}
-	)
+		model.{{ $field | fieldName }} = relationModel
+	{{- end }}
+	return nil
 }
+{{- end }}
+{{- end }}
 `

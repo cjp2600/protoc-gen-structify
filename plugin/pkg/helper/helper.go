@@ -513,3 +513,13 @@ func CamelCaseSlice(elem []string) string {
 func BuildJSONTypeName(parentName string, typeName string) string {
 	return "JSON" + UpperCamelCase(parentName) + UpperCamelCase(typeName)
 }
+
+func DetermineRelationDirection(rd *descriptorpb.DescriptorProto, pd *descriptorpb.DescriptorProto) string {
+	for _, f := range rd.GetField() {
+		if f.GetName() == strings.ToLower(pd.GetName())+"_id" {
+			return "child-to-parent"
+		}
+	}
+
+	return "parent-to-child"
+}
