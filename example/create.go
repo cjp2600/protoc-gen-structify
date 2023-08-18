@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/pkg/errors"
 	"time"
 
 	"github.com/cjp2600/structify/example/db"
@@ -99,6 +100,9 @@ func main() {
 		return nil
 	})
 	if err != nil {
-		panic(err)
+		if errors.Is(err, db.ErrRowAlreadyExist) {
+			fmt.Println("user already exists")
+			return
+		}
 	}
 }
