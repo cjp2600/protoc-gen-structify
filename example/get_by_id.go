@@ -47,6 +47,18 @@ func main() {
 		panic(err)
 	}
 
+	// lazy load settings
+	if err := userStorage.LoadSettings(ctx, user); err != nil {
+		panic(err)
+	}
+
+	// lazy load addresses
+	if err := userStorage.LoadAddresses(ctx, user); err != nil {
+		panic(err)
+	}
+
 	fmt.Println(fmt.Sprintf("User: %+v", user))
 	fmt.Println(fmt.Sprintf("Device: %+v", user.Device))
+	fmt.Println(fmt.Sprintf("Setting: %+v", user.Settings))
+	fmt.Println(fmt.Sprintf("Addreses: %+v", user.Addresses))
 }
