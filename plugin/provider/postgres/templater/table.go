@@ -62,6 +62,10 @@ func (t *tableTemplater) BuildTemplate() string {
 			Name: "find_many_method",
 			Body: tmplpkg.TableFindManyMethodTemplate,
 		},
+		helperpkg.IncludeTemplate{
+			Name: "find_one_method",
+			Body: tmplpkg.TableFindOneMethodTemplate,
+		},
 	)
 	if err != nil {
 		log.Fatalf("failed to execute template: %v", err)
@@ -230,6 +234,11 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 		// storageName returns the upper camel case storage name.
 		"storageName": func() string {
 			return fmt.Sprintf("%sStorage", helperpkg.UpperCamelCase(t.message.GetName()))
+		},
+
+		// messageName returns the upper camel case message name.
+		"messageName": func() string {
+			return helperpkg.UpperCamelCase(t.message.GetName())
 		},
 
 		// fields returns the fields.

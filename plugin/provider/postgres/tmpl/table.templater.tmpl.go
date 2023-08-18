@@ -12,6 +12,25 @@ const TableTemplate = `
 {{ template "get_by_id_method" . }}
 {{- end }}
 {{ template "find_many_method" . }}
+{{ template "find_one_method" . }}
+`
+
+const TableFindOneMethodTemplate = `
+// findOne finds a single {{ structureName }} based on the provided options.
+func (t *{{ storageName | lowerCamelCase }}) FindOne(ctx context.Context, builders ...*QueryBuilder) (*{{structureName}}, error) {
+	// Use findMany but limit the results to 1
+	builders = append(builders, LimitBuilder(1))
+	results, err := t.FindMany(ctx, builders...)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(results) == 0 {
+		return nil, fmt.Errorf("no {{ structureName }} found")
+	}
+
+	return results[0], nil
+}
 `
 
 const TableFindManyMethodTemplate = `
@@ -69,24 +88,10 @@ func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, build
 `
 
 const TableGetByIDMethodTemplate = `
-// GetBy{{ getPrimaryKey.GetName | camelCase }} retrieves a {{ structureName }} by its {{ getPrimaryKey.GetName }}.
-func (t *{{ storageName | lowerCamelCase }}) GetBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}, opts ...Option) (*{{ structureName }}, error) {
-	// set default options
-	options := &Options{}
-	for _, o := range opts {
-		o(options)
-	}
-
-	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName()).Where("{{ getPrimaryKey.GetName }} = ?", id)
-
-	sqlQuery, args, err := query.ToSql()
+// FindBy{{ getPrimaryKey.GetName | camelCase }} retrieves a {{ structureName }} by its {{ getPrimaryKey.GetName }}.
+func (t *{{ storageName | lowerCamelCase }}) FindBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}, opts ...Option) (*{{ structureName }}, error) {
+	model, err := t.FindOne(ctx, NewQueryBuilder().WithFilter({{ messageName }}{{ getPrimaryKey.GetName | camelCase }}Eq(id)))
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
-	}
-
-	row := t.DB(ctx).QueryRowContext(ctx,sqlQuery, args...)
-	model := &{{ structureName }}{}
-	if err := model.ScanRow(row); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrRowNotFound
 		}
@@ -308,11 +313,13 @@ type {{ storageName }} interface {
 	DeleteBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, {{getPrimaryKey.GetName}} {{IDType}}, opts ...Option) error
 	{{- end }}
 	{{- if (hasPrimaryKey) }}
-	// GetBy{{ getPrimaryKey.GetName | camelCase }} retrieves a {{ structureName }} by its {{ getPrimaryKey.GetName }}.
-	GetBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}, opts ...Option) (*{{ structureName }}, error)
+	// FindBy{{ getPrimaryKey.GetName | camelCase }} retrieves a {{ structureName }} by its {{ getPrimaryKey.GetName }}.
+	FindBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}, opts ...Option) (*{{ structureName }}, error)
 	{{- end }}
 	// FindMany finds multiple {{ structureName }} based on the provided options.
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*{{structureName}}, error)
+	// FindOne finds a single {{ structureName }} based on the provided options.
+	FindOne(ctx context.Context, builders ...*QueryBuilder) (*{{structureName}}, error)	
 }
 
 // New{{ storageName }} returns a new {{ storageName | lowerCamelCase }}.
