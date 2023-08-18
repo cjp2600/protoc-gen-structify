@@ -90,7 +90,14 @@ func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, build
 const TableGetByIDMethodTemplate = `
 // FindBy{{ getPrimaryKey.GetName | camelCase }} retrieves a {{ structureName }} by its {{ getPrimaryKey.GetName }}.
 func (t *{{ storageName | lowerCamelCase }}) FindBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}, opts ...Option) (*{{ structureName }}, error) {
-	model, err := t.FindOne(ctx, NewQueryBuilder().WithFilter({{ messageName }}{{ getPrimaryKey.GetName | camelCase }}Eq(id)))
+	builder := NewQueryBuilder()
+	{
+		builder.WithFilter({{ messageName }}{{ getPrimaryKey.GetName | camelCase }}Eq(id))
+		builder.WithOptions(opts...)
+	}
+	
+	// Use FindOne to get a single result
+	model, err := t.FindOne(ctx, builder)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrRowNotFound

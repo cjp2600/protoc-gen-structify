@@ -29,7 +29,7 @@ func main() {
 	store := db.NewBlogStorages(connection)
 	userStorage := store.GetUserStorage()
 
-	user, err := userStorage.GetById(ctx, "d0e628b8-3266-480b-bb65-cfc356121b29")
+	user, err := userStorage.FindById(ctx, "d0e628b8-3266-480b-bb65-cfc356121b29")
 	if err != nil {
 		panic(err)
 	}
