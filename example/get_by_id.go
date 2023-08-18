@@ -34,7 +34,7 @@ func main() {
 	//  FindById
 	//
 
-	user, err := userStorage.FindById(ctx, "d0e628b8-3266-480b-bb65-cfc356121b28")
+	user, err := userStorage.FindById(ctx, "be0548df-9a62-4698-8cbe-bb96dd496682")
 	if err != nil {
 		if errors.Is(err, db.ErrRowNotFound) {
 			fmt.Println("user not found")
@@ -42,5 +42,11 @@ func main() {
 		}
 	}
 
+	// lazy load device
+	if err := userStorage.LoadDevice(ctx, user); err != nil {
+		panic(err)
+	}
+
 	fmt.Println(fmt.Sprintf("User: %+v", user))
+	fmt.Println(fmt.Sprintf("Device: %+v", user.Device))
 }
