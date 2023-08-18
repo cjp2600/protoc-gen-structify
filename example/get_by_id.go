@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/pkg/errors"
 	"time"
 
 	"github.com/cjp2600/structify/example/db"
@@ -29,9 +30,16 @@ func main() {
 	store := db.NewBlogStorages(connection)
 	userStorage := store.GetUserStorage()
 
-	user, err := userStorage.FindById(ctx, "d0e628b8-3266-480b-bb65-cfc356121b29")
+	//
+	//  FindById
+	//
+
+	user, err := userStorage.FindById(ctx, "d0e628b8-3266-480b-bb65-cfc356121b28")
 	if err != nil {
-		panic(err)
+		if errors.Is(err, db.ErrRowNotFound) {
+			fmt.Println("user not found")
+			return
+		}
 	}
 
 	fmt.Println(fmt.Sprintf("User: %+v", user))

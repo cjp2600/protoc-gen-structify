@@ -63,6 +63,7 @@ var (
 	ImportLibPQ        = Import{"github.com/lib/pq", "_"}
 	ImportLibPQWOAlias = Import{"github.com/lib/pq", ""}
 	ImportStrings      = Import{"strings", ""}
+	ImportMath         = Import{"math", ""}
 	ImportSquirrel     = Import{"github.com/Masterminds/squirrel", "sq"}
 	ImportFMT          = Import{"fmt", ""}
 	ImportErrors       = Import{"github.com/pkg/errors", ""}

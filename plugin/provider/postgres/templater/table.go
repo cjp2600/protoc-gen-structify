@@ -66,6 +66,14 @@ func (t *tableTemplater) BuildTemplate() string {
 			Name: "find_one_method",
 			Body: tmplpkg.TableFindOneMethodTemplate,
 		},
+		helperpkg.IncludeTemplate{
+			Name: "count_method",
+			Body: tmplpkg.TableCountMethodTemplate,
+		},
+		helperpkg.IncludeTemplate{
+			Name: "find_with_pagination",
+			Body: tmplpkg.TableFindWithPaginationMethodTemplate,
+		},
 	)
 	if err != nil {
 		log.Fatalf("failed to execute template: %v", err)
@@ -85,6 +93,7 @@ func (t *tableTemplater) Imports() importpkg.ImportSet {
 		importpkg.ImportFMT,
 		importpkg.ImportErrors,
 		importpkg.ImportSquirrel,
+		importpkg.ImportMath,
 	)
 
 	return is

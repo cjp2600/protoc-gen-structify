@@ -13,6 +13,75 @@ const TableTemplate = `
 {{- end }}
 {{ template "find_many_method" . }}
 {{ template "find_one_method" . }}
+{{ template "count_method" . }}
+{{ template "find_with_pagination" . }}
+`
+
+const TableFindWithPaginationMethodTemplate = `
+// FindManyWithPagination finds multiple {{ structureName }} with pagination support.
+func (t *{{ storageName | lowerCamelCase }}) FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*{{structureName}}, *Paginator, error) {
+	// Count the total number of records
+	totalCount, err := t.Count(ctx, builders...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to count {{ structureName }}: %w", err)
+	}
+
+	// Calculate offset
+	offset := (page - 1) * limit
+
+	// Build the pagination object
+	paginator := &Paginator{
+		TotalCount: totalCount,
+		Limit:      limit,
+		Page:       page,
+		TotalPages: int(math.Ceil(float64(totalCount) / float64(limit))),
+	}
+
+	// Add pagination to query builder
+	builders = append(builders, PaginateBuilder(uint64(limit), uint64(offset)))
+
+	// Find records using FindMany
+	records, err := t.FindMany(ctx, builders...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to find {{ structureName }}: %w", err)
+	}
+
+	return records, paginator, nil
+}
+`
+
+const TableCountMethodTemplate = `
+// Count counts {{ structureName }} based on the provided options.
+func (t *{{ storageName | lowerCamelCase }}) Count(ctx context.Context, builders ...*QueryBuilder) (int64, error) {
+	// build query
+	query := t.queryBuilder.Select("COUNT(*)").From(t.TableName())
+
+	// apply options from builder
+	for _, builder := range builders {
+		if builder == nil {
+			continue
+		}
+
+		// apply filter options
+		for _, option := range builder.filterOptions {
+			query = option.Apply(query)
+		}
+	}
+
+	// execute query
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
+	var count int64
+	if err := row.Scan(&count); err != nil {
+		return 0, fmt.Errorf("failed to count {{ structureName }}: %w", err)
+	}
+
+	return count, nil
+}
 `
 
 const TableFindOneMethodTemplate = `
@@ -26,7 +95,7 @@ func (t *{{ storageName | lowerCamelCase }}) FindOne(ctx context.Context, builde
 	}
 
 	if len(results) == 0 {
-		return nil, fmt.Errorf("no {{ structureName }} found")
+		return nil, ErrRowNotFound
 	}
 
 	return results[0], nil
@@ -38,6 +107,9 @@ const TableFindManyMethodTemplate = `
 func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, builders ...*QueryBuilder) ([]*{{structureName}}, error) {
 	// build query
 	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName())
+
+	// set default options
+	options := &Options{}
 
  	// apply options from builder
 	for _, builder := range builders {
@@ -58,8 +130,11 @@ func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, build
 				query = query.Offset(*builder.pagination.offset)
 			}
 		}
-		// apply sorting
-		// ...
+
+	    // apply options
+		for _, o := range builder.options {
+			o(options)
+		}
 	}
 
 	// execute query
@@ -99,10 +174,7 @@ func (t *{{ storageName | lowerCamelCase }}) FindBy{{ getPrimaryKey.GetName | ca
 	// Use FindOne to get a single result
 	model, err := t.FindOne(ctx, builder)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, ErrRowNotFound
-		}
-		return nil, fmt.Errorf("failed to get {{ structureName }}: %w", err)
+		return nil, errors.Wrap(err, "find one {{ structureName }}: ")
 	}
 
 	return model, nil
@@ -314,7 +386,6 @@ type {{ storageName }} interface {
 	{{- end }}
 	// Update updates an existing {{ structureName }}.
 	Update(ctx context.Context, id {{IDType}}, updateData *{{structureName}}Update) error
-
 	{{- if (hasPrimaryKey) }}
 	// Delete removes an existing {{ structureName }} by its ID.
 	DeleteBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, {{getPrimaryKey.GetName}} {{IDType}}, opts ...Option) error
@@ -327,6 +398,10 @@ type {{ storageName }} interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*{{structureName}}, error)
 	// FindOne finds a single {{ structureName }} based on the provided options.
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*{{structureName}}, error)	
+    // Count counts {{ structureName }} based on the provided options.
+	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
+	// FindManyWithPagination finds multiple {{ structureName }} with pagination support.
+	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*{{structureName}}, *Paginator, error)
 }
 
 // New{{ storageName }} returns a new {{ storageName | lowerCamelCase }}.
