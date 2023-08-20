@@ -13,6 +13,7 @@ type ContentGenerator interface {
 	Content() (string, error)
 }
 
+// contentGenerator is the content generator.
 type contentGenerator struct {
 	builder strings.Builder
 	state   *statepkg.State
@@ -62,6 +63,7 @@ func (c *contentGenerator) Content() (string, error) {
 		c.builder = c.buildTemplater(finalizeStatementTemplater)
 	}
 
+	// return the content
 	return c.builder.String(), nil
 }
 
@@ -124,5 +126,6 @@ func (c *contentGenerator) buildMainComment() strings.Builder {
 func (c *contentGenerator) buildBlock(block string) strings.Builder {
 	c.builder.WriteString(block)
 	c.builder.WriteString("\n")
+
 	return c.builder
 }

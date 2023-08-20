@@ -1,4 +1,5 @@
 syntax = "proto3";
+
 package structify;
 
 import "google/protobuf/descriptor.proto";
@@ -10,48 +11,68 @@ extend google.protobuf.FileOptions {
   StructifyDBOptions db = 50002;
 }
 
+// Defines a custom option for message-level settings.
 extend google.protobuf.MessageOptions {
   StructifyMessageOptions opts = 99432;
 }
 
+// Defines a custom option for field-level settings.
+extend google.protobuf.FieldOptions {
+  StructifyFieldOptions field = 99432;
+}
+
+// Defines a custom option for method-level settings.
+extend google.protobuf.MethodOptions {
+  MethodOptions method = 99432;
+}
+
+// StructifyDBOptions defines the options for the database connection
 message StructifyDBOptions {
     string provider = 1;
     string url = 2;
     string url_env = 3;
 }
 
+// StructifyMessageOptions defines database table and comment
 message StructifyMessageOptions {
   string table = 1;
   string comment = 2;
 }
 
-extend google.protobuf.FieldOptions {
-  StructifyFieldOptions field = 99432;
-}
-
+// StructifyFieldOptions defines database field options
 message StructifyFieldOptions {
+  // primary_key defines the field as the primary key
   bool primary_key = 1;
+  // auto_increment defines the field as auto increment
   bool auto_increment = 2;
+  // unique defines the field as unique
   bool unique = 3;
+  // uuid defines the field as uuid
   bool uuid = 4;
+  // index defines the field as index
   bool index = 5;
+  // skip defines the field as skip
   bool skip = 6;
+  // nullable defines the field as nullable
   bool nullable = 7;
+  // default defines the field as default
   string default = 8;
+  // relation defines the field as relation
+  // 1:1, 1:n, n:1, n:n
   Relation relation = 9;
+  // json defines the field as json
   bool json = 10;
 }
 
+// Relation defines the relation between two tables
 message Relation {
+  // field defines the field name
   string field = 1;
+  // reference defines the reference table
   string reference = 2;
-  int32 limit = 3;
 }
 
-extend google.protobuf.MethodOptions {
-  MethodOptions method = 99432;
-}
-
+// MethodOptions defines the method options
 message MethodOptions {
   string object_type = 1;
 }

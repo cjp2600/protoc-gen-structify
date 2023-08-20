@@ -48,6 +48,7 @@ func ParseFromString(provider string) Provider {
 	case "sqlite":
 		return Sqlite
 	default:
+		// Default to Postgres
 		return Postgres
 	}
 }

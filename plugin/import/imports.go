@@ -50,10 +50,12 @@ type Import struct {
 	sub  string
 }
 
+// String returns a string representation of the Import.
 func (i Import) String() string {
 	return fmt.Sprintf("import %s \"%s\"\n", i.alias(), i.path)
 }
 
+// alias returns the alias for the import.
 func (i Import) alias() string {
 	return i.sub
 }

@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/pkg/errors"
 	"time"
 
-	"github.com/cjp2600/structify/example/db"
+	"github.com/pkg/errors"
+
+	"github.com/cjp2600/structify/example/case_one/db"
 )
 
 func main() {

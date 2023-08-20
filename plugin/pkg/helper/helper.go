@@ -21,8 +21,10 @@ import (
 	structify "github.com/cjp2600/structify/plugin/options"
 )
 
+// DescriptorMList is a map of descriptors.
 type DescriptorMList map[string]*descriptorpb.DescriptorProto
 
+// GetFieldOptions returns the custom options for a field.
 func GetFieldOptions(f *descriptorpb.FieldDescriptorProto) *structify.StructifyFieldOptions {
 	opts := f.GetOptions()
 	if opts != nil {
@@ -66,15 +68,18 @@ func GetDBOptions(f *descriptorpb.FileDescriptorProto) *structify.StructifyDBOpt
 	return nil
 }
 
+// exists returns true if the descriptor exists.
 func (d *DescriptorMList) exists(name string) bool {
 	_, ok := (*d)[name]
 	return ok
 }
 
+// getDescriptor returns the descriptor.
 func (d *DescriptorMList) getDescriptor(name string) *descriptorpb.DescriptorProto {
 	return (*d)[name]
 }
 
+// getDescriptorByType returns the descriptor by type.
 func (d *DescriptorMList) getDescriptorByType(typ string) *descriptorpb.DescriptorProto {
 	for _, v := range *d {
 		if v.GetName() == typ {
@@ -84,6 +89,7 @@ func (d *DescriptorMList) getDescriptorByType(typ string) *descriptorpb.Descript
 	return nil
 }
 
+// getDescriptorByField returns the descriptor by field.
 func (d *DescriptorMList) getDescriptorByField(field string) *descriptorpb.DescriptorProto {
 	for _, v := range *d {
 		for _, f := range v.GetField() {
@@ -114,16 +120,19 @@ func LowerCamelCase(name string) string {
 	return strcase.LowerCamelCase(name)
 }
 
+// ToLower converts a string to a lower string.
 func ToLower(name string) string {
 	return strings.ToLower(name)
 }
 
+// Plural converts a string to a plural string.
 func Plural(name string) string {
 	client := pluralize.NewClient()
 	plural := client.Plural(name)
 	return strings.ToLower(plural)
 }
 
+// PostgresType returns the postgres type for the given type.
 func PostgresType(goType string, options *structify.StructifyFieldOptions, isJson bool) string {
 	t := GoTypeToPostgresType(goType)
 
@@ -144,6 +153,7 @@ func PostgresType(goType string, options *structify.StructifyFieldOptions, isJso
 	return t
 }
 
+// GoTypeToPostgresType returns the postgres type for the given type.
 func GoTypeToPostgresType(goType string) string {
 	goType = strings.TrimPrefix(goType, "*")
 	switch goType {
@@ -174,6 +184,7 @@ type IncludeTemplate struct {
 	Body string
 }
 
+// ExecuteTemplate executes a template.
 func ExecuteTemplate(tmpl string, funcs template.FuncMap, data any, templates ...IncludeTemplate) (string, error) {
 	var output bytes.Buffer
 
@@ -198,58 +209,11 @@ func ExecuteTemplate(tmpl string, funcs template.FuncMap, data any, templates ..
 	return output.String(), nil
 }
 
+// ClearPointer removes the pointer and slice from a string.
 func ClearPointer(s string) string {
 	s = strings.ReplaceAll(s, "[]", "")
 	s = strings.ReplaceAll(s, "*", "")
 	return s
-}
-
-func IsDefType(field *descriptorpb.FieldDescriptorProto) bool {
-	switch *field.Type {
-	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE:
-		return true
-	case descriptorpb.FieldDescriptorProto_TYPE_FLOAT:
-		return true
-	case descriptorpb.FieldDescriptorProto_TYPE_INT64:
-		return true
-	case descriptorpb.FieldDescriptorProto_TYPE_UINT64:
-		return true
-	case descriptorpb.FieldDescriptorProto_TYPE_INT32:
-		return true
-	case descriptorpb.FieldDescriptorProto_TYPE_FIXED64:
-		return true
-	case descriptorpb.FieldDescriptorProto_TYPE_FIXED32:
-		return true
-	case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
-		return true
-	case descriptorpb.FieldDescriptorProto_TYPE_STRING:
-		return true
-	case descriptorpb.FieldDescriptorProto_TYPE_BYTES:
-		return true
-	case descriptorpb.FieldDescriptorProto_TYPE_UINT32:
-		return true
-	case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
-		return true
-	case descriptorpb.FieldDescriptorProto_TYPE_SFIXED32:
-		return true
-	case descriptorpb.FieldDescriptorProto_TYPE_SFIXED64:
-		return true
-	case descriptorpb.FieldDescriptorProto_TYPE_SINT32:
-		return true
-	case descriptorpb.FieldDescriptorProto_TYPE_SINT64:
-		return true
-	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
-		rtyp := field.GetTypeName()
-		parts := strings.Split(rtyp, ".")
-		typName := parts[len(parts)-1]
-		if typName == "Timestamp" && parts[len(parts)-2] == "protobuf" && parts[len(parts)-3] == "google" {
-			return true
-		} else {
-			return false
-		}
-	}
-
-	return false
 }
 
 // ConvertType converts a protobuf type to a Go type.
@@ -314,6 +278,7 @@ func ConvertType(field *descriptorpb.FieldDescriptorProto) string {
 	return typ
 }
 
+// TypePrefix returns the type prefix.
 func TypePrefix(field *descriptorpb.FieldDescriptorProto, typeName string) string {
 	if IsRepeated(field) {
 		typeName = "[]" + typeName
@@ -391,7 +356,7 @@ func FirstLetterLower(s string) (string, error) {
 func SliceToString(slice []string) string {
 	quoted := make([]string, len(slice))
 	for i, elem := range slice {
-		quoted[i] = fmt.Sprintf("\"%s\"", elem)
+		quoted[i] = fmt.Sprintf("\"%s\"", strings.ReplaceAll(elem, "\"", "\\\""))
 	}
 	return fmt.Sprintf("[]string{%s}", strings.Join(quoted, ", "))
 }
@@ -436,12 +401,6 @@ func CheckProtoSyntax(file *descriptorpb.FileDescriptorProto) error {
 	return nil
 }
 
-func DC(f string, to string, s ...interface{}) {
-	if strings.Contains(f, to) {
-		DumpPrint(s...)
-	}
-}
-
 func dump(s interface{}) string {
 	jsonData, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
@@ -482,6 +441,7 @@ func GetUserProtoFiles(req *plugingo.CodeGeneratorRequest) []*descriptorpb.FileD
 	return userProtoFiles
 }
 
+// IsContainsStar returns true if the string contains a star.
 func IsContainsStar(s string) bool {
 	return strings.Contains(s, "*")
 }
@@ -506,14 +466,12 @@ func DetectField(structName string) string {
 	return "id"
 }
 
+// CamelCaseSlice returns the camel case of a slice.
 func CamelCaseSlice(elem []string) string {
 	return UpperCamelCase(strings.Join(elem, ""))
 }
 
-func BuildJSONTypeName(parentName string, typeName string) string {
-	return "JSON" + UpperCamelCase(parentName) + UpperCamelCase(typeName)
-}
-
+// DetermineRelationDirection determines the relation direction.
 func DetermineRelationDirection(rd *descriptorpb.DescriptorProto, pd *descriptorpb.DescriptorProto) string {
 	for _, f := range rd.GetField() {
 		if f.GetName() == strings.ToLower(pd.GetName())+"_id" {
