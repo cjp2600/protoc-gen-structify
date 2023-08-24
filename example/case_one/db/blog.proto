@@ -21,7 +21,7 @@ message Device {
 message Post {
   int32 id = 1 [(structify.field) = {primary_key: true, auto_increment: true}];
   string title = 2 [(structify.field) = {index: true}];
-  string Body = 3;
+  string body = 3;
   User author = 4 [(structify.field) = {relation: { field: "author_id", reference: "id" } }];
   string author_id = 5 [(structify.field) = {index: true, uuid: true}];
 }

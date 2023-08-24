@@ -473,6 +473,9 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 		// camelCase returns the upper camel case.
 		"camelCase": helperpkg.UpperCamelCase,
 
+		// plural returns the plural.
+		"plural": helperpkg.Plural,
+
 		// lowerCamelCase returns the lower camel case.
 		"lowerCamelCase": helperpkg.LowerCamelCase,
 	}

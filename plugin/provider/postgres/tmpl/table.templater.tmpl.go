@@ -437,6 +437,12 @@ type {{ storageName }} interface {
 	Load{{ $field | pluralFieldName }} (ctx context.Context, model *{{structureName}}, builders ...*QueryBuilder) error
 	{{- end }}
 	{{- end }}
+	{{- range $index, $field := fields }}
+	{{- if and ($field | isRelation) }}
+	// LoadBatch{{ $field | pluralFieldName }} loads the {{ $field | pluralFieldName }} relation.
+	LoadBatch{{ $field | pluralFieldName }} (ctx context.Context, items []*{{structureName}}, builders ...*QueryBuilder) error
+	{{- end }}
+	{{- end }}
 }
 
 // New{{ storageName }} returns a new {{ storageName | lowerCamelCase }}.
@@ -545,6 +551,45 @@ func (t *{{ storageName | lowerCamelCase }}) Load{{ $field | pluralFieldName }} 
 
 		model.{{ $field | fieldName }} = relationModel
 	{{- end }}
+	return nil
+}
+{{- end }}
+{{- end }}
+
+{{- range $index, $field := fields }}
+{{- if and ($field | isRelation) }}
+// LoadBatch{{ $field | pluralFieldName }} loads the {{ $field | pluralFieldName }} relation.
+func (t *{{ storageName | lowerCamelCase }}) LoadBatch{{ $field | pluralFieldName }} (ctx context.Context, items []*{{structureName}}, builders ...*QueryBuilder) error {
+	requestItems := make([]interface{}, len(items))
+	for i, item := range items {
+		requestItems[i] = item.{{ $field | getFieldID }}
+	}
+
+	// New{{ $field | relationStorageName }} creates a new {{ $field | relationStorageName }}.
+	s := New{{ $field | relationStorageName }}(t.db)
+
+	// Add the filter for the relation
+	builders = append(builders, FilterBuilder({{ $field | relationStructureName  }}{{ $field | getRefID }}In(requestItems...)))
+
+	results, err := s.FindMany(ctx, builders...)
+	if err != nil {
+		return fmt.Errorf("failed to find many {{ $field | relationStorageName }}: %w", err)
+	}
+
+	// Assign {{ $field | relationStructureName }} to items
+	// todo: optimize this, use map. Find way to get {{ $field | relationStructureName }} from items
+	for _, item := range items {
+	   		for _, result := range results {
+			if item.{{ $field | getFieldID }} == result.{{ $field | getRefID }} {
+				{{- if ($field | isRepeated) }}
+				item.{{ $field | fieldName }} = append(item.{{ $field | fieldName }}, result)
+				{{- else }}
+				item.{{ $field | fieldName }} = result
+				{{- end }}
+			}
+		}
+	}
+
 	return nil
 }
 {{- end }}
