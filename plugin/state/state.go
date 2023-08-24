@@ -112,15 +112,25 @@ func findRelatedDescriptor(request *plugingo.CodeGeneratorRequest, field *descri
 			return msg
 		}
 	}
+
 	return nil
 }
 
 // getRelation fills the Relations map in the state struct.
 func getRelations(request *plugingo.CodeGeneratorRequest, nestSet NestedMessages) Relations {
 	protoFile := helperpkg.GetUserProtoFile(request)
-	var respRelations = make(map[RelationType]*Relation)
+	var respRelations = make(Relations)
 
 	for _, msg := range protoFile.GetMessageType() {
+		var pk *descriptor.FieldDescriptorProto
+		for _, f := range msg.GetField() {
+			if opts := helperpkg.GetFieldOptions(f); opts != nil {
+				if opts.GetPrimaryKey() {
+					pk = f
+				}
+			}
+		}
+
 		for _, field := range msg.GetField() {
 			if field.GetType() == descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
 				convertedType := helperpkg.ConvertType(field)
@@ -136,17 +146,49 @@ func getRelations(request *plugingo.CodeGeneratorRequest, nestSet NestedMessages
 					Store:              helperpkg.DetectStoreName(convertedType),  // Fill this with the proper value
 					Many:               helperpkg.DetectMany(convertedType),       // As the field is repeated, it means there are many Relations
 					AllowSubCreating:   isAllowSubCreating(request, msg, field),   // default allow sub creating
-					Limit:              100,                                       // default relation limit
+				}
+
+				// find related options
+				if relation.RelationDescriptor != nil {
+					for _, f := range relation.RelationDescriptor.GetField() {
+						pc := helperpkg.ConvertType(f)
+						if helperpkg.ClearPointer(pc) == msg.GetName() {
+							options := helperpkg.GetFieldOptions(f)
+							if options != nil {
+								relOptions := options.GetRelation()
+								if relOptions != nil {
+									relation.Field = relOptions.GetReference()
+									relation.Reference = relOptions.GetField()
+									if pk != nil {
+										if relation.Field != pk.GetName() {
+											relation.Direction = ChildToParent
+										} else {
+											relation.Direction = ParentToChild
+										}
+									}
+								}
+							}
+						}
+					}
 				}
 
 				options := helperpkg.GetFieldOptions(field)
 				if options != nil {
 					relOptions := options.GetRelation()
 					if relOptions != nil {
+						relation.UseTag = true
 						relation.Field = relOptions.GetField()
 						relation.Reference = relOptions.GetReference()
-						relation.Limit = uint64(relOptions.GetLimit())
+						if pk != nil {
+							if relation.Field != pk.GetName() {
+								relation.Direction = ChildToParent
+							} else {
+								relation.Direction = ParentToChild
+							}
+						}
 					}
+				} else {
+					updateSupOptions(relation)
 				}
 
 				if nestSet.CheckIsRelation(field) {
@@ -157,24 +199,21 @@ func getRelations(request *plugingo.CodeGeneratorRequest, nestSet NestedMessages
 		}
 	}
 
-	for _, msg := range protoFile.GetMessageType() {
-		for _, field := range msg.GetField() {
-			if field.GetType() == descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
-				convertedType := helperpkg.ConvertType(field)
-				structName := helperpkg.DetectStructName(convertedType)
-				if v, ok := respRelations[NewRelationType(structName, msg.GetName())]; ok {
-					// If the relation is already in the map, it means that it is a many-to-many relation
-					// and we need to fill the reference and field values of the relation.
-					// The reference and field values are the opposite of the values of the relation
-					// that is already in the map.
-					respRelations[NewRelationType(msg.GetName(), structName)].Field = v.Reference
-					respRelations[NewRelationType(msg.GetName(), structName)].Reference = v.Field
-				}
+	return respRelations
+}
+
+func updateSupOptions(relation *Relation) {
+	for _, pDesc := range relation.RelationDescriptor.GetField() {
+		options := helperpkg.GetFieldOptions(pDesc)
+		if options != nil {
+			relOptions := options.GetRelation()
+			if relOptions != nil {
+				relation.Field = relOptions.GetReference()
+				relation.Reference = relOptions.GetField()
+				relation.UseTag = true
 			}
 		}
 	}
-
-	return respRelations
 }
 
 // GetFlattenNestedMessages checks that the protobuf syntax is supported.
@@ -621,18 +660,27 @@ type NestedTableVal struct {
 	HasType       bool
 }
 
+type Direction uint
+
+const (
+	UnknownDirectionDirection = iota
+	ParentToChild
+	ChildToParent
+)
+
 type Relation struct {
 	RelationDescriptor *descriptor.DescriptorProto
 	ParentDescriptor   *descriptor.DescriptorProto
 	Descriptor         *descriptor.FieldDescriptorProto
 	Field              string
+	Direction          Direction
 	Reference          string
 	TableName          string
 	StructName         string
 	Store              string
-	Limit              uint64
 	Many               bool
 	AllowSubCreating   bool
+	UseTag             bool
 }
 
 type RelationType string

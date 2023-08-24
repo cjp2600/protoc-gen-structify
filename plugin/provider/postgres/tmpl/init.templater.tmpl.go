@@ -602,5 +602,7 @@ var (
 	ErrNoTransaction = errors.New("no transaction provided")
 	// ErrRowAlreadyExist is returned when a row already exist.
 	ErrRowAlreadyExist    = errors.New("row already exist")
+	// ErrModelIsNil is returned when a relation model is nil.
+	ErrModelIsNil = errors.New("model is nil")
 )
 `

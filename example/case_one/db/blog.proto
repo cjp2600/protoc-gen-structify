@@ -15,9 +15,17 @@ option (structify.db) = {
 message Device {
   string name = 1;
   string value = 3;
-  string user_id = 4
-  [(structify.field) = {index: true, uuid: true}];
+  string user_id = 4 [(structify.field) = {index: true, uuid: true}];
 }
+
+message Post {
+  int32 id = 1 [(structify.field) = {primary_key: true, auto_increment: true}];
+  string title = 2 [(structify.field) = {index: true}];
+  string Body = 3;
+  User author = 4 [(structify.field) = {relation: { field: "author_id", reference: "id" } }];
+  string author_id = 5 [(structify.field) = {index: true, uuid: true}];
+}
+
 
 /**
   * @structify.table users
@@ -55,11 +63,11 @@ message User {
   string email = 4 [(structify.field) = {unique: true}];
   optional string last_name = 5;
 
+  Device device = 15  [(structify.field) = {relation: { field: "id", reference: "user_id" } }];
+  Setting settings = 7 [(structify.field) = {relation: { field: "id", reference: "user_id" } }];
 
-  Device device = 15 [(structify.field) = {relation: { field: "user_id", reference: "id" } }];
-
-  Setting settings = 7;
-  repeated Address addresses = 6 [(structify.field) = {relation: { limit: 3 } }];
+  repeated Address addresses = 6;
+  repeated Post posts = 16;
 
   google.protobuf.Timestamp created_at = 8 [(structify.field) = {default: "now()"}];
   optional google.protobuf.Timestamp updated_at = 9;

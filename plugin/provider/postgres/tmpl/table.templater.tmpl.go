@@ -365,7 +365,7 @@ const TableCreateMethodTemplate = `
 	{{- if and ($field | isRelation) ($field | relationAllowSubCreating) }}
 	    if options.relations && model.{{ $field | fieldName }} != nil { {{ if ($field | isRepeated) }}
 			for _, item := range model.{{ $field | fieldName }} {
-				item.{{ $field | relationIDFieldName }} = id
+				item.{{ $field | getRefID }} = id
 				s := New{{ $field | relationStorageName }}(t.db)
                 {{ if ($field | hasIDFromRelation) }} _, err := s.Create(ctx, item) {{ else }} err := s.Create(ctx, item) {{ end }}
 				if err != nil {
@@ -373,7 +373,7 @@ const TableCreateMethodTemplate = `
 				}
 			} {{ else }}
 			s := New{{ $field | relationStorageName }}(t.db)
-			model.{{ $field | fieldName }}.{{ $field | relationIDFieldName }} = id
+			model.{{ $field | fieldName }}.{{ $field | getRefID }} = id
 			{{ if ($field | hasIDFromRelation) }} _, err := s.Create(ctx, model.{{ $field | fieldName }}) {{ else }} err := s.Create(ctx, model.{{ $field | fieldName }}) {{ end }}
 			if err != nil {
 				{{ if (hasID) }} return nil, fmt.Errorf("failed to create {{ $field | fieldName }}: %w", err) {{ else }} return fmt.Errorf("failed to create {{ structureName }}: %w", err) {{ end }}
@@ -434,7 +434,7 @@ type {{ storageName }} interface {
 	{{- range $index, $field := fields }}
 	{{- if and ($field | isRelation) }}
 	// Load{{ $field | pluralFieldName }} loads the {{ $field | pluralFieldName }} relation.
-	Load{{ $field | pluralFieldName }} (ctx context.Context, model *{{structureName}}) error
+	Load{{ $field | pluralFieldName }} (ctx context.Context, model *{{structureName}}, builders ...*QueryBuilder) error
 	{{- end }}
 	{{- end }}
 }
@@ -520,17 +520,25 @@ func (t *{{ storageName | lowerCamelCase }}) UpgradeTable(ctx context.Context) e
 {{- range $index, $field := fields }}
 {{- if and ($field | isRelation) }}
 // Load{{ $field | pluralFieldName }} loads the {{ $field | pluralFieldName }} relation.
-func (t *{{ storageName | lowerCamelCase }}) Load{{ $field | pluralFieldName }} (ctx context.Context, model *{{structureName}}) error {
+func (t *{{ storageName | lowerCamelCase }}) Load{{ $field | pluralFieldName }} (ctx context.Context, model *{{structureName}}, builders ...*QueryBuilder) error {
+	if model == nil {
+		return errors.Wrap(ErrModelIsNil, "{{structureName}} is nil")
+	}
+
+	// New{{ $field | relationStorageName }} creates a new {{ $field | relationStorageName }}.
 	s := New{{ $field | relationStorageName }}(t.db)
+
+	// Add the filter for the relation
+	builders = append(builders, FilterBuilder({{ $field | relationStructureName  }}{{ $field | getRefID }}Eq(model.{{ $field | getFieldID }})))
 	{{- if ($field | isRepeated) }}
-		relationModels, err := s.FindMany(ctx, FilterBuilder({{ $field | relationStructureName  }}{{ $field | relationIDFieldName }}Eq(model.{{ $field | parentRelationIDFieldName }})))
+		relationModels, err := s.FindMany(ctx, builders...)
 		if err != nil {
 			return fmt.Errorf("failed to find many {{ $field | relationStorageName }}: %w", err)
 		}
 
 		model.{{ $field | fieldName }} = relationModels
 	{{- else }}
-		relationModel, err := s.FindOne(ctx, FilterBuilder({{ $field | relationStructureName  }}{{ $field | relationIDFieldName }}Eq(model.{{ $field | parentRelationIDFieldName }})))
+		relationModel, err := s.FindOne(ctx, builders...)
 		if err != nil {
 			return fmt.Errorf("failed to find {{ $field | relationStorageName }}: %w", err)
 		}

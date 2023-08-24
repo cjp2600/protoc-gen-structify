@@ -250,6 +250,10 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			return helperpkg.UpperCamelCase(t.message.GetName())
 		},
 
+		"message": func() *descriptorpb.DescriptorProto {
+			return t.message
+		},
+
 		// fields returns the fields.
 		"fields": func() []*descriptorpb.FieldDescriptorProto {
 			return t.message.GetField()
@@ -328,11 +332,17 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			return false
 		},
 
-		"parentRelationIDFieldName": func(fl *descriptorpb.FieldDescriptorProto) string {
-			if t.state.Relations.IsExist(fl) {
-				relation := t.state.Relations.GetByFieldDescriptor(fl)
+		"getFieldID": func(fl *descriptorpb.FieldDescriptorProto) string {
+			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(fl))
+			relation, ok := t.state.Relations.Get(relName)
+
+			if ok {
 				rd := relation.RelationDescriptor
 				pd := relation.ParentDescriptor
+
+				if relation.UseTag {
+					return helperpkg.UpperCamelCase(relation.Field)
+				}
 
 				var currentPrimaryKey string
 				for _, f := range pd.GetField() {
@@ -352,11 +362,19 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			return ""
 		},
 
-		"relationIDFieldName": func(fl *descriptorpb.FieldDescriptorProto) string {
-			if t.state.Relations.IsExist(fl) {
-				relation := t.state.Relations.GetByFieldDescriptor(fl)
+		"getRefID": func(fl *descriptorpb.FieldDescriptorProto) string {
+			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(fl))
+			relation, ok := t.state.Relations.Get(relName)
+
+			if ok {
 				rd := relation.RelationDescriptor
 				pd := relation.ParentDescriptor
+
+				if relation.UseTag {
+					return helperpkg.UpperCamelCase(relation.Reference)
+				}
+
+				// todo: check
 
 				if helperpkg.DetermineRelationDirection(rd, pd) == "child-to-parent" {
 					for _, f := range rd.GetField() {
@@ -396,8 +414,11 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 
 		// relationAllowSubCreating returns true if the relation allows sub creating.
 		"relationAllowSubCreating": func(f *descriptorpb.FieldDescriptorProto) bool {
-			if t.state.Relations.IsExist(f) {
-				return t.state.Relations.GetByFieldDescriptor(f).AllowSubCreating
+			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(f))
+			relation, ok := t.state.Relations.Get(relName)
+
+			if ok {
+				return relation.AllowSubCreating
 			}
 			return false
 		},
