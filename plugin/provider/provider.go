@@ -3,9 +3,9 @@ package provider
 import (
 	"errors"
 
-	helperpkg "github.com/cjp2600/structify/plugin/pkg/helper"
-	"github.com/cjp2600/structify/plugin/provider/postgres"
-	statepkg "github.com/cjp2600/structify/plugin/state"
+	helperpkg "github.com/cjp2600/protoc-gen-structify/plugin/pkg/helper"
+	"github.com/cjp2600/protoc-gen-structify/plugin/provider/postgres"
+	statepkg "github.com/cjp2600/protoc-gen-structify/plugin/state"
 	plugingo "github.com/golang/protobuf/protoc-gen-go/plugin"
 )
 

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"text/template"
 
-	importpkg "github.com/cjp2600/structify/plugin/import"
-	helperpkg "github.com/cjp2600/structify/plugin/pkg/helper"
-	tmplpkg "github.com/cjp2600/structify/plugin/provider/postgres/tmpl"
-	statepkg "github.com/cjp2600/structify/plugin/state"
+	importpkg "github.com/cjp2600/protoc-gen-structify/plugin/import"
+	helperpkg "github.com/cjp2600/protoc-gen-structify/plugin/pkg/helper"
+	tmplpkg "github.com/cjp2600/protoc-gen-structify/plugin/provider/postgres/tmpl"
+	statepkg "github.com/cjp2600/protoc-gen-structify/plugin/state"
 )
 
 // tableTemplater is the templater for the init statement.

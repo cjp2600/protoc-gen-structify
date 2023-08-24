@@ -1,4 +1,4 @@
-module github.com/cjp2600/structify/example/case_one
+module github.com/cjp2600/protoc-gen-structify/example/case_one
 
 go 1.20
 

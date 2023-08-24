@@ -11,10 +11,10 @@ import (
 	"github.com/golang/protobuf/proto"
 	plugingo "github.com/golang/protobuf/protoc-gen-go/plugin"
 
-	generatorpkg "github.com/cjp2600/structify/plugin/generator"
-	helperpkg "github.com/cjp2600/structify/plugin/pkg/helper"
-	"github.com/cjp2600/structify/plugin/provider"
-	statepkg "github.com/cjp2600/structify/plugin/state"
+	generatorpkg "github.com/cjp2600/protoc-gen-structify/plugin/generator"
+	helperpkg "github.com/cjp2600/protoc-gen-structify/plugin/pkg/helper"
+	"github.com/cjp2600/protoc-gen-structify/plugin/provider"
+	statepkg "github.com/cjp2600/protoc-gen-structify/plugin/state"
 )
 
 // Plugin handles generation of code based on protobuf.

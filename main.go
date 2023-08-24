@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/cjp2600/structify/plugin"
+	"github.com/cjp2600/protoc-gen-structify/plugin"
 )
 
 func main() {

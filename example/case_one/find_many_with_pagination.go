@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cjp2600/structify/example/case_one/db"
+	"github.com/cjp2600/protoc-gen-structify/example/case_one/db"
 )
 
 func main() {

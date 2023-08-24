@@ -10,9 +10,9 @@ import (
 	plugingo "github.com/golang/protobuf/protoc-gen-go/plugin"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	importpkg "github.com/cjp2600/structify/plugin/import"
-	helperpkg "github.com/cjp2600/structify/plugin/pkg/helper"
-	"github.com/cjp2600/structify/plugin/pkg/version"
+	importpkg "github.com/cjp2600/protoc-gen-structify/plugin/import"
+	helperpkg "github.com/cjp2600/protoc-gen-structify/plugin/pkg/helper"
+	"github.com/cjp2600/protoc-gen-structify/plugin/pkg/version"
 )
 
 // State is the state of the plugin.

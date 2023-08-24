@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-import "github.com/cjp2600/structify/plugin/options/structify.proto";
+import "github.com/cjp2600/protoc-gen-structify/plugin/options/structify.proto";
 import "google/protobuf/timestamp.proto";
 
 package db;

@@ -1,9 +1,9 @@
 package postgres
 
 import (
-	importpkg "github.com/cjp2600/structify/plugin/import"
-	templaterpkg "github.com/cjp2600/structify/plugin/provider/postgres/templater"
-	statepkg "github.com/cjp2600/structify/plugin/state"
+	importpkg "github.com/cjp2600/protoc-gen-structify/plugin/import"
+	templaterpkg "github.com/cjp2600/protoc-gen-structify/plugin/provider/postgres/templater"
+	statepkg "github.com/cjp2600/protoc-gen-structify/plugin/state"
 )
 
 // Postgres is a type for providing content.

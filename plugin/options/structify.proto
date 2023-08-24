@@ -4,7 +4,7 @@ package structify;
 
 import "google/protobuf/descriptor.proto";
 
-option go_package = "github.com/cjp2600/structify/plugin/options;structify";
+option go_package = "github.com/cjp2600/protoc-gen-structify/plugin/options;structify";
 
 // Defines a custom option for file-level settings.
 extend google.protobuf.FileOptions {

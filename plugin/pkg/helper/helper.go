@@ -18,7 +18,7 @@ import (
 	"github.com/stoewer/go-strcase"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	structify "github.com/cjp2600/structify/plugin/options"
+	structify "github.com/cjp2600/protoc-gen-structify/plugin/options"
 )
 
 // DescriptorMList is a map of descriptors.

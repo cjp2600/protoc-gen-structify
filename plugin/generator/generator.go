@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cjp2600/structify/plugin/provider"
-	statepkg "github.com/cjp2600/structify/plugin/state"
+	"github.com/cjp2600/protoc-gen-structify/plugin/provider"
+	statepkg "github.com/cjp2600/protoc-gen-structify/plugin/state"
 )
 
 // ContentGenerator is a type for generating content.

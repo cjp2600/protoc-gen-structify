@@ -4,10 +4,10 @@ DATE             := $(shell date +%FT%T%z)
 GIT_COMMIT       := $(shell git rev-parse HEAD)
 GIT_BRANCH       := $(shell git rev-parse --abbrev-ref HEAD)
 GOBIN			 = $(CURDIR)/bin
-LDFLAGS          = -ldflags "-X 'github.com/cjp2600/structify/plugin/pkg/version.Version=$(VERSION)' \
-                             -X 'github.com/cjp2600/structify/plugin/pkg/version.Revision=$(GIT_COMMIT)' \
-                             -X 'github.com/cjp2600/structify/plugin/pkg/version.Branch=$(GIT_BRANCH)' \
-                             -X 'github.com/cjp2600/structify/plugin/pkg/version.BuildDate=$(DATE)'"
+LDFLAGS          = -ldflags "-X 'github.com/cjp2600/protoc-gen-structify/plugin/pkg/version.Version=$(VERSION)' \
+                             -X 'github.com/cjp2600/protoc-gen-structify/plugin/pkg/version.Revision=$(GIT_COMMIT)' \
+                             -X 'github.com/cjp2600/protoc-gen-structify/plugin/pkg/version.Branch=$(GIT_BRANCH)' \
+                             -X 'github.com/cjp2600/protoc-gen-structify/plugin/pkg/version.BuildDate=$(DATE)'"
 
 PROTOC_VER := 3.15.8
 PROTOC_ZIP := protoc-$(PROTOC_VER)-osx-x86_64.zip
