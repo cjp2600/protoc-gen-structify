@@ -576,17 +576,23 @@ func (t *{{ storageName | lowerCamelCase }}) LoadBatch{{ $field | pluralFieldNam
 		return fmt.Errorf("failed to find many {{ $field | relationStorageName }}: %w", err)
 	}
 
+	{{- if ($field | isRepeated) }}
+	resultMap := make(map[interface{}][]*{{ $field | relationStructureName }})
+	{{- else }}
+	resultMap := make(map[interface{}]*{{ $field | relationStructureName }})
+	{{- end }}
+	for _, result := range results {
+		{{- if ($field | isRepeated) }}
+		resultMap[result.{{ $field | getRefID }}] = append(resultMap[result.{{ $field | getRefID }}], result)
+		{{- else }}
+		resultMap[result.{{ $field | getRefID }}] = result
+		{{- end }}
+	}
+
 	// Assign {{ $field | relationStructureName }} to items
-	// todo: optimize this, use map. Find way to get {{ $field | relationStructureName }} from items
 	for _, item := range items {
-	   		for _, result := range results {
-			if item.{{ $field | getFieldID }} == result.{{ $field | getRefID }} {
-				{{- if ($field | isRepeated) }}
-				item.{{ $field | fieldName }} = append(item.{{ $field | fieldName }}, result)
-				{{- else }}
-				item.{{ $field | fieldName }} = result
-				{{- end }}
-			}
+        if v, ok := resultMap[item.{{ $field | getFieldID }}]; ok {
+			item.{{ $field | fieldName }} = v
 		}
 	}
 
