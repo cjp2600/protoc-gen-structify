@@ -1,6 +1,40 @@
 package tmpl
 
 const TableConditionsTemplate = `
+type Tabler interface {
+	TableName() string
+}
+
+type JoinType string
+
+const (
+	LeftJoin  JoinType = "LEFT"
+	InnerJoin JoinType = "INNER"
+	RightJoin JoinType = "RIGHT"
+)
+
+type JoinCondition struct {
+	Type  JoinType
+	Table Tabler
+	On    FilterApplier
+}
+
+func Join(joinType JoinType, table Tabler, on FilterApplier) FilterApplier {
+	return JoinCondition{Type: joinType, Table: table, On: on}
+}
+
+func (c JoinCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	onQuery := c.On.Apply(sq.Select("*"))
+	onClause, args, _ := onQuery.ToSql()
+	onClause = strings.TrimPrefix(onClause, "SELECT * WHERE ")
+	joinExpr := fmt.Sprintf("%s JOIN %s ON %s", c.Type, c.Table.TableName(), onClause)
+	return query.JoinClause(sq.Expr(joinExpr, args...))
+}
+
+func (c JoinCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query
+}
+
 // And returns a condition that combines the given conditions with AND.
 type AndCondition struct {
 	Where []FilterApplier

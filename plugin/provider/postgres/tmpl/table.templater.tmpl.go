@@ -271,6 +271,11 @@ type {{ structureName }} struct {
 	{{ $field | fieldName }} {{ $field | fieldType }}{{if not ($field | isRelation) }}` + " `db:\"{{ $field | sourceName }}\"`" + `{{end}}{{end}}
 }
 
+// TableName returns the table name.
+func (t *{{ structureName }}) TableName() string {
+	return "{{ tableName }}"
+}
+
 // ScanRow scans a row into a {{ structureName }}.
 func (t *{{ structureName }}) ScanRow(r *sql.Row) error {
 	return r.Scan({{ range $field := fields }} {{if not ($field | isRelation) }} &t.{{ $field | fieldName }}, {{ end }}{{ end }})
