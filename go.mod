@@ -1,8 +1,6 @@
 module github.com/cjp2600/protoc-gen-structify
 
-go 1.20
-
-replace github.com/cjp2600/protoc-gen-structify => ./
+go 1.21
 
 require (
 	github.com/stoewer/go-strcase v1.3.0
