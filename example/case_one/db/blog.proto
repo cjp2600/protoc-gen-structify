@@ -15,15 +15,15 @@ option (structify.db) = {
 message Device {
   string name = 1;
   string value = 3;
-  string user_id = 4 [(structify.field) = {index: true, uuid: true}];
+  string user_id = 4 [(structify.field) = {index: true, uuid: true, unique: true}];
 }
 
 message Post {
   int32 id = 1 [(structify.field) = {primary_key: true, auto_increment: true}];
   string title = 2 [(structify.field) = {index: true}];
   string body = 3;
-  User author = 4 [(structify.field) = {relation: { field: "author_id", reference: "id" } }];
-  string author_id = 5 [(structify.field) = {index: true, uuid: true}];
+  User author = 4 [(structify.field) = {relation: { field: "author_id", reference: "id", foreign: { cascade: false } } }];
+  string author_id = 5 [(structify.field) = {index: true, uuid: true, unique: true}];
 }
 
 
@@ -63,8 +63,8 @@ message User {
   string email = 4 [(structify.field) = {unique: true}];
   optional string last_name = 5;
 
-  Device device = 15  [(structify.field) = {relation: { field: "id", reference: "user_id" } }];
-  Setting settings = 7 [(structify.field) = {relation: { field: "id", reference: "user_id" } }];
+  Device device = 15  [(structify.field) = {relation: { field: "id", reference: "user_id", foreign: { cascade: true } } }];
+  Setting settings = 7 [(structify.field) = {relation: { field: "id", reference: "user_id", foreign: { cascade: true }  } }];
 
   repeated Address addresses = 6;
   repeated Post posts = 16;
@@ -94,7 +94,7 @@ message Setting {
   string name = 2 [(structify.field) = {index: true}];
   string value = 3;
   User user = 4 [(structify.field) = {relation: { field: "user_id", reference: "id" } }];
-  string user_id = 5 [(structify.field) = {index: true, uuid: true}];
+  string user_id = 5 [(structify.field) = {index: true, uuid: true, unique: true}];
 }
 
 /**
@@ -107,8 +107,8 @@ message Address {
   string city = 3 [(structify.field) = {index: true}];
   int32 state = 4;
   int64 zip = 5;
-  User user = 6 [(structify.field) = {relation: { field: "user_id", reference: "id" } }];
-  string user_id = 7 [(structify.field) = {index: true, uuid: true}];
+  User user = 6 [(structify.field) = {relation: { field: "user_id", reference: "id", foreign: { cascade: false }  } }];
+  string user_id = 7 [(structify.field) = {index: true, uuid: true, unique: true}];
 
   google.protobuf.Timestamp created_at = 8 [(structify.field) = {default: "now()"}];
   optional google.protobuf.Timestamp updated_at = 9;

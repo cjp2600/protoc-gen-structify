@@ -70,6 +70,12 @@ message Relation {
   string field = 1;
   // reference defines the reference table
   string reference = 2;
+  // cascade defines the cascade delete
+  Foreign foreign = 3;
+}
+
+message Foreign {
+  bool cascade = 3;
 }
 
 // MethodOptions defines the method options

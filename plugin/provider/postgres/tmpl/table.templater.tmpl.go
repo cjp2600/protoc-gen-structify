@@ -492,10 +492,36 @@ func (t *{{ storageName | lowerCamelCase }}) CreateTable(ctx context.Context) er
 		CREATE TABLE IF NOT EXISTS {{ tableName }} (
 		{{- range $index, $field := fields }}
 		{{- if not ($field | isRelation) }}
-		{{ $field | sourceName }} {{if ($field | isAutoIncrement) }} SERIAL{{else}}{{ $field | postgresType }}{{end}}{{if $field | isPrimaryKey }} PRIMARY KEY{{end}}{{if ($field | isUnique) }} UNIQUE{{end}}{{ if and (isNotNull $field) (not (isAutoIncrement $field)) }} NOT NULL{{ end }}{{if ($field | getDefaultValue) }} DEFAULT {{$field | getDefaultValue}}{{end}}{{if not ( $field | isLastField )}},{{end}}
+		{{ $field | sourceName }} {{if ($field | isAutoIncrement) }} SERIAL{{else}}{{ $field | postgresType }}{{end}}{{if $field | isPrimaryKey }} PRIMARY KEY{{end}}{{ if and (isNotNull $field) (not (isAutoIncrement $field)) }} NOT NULL{{ end }}{{if ($field | getDefaultValue) }} DEFAULT {{$field | getDefaultValue}}{{end}}{{if not ( $field | isLastField )}},{{end}}
 		{{- end}}
 		{{- end}});
-		{{if (comment) }}COMMENT ON TABLE {{ tableName }} IS '{{ comment }}';{{end}}
+		-- Other entities
+		{{- if (comment) }}
+		COMMENT ON TABLE {{ tableName }} IS '{{ comment }}';
+		{{- end}}
+		{{- range $index, $field := fields }}
+		{{- if ($field | hasUnique) }}
+		CREATE UNIQUE INDEX IF NOT EXISTS {{ tableName }}_{{ $field | sourceName }}_unique_idx ON {{ tableName }} USING btree ({{ $field | sourceName }});
+		{{- end}}
+		{{- end}}
+		{{- range $index, $field := fields }}
+		{{- if ($field | hasIndex) }}
+		CREATE INDEX IF NOT EXISTS {{ tableName }}_{{ $field | sourceName }}_idx ON {{ tableName }} USING btree ({{ $field | sourceName }});
+		{{- end}}
+		{{- end}}
+		{{- range $index, $field := fields }}
+		{{- if ($field | isRelation) }}
+		{{- if ($field | isForeign) }}
+		-- Foreign keys for {{ $field | relationTableName }}
+		ALTER TABLE {{ tableName }}
+		ADD FOREIGN KEY ({{ $field | getFieldSource }}) REFERENCES {{ $field | relationTableName }}({{ $field | getRefSource }})
+		{{- if ($field | isCascade) }}
+		ON DELETE CASCADE;
+		{{- else }}; 
+        {{- end}}
+		{{- end}}
+		{{- end}}
+		{{- end }}
 	` + "`" + `
 
 	_, err := t.db.ExecContext(ctx,sqlQuery)

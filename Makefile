@@ -39,7 +39,7 @@ install-protoc: $(GOBIN) ## Install protocol buffer compiler
 
 .PHONY: install-protoc-gen-go
 install-protoc-gen-go: $(GOBIN) ## Install protoc-gen-go plugin
-	@GOBIN=$(GOBIN) $(GO) install github.com/golang/protobuf/protoc-gen-go@v1.3.2
+	@GOBIN=$(GOBIN) $(GO) install github.com/golang/protobuf/protoc-gen-go@v1.5.3
 
 .PHONY: build-options
 build-options: install-tools ## Build options plugin

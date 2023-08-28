@@ -35,6 +35,7 @@ type State struct {
 	SingleTypes SingleTypes
 }
 
+// NewState returns a new State.
 func NewState(
 	request *plugingo.CodeGeneratorRequest,
 ) *State {
@@ -58,6 +59,12 @@ func NewState(
 	return state
 }
 
+// IsRelation checks if the given field is a Relation.
+func (s *State) IsRelation(f *descriptorpb.FieldDescriptorProto) bool {
+	return s.Relations.IsExist(f) && !s.NestedMessages.IsJSON(f)
+}
+
+// getProvider returns the Provider of the plugin.
 func getProvider(request *plugingo.CodeGeneratorRequest) string {
 	protoFile := helperpkg.GetUserProtoFile(request)
 	opts := helperpkg.GetDBOptions(protoFile)
@@ -104,6 +111,7 @@ func isAllowSubCreating(request *plugingo.CodeGeneratorRequest, msg *descriptor.
 	return false
 }
 
+// findRelatedDescriptor returns the related descriptor.
 func findRelatedDescriptor(request *plugingo.CodeGeneratorRequest, field *descriptor.FieldDescriptorProto) *descriptor.DescriptorProto {
 	protoFile := helperpkg.GetUserProtoFile(request)
 	convertedType := helperpkg.ConvertType(field)
@@ -202,6 +210,7 @@ func getRelations(request *plugingo.CodeGeneratorRequest, nestSet NestedMessages
 	return respRelations
 }
 
+// updateSupOptions updates the relation options.
 func updateSupOptions(relation *Relation) {
 	for _, pDesc := range relation.RelationDescriptor.GetField() {
 		options := helperpkg.GetFieldOptions(pDesc)
@@ -311,6 +320,7 @@ func (j SingleTypes) String() string {
 	return string(b)
 }
 
+// ExistByName checks if the given name exists in the Messages.
 func (j SingleTypes) ExistByName(name string) bool {
 	for k, _ := range j {
 		if strings.Contains(k, "::"+name) {
@@ -320,6 +330,7 @@ func (j SingleTypes) ExistByName(name string) bool {
 	return false
 }
 
+// GetByName returns the SingleType by the given name.
 func (j SingleTypes) GetByName(name string) *SingleType {
 	for k, v := range j {
 		if strings.Contains(k, "::"+name) {
@@ -329,11 +340,13 @@ func (j SingleTypes) GetByName(name string) *SingleType {
 	return nil
 }
 
+// Get returns the SingleType by the given name.
 func (j SingleTypes) Get(name string) (SingleType, bool) {
 	val, ok := j[name]
 	return val, ok
 }
 
+// Delete deletes the SingleType by the given name.
 func (j SingleTypes) Delete(name string) {
 	delete(j, name)
 }
@@ -359,6 +372,7 @@ func (j SingleTypes) IsExist(f *descriptorpb.FieldDescriptorProto) bool {
 	return false
 }
 
+// GetByFieldDescriptor returns the SingleType by the given FieldDescriptorProto.
 func (j SingleTypes) GetByFieldDescriptor(f *descriptorpb.FieldDescriptorProto) *SingleType {
 	for k, v := range j {
 		for _, n := range []string{
@@ -380,8 +394,10 @@ func (j SingleTypes) GetByFieldDescriptor(f *descriptorpb.FieldDescriptorProto) 
 	return nil
 }
 
+// Relations is a type for how to generate json statements.
 type Relations map[RelationType]*Relation
 
+// String returns a string representation of the Relations.
 func (r Relations) String() string {
 	var output string
 	for k := range r {
@@ -390,10 +406,12 @@ func (r Relations) String() string {
 	return output
 }
 
+// Delete deletes the Relation by the given name.
 func (r Relations) Delete(name string) {
 	delete(r, RelationType(name))
 }
 
+// Get returns the Relation by the given name.
 func (r Relations) Get(name string) (*Relation, bool) {
 	val, ok := r[RelationType(name)]
 	return val, ok
@@ -442,8 +460,10 @@ func (r Relations) GetByFieldDescriptor(f *descriptorpb.FieldDescriptorProto) *R
 	return nil
 }
 
+// Messages is a type for how to generate json statements.
 type Messages []*descriptorpb.DescriptorProto
 
+// String returns a string representation of the Messages.
 func (t Messages) String() string {
 	b, err := json.Marshal(t)
 	if err != nil {
@@ -453,6 +473,7 @@ func (t Messages) String() string {
 	return string(b)
 }
 
+// FindByName returns the table with the given name.
 func (t Messages) FindByName(name string) *descriptorpb.DescriptorProto {
 	for _, m := range t {
 		if m.GetName() == name {
@@ -463,6 +484,7 @@ func (t Messages) FindByName(name string) *descriptorpb.DescriptorProto {
 	return nil
 }
 
+// NestedMessages is a type for how to generate json statements.
 type NestedMessages map[string]*MessageDescriptor
 
 // String returns a string representation of the NestedMessages.
@@ -475,6 +497,7 @@ func (t NestedMessages) String() string {
 	return string(b)
 }
 
+// CheckIsRelation checks if the given field is a Relation.
 func (t NestedMessages) CheckIsRelation(f *descriptorpb.FieldDescriptorProto) bool {
 	if _, ok := t[helperpkg.DetectStructName(helperpkg.ConvertType(f))]; ok {
 		return false
@@ -543,6 +566,7 @@ func (t NestedMessages) IsExist(f *descriptorpb.FieldDescriptorProto) bool {
 	return false
 }
 
+// GetByField returns the table by the given field.
 func (t NestedMessages) GetByField(f *descriptorpb.FieldDescriptorProto) *MessageDescriptor {
 	for k, v := range t {
 		for _, n := range []string{
@@ -586,6 +610,7 @@ func (t NestedMessages) GetByFieldDescriptor(f *descriptorpb.FieldDescriptorProt
 	return nil
 }
 
+// Get gets the table by the given name.
 func (t NestedMessages) Get(name string) *MessageDescriptor {
 	if v, ok := t[name]; ok {
 		return v
@@ -614,6 +639,7 @@ func (s *State) IsExistInNestedTables(name string) bool {
 	return false
 }
 
+// String returns a string representation of the State.
 func (s *State) String() string {
 	return "State{" +
 		"Provider: " + s.Provider +
@@ -642,6 +668,7 @@ func (s *State) ImportsFromTable(tables []Templater) {
 	}
 }
 
+// SingleType is a type for how to generate json statements.
 type SingleType struct {
 	ParentDescriptor *descriptor.DescriptorProto
 	Descriptor       *descriptor.FieldDescriptorProto
@@ -655,11 +682,13 @@ type SingleType struct {
 	Repeated            bool
 }
 
+// NestedTableVal is a type for how to generate json statements.
 type NestedTableVal struct {
 	StructureName string
 	HasType       bool
 }
 
+// Direction is a type for how to generate json statements.
 type Direction uint
 
 const (
@@ -668,6 +697,7 @@ const (
 	ChildToParent
 )
 
+// Relation is a type for how to generate json statements.
 type Relation struct {
 	RelationDescriptor *descriptor.DescriptorProto
 	ParentDescriptor   *descriptor.DescriptorProto
@@ -683,6 +713,7 @@ type Relation struct {
 	UseTag             bool
 }
 
+// RelationType is a type for how to generate json statements.
 type RelationType string
 
 // Relation SingleTypes.
@@ -747,18 +778,6 @@ func getLinkedStructName(m *descriptor.DescriptorProto, field *descriptor.FieldD
 		linkedStructName = val.Descriptor.GetName()
 	}
 	return linkedStructName
-}
-
-// buildJSONTypeTemplate builds the template of a repeated field.
-func buildJSONTypeTemplate(linkedStructName string, convertedType string, repeated bool) string {
-	template := fmt.Sprintf(`type %s %s`+"\n", linkedStructName, convertedType)
-
-	if repeated {
-		convertedType = "[]*" + linkedStructName
-		template = fmt.Sprintf(`type %s %s`+"\n", linkedStructName+"Repeated", convertedType)
-	}
-
-	return template
 }
 
 // MessageDescriptor is a descriptor for a message.

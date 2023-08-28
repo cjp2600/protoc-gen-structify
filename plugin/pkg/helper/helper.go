@@ -39,6 +39,22 @@ func GetFieldOptions(f *descriptorpb.FieldDescriptorProto) *structify.StructifyF
 	return nil
 }
 
+// HasIndex returns the index option for a field.
+func HasIndex(f *descriptorpb.FieldDescriptorProto) bool {
+	if opts := GetFieldOptions(f); opts != nil {
+		return opts.GetIndex()
+	}
+	return false
+}
+
+// HasUnique returns the unique option for a field.
+func HasUnique(f *descriptorpb.FieldDescriptorProto) bool {
+	if opts := GetFieldOptions(f); opts != nil {
+		return opts.GetUnique()
+	}
+	return false
+}
+
 // GetMessageOptions returns the custom options for a message.
 func GetMessageOptions(d *descriptorpb.DescriptorProto) *structify.StructifyMessageOptions {
 	opts := d.GetOptions()
@@ -118,6 +134,10 @@ func UpperCamelCase(name string) string {
 // LowerCamelCase converts a string to a lowerCamelCase string.
 func LowerCamelCase(name string) string {
 	return strcase.LowerCamelCase(name)
+}
+
+func SnakeCase(name string) string {
+	return strings.ToLower(strcase.SnakeCase(name))
 }
 
 // ToLower converts a string to a lower string.

@@ -162,7 +162,7 @@ func (i *initTemplater) Funcs() map[string]interface{} {
 
 		// isRelation returns the field type.
 		"isRelation": func(f *descriptorpb.FieldDescriptorProto) bool {
-			return i.state.Relations.IsExist(f) && !i.state.NestedMessages.IsJSON(f)
+			return i.state.IsRelation(f)
 		},
 
 		// isJSON returns the field type.
