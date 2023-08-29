@@ -279,14 +279,16 @@ const StorageTemplate = `
 type {{ storageName | lowerCamelCase }} struct {
 	db *sql.DB // The database connection.
 	tx *TxManager // The transaction manager.
-{{ range $key, $value := storages }}
-{{ $key }} {{ $value }}{{ end }}
+{{ range $value := storages }}
+{{ $value.Key }} {{ $value.Value }}{{ end }}
 }
 
 // {{ storageName }} is the interface for the {{ storageName }}.
-type {{ storageName }} interface { {{ range $key, $value := storages }}
-	// Get{{ $value }} returns the {{ $value }} store.
-	Get{{ $value }}() {{ $value }}{{ end }}
+type {{ storageName }} interface { 
+	{{- range $value := storages }}
+	// Get{{ $value.Value }} returns the {{ $value.Value }} store.
+	Get{{ $value.Value }}() {{ $value.Value }}
+	{{- end }}
 	// TxManager returns the transaction manager.
 	TxManager() *TxManager
 	// CreateTables creates the tables for all the stores.
@@ -304,8 +306,8 @@ func New{{ storageName }}(db *sql.DB) {{ storageName }} {
 	return &{{ storageName | lowerCamelCase }}{
 		db: db,
 		tx: NewTxManager(db),
-{{ range $key, $value := storages }}
-{{ $key }}: New{{ $value }}(db),{{ end }}
+{{ range $value := storages }}
+{{ $value.Key }}: New{{ $value.Value }}(db),{{ end }}
 	}
 }
 
@@ -314,10 +316,10 @@ func (c *{{ storageName | lowerCamelCase }}) TxManager() *TxManager {
 	return c.tx
 }
 
-{{ range $key, $value := storages }}
-// Get{{ $value }} returns the {{ $value }} store.
-func (c *{{ storageName | lowerCamelCase }}) Get{{ $value }}() {{ $value }} {
-	return c.{{ $key }}
+{{ range $value := storages }}
+// Get{{ $value.Value }} returns the {{ $value.Value }} store.
+func (c *{{ storageName | lowerCamelCase }}) Get{{ $value.Value }}() {{ $value.Value }} {
+	return c.{{ $value.Key }}
 }
 {{ end }}
 
@@ -325,9 +327,9 @@ func (c *{{ storageName | lowerCamelCase }}) Get{{ $value }}() {{ $value }} {
 // This is idempotent and safe to run multiple times.
 func (c *{{ storageName | lowerCamelCase }}) CreateTables(ctx context.Context) error {
 	var err error
-{{ range $key, $value := storages }}
-	// create the {{ $value }} table.
-	err = c.{{ $key }}.CreateTable(ctx)
+{{ range $value := storages }}
+	// create the {{ $value.Value }} table.
+	err = c.{{ $value.Key }}.CreateTable(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create table: %w", err)
 	}
@@ -339,9 +341,9 @@ func (c *{{ storageName | lowerCamelCase }}) CreateTables(ctx context.Context) e
 // This is idempotent and safe to run multiple times.
 func (c *{{ storageName | lowerCamelCase }}) DropTables(ctx context.Context) error {
 	var err error
-{{ range $key, $value := storages }}
-	// drop the {{ $value }} table.
-	err = c.{{ $key }}.DropTable(ctx)
+{{ range $value := storages }}
+	// drop the {{ $value.Value }} table.
+	err = c.{{ $value.Key }}.DropTable(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to drop table: %w", err)
 	}
@@ -353,9 +355,9 @@ func (c *{{ storageName | lowerCamelCase }}) DropTables(ctx context.Context) err
 // This is idempotent and safe to run multiple times.
 func (c *{{ storageName | lowerCamelCase }}) TruncateTables(ctx context.Context) error {
 	var err error
-{{ range $key, $value := storages }}
-	// truncate the {{ $value }} table.
-	err = c.{{ $key }}.TruncateTable(ctx)
+{{ range  $value := storages }}
+	// truncate the {{ $value.Value }} table.
+	err = c.{{ $value.Key }}.TruncateTable(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to truncate table: %w", err)
 	}
@@ -367,9 +369,9 @@ func (c *{{ storageName | lowerCamelCase }}) TruncateTables(ctx context.Context)
 // This is idempotent and safe to run multiple times.
 func (c *{{ storageName | lowerCamelCase }}) UpgradeTables(ctx context.Context) error {
 	var err error
-{{ range $key, $value := storages }}
-	// run the {{ $value }} upgrade.
-	err = c.{{ $key }}.UpgradeTable(ctx)
+{{ range $value := storages }}
+	// run the {{ $value.Value }} upgrade.
+	err = c.{{ $value.Key }}.UpgradeTable(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to upgrade: %w", err)
 	}

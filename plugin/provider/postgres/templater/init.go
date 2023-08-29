@@ -96,6 +96,11 @@ func (i *initTemplater) Imports() importpkg.ImportSet {
 	return is
 }
 
+type KeyValuePair struct {
+	Key   string
+	Value string
+}
+
 // Funcs returns the template functions.
 func (i *initTemplater) Funcs() map[string]interface{} {
 	return template.FuncMap{
@@ -106,10 +111,14 @@ func (i *initTemplater) Funcs() map[string]interface{} {
 		},
 
 		// storageNames returns the storage names.
-		"storages": func() map[string]string {
-			var storages = make(map[string]string)
+		"storages": func() []KeyValuePair {
+			var storages []KeyValuePair
 			for _, m := range i.state.Messages {
-				storages[helperpkg.LowerCamelCase(m.GetName())+StoragePostfix] = helperpkg.UpperCamelCase(m.GetName()) + StoragePostfix
+				// helperpkg.LowerCamelCase(m.GetName())+StoragePostfix
+				key := helperpkg.LowerCamelCase(m.GetName()) + StoragePostfix
+				// helperpkg.UpperCamelCase(m.GetName()) + StoragePostfix
+				value := helperpkg.UpperCamelCase(m.GetName()) + StoragePostfix
+				storages = append(storages, KeyValuePair{Key: key, Value: value})
 			}
 			return storages
 		},
