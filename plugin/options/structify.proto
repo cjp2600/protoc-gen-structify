@@ -37,6 +37,12 @@ message StructifyDBOptions {
 message StructifyMessageOptions {
   string table = 1;
   string comment = 2;
+  repeated UniqueIndex unique_index = 3;
+  repeated string index = 4;
+}
+
+message UniqueIndex {
+  repeated string fields = 2;
 }
 
 // StructifyFieldOptions defines database field options

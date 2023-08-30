@@ -504,6 +504,17 @@ func (t *{{ storageName | lowerCamelCase }}) CreateTable(ctx context.Context) er
 		CREATE UNIQUE INDEX IF NOT EXISTS {{ tableName }}_{{ $field | sourceName }}_unique_idx ON {{ tableName }} USING btree ({{ $field | sourceName }});
 		{{- end}}
 		{{- end}}
+
+		{{- range $index, $fields := getStructureUniqueIndexes }}
+		CREATE UNIQUE INDEX IF NOT EXISTS {{ tableName }}_unique_idx_{{ $fields | sliceToString }} ON {{ tableName }} USING btree (
+        {{- $length := sub (len $fields) 1 }}
+        {{- range $i, $field := $fields }}
+            {{ $field | sourceName }}{{ if lt $i $length }}, {{ end }}
+        {{- end }}
+    	);
+		{{- end }}
+
+
 		{{- range $index, $field := fields }}
 		{{- if ($field | hasIndex) }}
 		CREATE INDEX IF NOT EXISTS {{ tableName }}_{{ $field | sourceName }}_idx ON {{ tableName }} USING btree ({{ $field | sourceName }});

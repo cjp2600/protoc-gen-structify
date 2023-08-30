@@ -82,6 +82,11 @@ message User {
   option (structify.opts) = {
     table: "users"
     comment: "This is a comment of User"
+    unique_index: [
+      {
+        fields: ["name", "email"]
+      }
+    ]
   };
 }
 

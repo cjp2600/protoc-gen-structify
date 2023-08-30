@@ -382,6 +382,40 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			return false
 		},
 
+		"getStructureUniqueIndexes": func() map[int][]*descriptorpb.FieldDescriptorProto {
+			var indexes = make(map[int][]*descriptorpb.FieldDescriptorProto)
+			if opts := helperpkg.GetMessageOptions(t.message); opts != nil {
+				if opts.GetUniqueIndex() != nil {
+					for indexID, uniqueIndex := range opts.GetUniqueIndex() {
+						var fields []*descriptorpb.FieldDescriptorProto
+						for _, fieldName := range uniqueIndex.Fields {
+							for _, field := range t.message.GetField() {
+								if field.GetName() == fieldName {
+									fields = append(fields, field)
+								}
+							}
+						}
+						if len(fields) > 0 {
+							indexes[indexID] = fields
+						}
+					}
+				}
+			}
+			return indexes
+		},
+
+		"sub": func(a, b int) int {
+			return a - b
+		},
+
+		"sliceToString": func(fields []*descriptorpb.FieldDescriptorProto) string {
+			var slice []string
+			for _, f := range fields {
+				slice = append(slice, helperpkg.SnakeCase(f.GetName()))
+			}
+			return strings.Join(slice, "_")
+		},
+
 		"getFieldID": func(fl *descriptorpb.FieldDescriptorProto) string {
 			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(fl))
 			relation, ok := t.state.Relations.Get(relName)
