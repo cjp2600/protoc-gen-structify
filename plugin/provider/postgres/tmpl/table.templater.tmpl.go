@@ -131,6 +131,11 @@ func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, build
 			}
 		}
 
+		// apply sorting
+		for _, option := range builder.sortOptions {
+			query = option.Apply(query)
+		}
+
 	    // apply options
 		for _, o := range builder.options {
 			o(options)

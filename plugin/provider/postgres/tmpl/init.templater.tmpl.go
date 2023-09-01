@@ -81,6 +81,8 @@ type QueryBuilder struct {
 	options       []Option
 	// filterOptions are the filter options.
 	filterOptions []FilterApplier
+	// orderOptions are the order options.
+	sortOptions  []FilterApplier
 	// pagination is the pagination.
 	pagination    *Pagination
 }
@@ -102,6 +104,12 @@ func (b *QueryBuilder) WithFilter(filterOptions ...FilterApplier) *QueryBuilder 
 	return b
 }
 
+// WithSort sets the sort options for the query.
+func (b *QueryBuilder) WithSort(sortOptions ...FilterApplier) *QueryBuilder {
+	b.sortOptions = sortOptions
+	return b
+}
+
 // WithPagination sets the pagination for the query.
 func (b *QueryBuilder) WithPagination(pagination *Pagination) *QueryBuilder {
 	b.pagination = pagination
@@ -111,6 +119,11 @@ func (b *QueryBuilder) WithPagination(pagination *Pagination) *QueryBuilder {
 // Filter is a helper function to create a new query builder with filter options.
 func FilterBuilder(filterOptions ...FilterApplier) *QueryBuilder {
 	return NewQueryBuilder().WithFilter(filterOptions...)
+}
+
+// SortBuilder is a helper function to create a new query builder with sort options.
+func SortBuilder(sortOptions ...FilterApplier) *QueryBuilder {
+	return NewQueryBuilder().WithSort(sortOptions...)
 }
 
 // Options is a helper function to create a new query builder with options.
