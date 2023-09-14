@@ -245,7 +245,7 @@ func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{ID
 		}
 		query = query.Set("{{ $field | sourceName }}", value)
 		{{- else }}
-		query = query.Set("{{ $field | sourceName }}", *updateData.{{ $field | fieldName }})
+		query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }})
 		{{- end}}
 	}
 	{{- end}}
