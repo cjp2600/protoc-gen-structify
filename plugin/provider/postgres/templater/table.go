@@ -74,6 +74,10 @@ func (t *tableTemplater) BuildTemplate() string {
 			Name: "find_with_pagination",
 			Body: tmplpkg.TableFindWithPaginationMethodTemplate,
 		},
+		helperpkg.IncludeTemplate{
+			Name: "lock_method",
+			Body: tmplpkg.TableLockMethodTemplate,
+		},
 	)
 	if err != nil {
 		log.Fatalf("failed to execute template: %v", err)

@@ -15,6 +15,7 @@ const TableTemplate = `
 {{ template "find_one_method" . }}
 {{ template "count_method" . }}
 {{ template "find_with_pagination" . }}
+{{ template "lock_method" . }}
 `
 
 const TableFindWithPaginationMethodTemplate = `
@@ -47,6 +48,39 @@ func (t *{{ storageName | lowerCamelCase }}) FindManyWithPagination(ctx context.
 	}
 
 	return records, paginator, nil
+}
+`
+
+const TableLockMethodTemplate = `
+// Lock locks the {{ structureName }} for the given ID.
+func (t *{{ storageName | lowerCamelCase }}) LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error {
+	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName()).Suffix("FOR UPDATE")
+
+	// apply options from builder
+	for _, builder := range builders {
+		if builder == nil {
+			continue
+		}
+
+		// apply filter options
+		for _, option := range builder.filterOptions {
+			query = option.Apply(query)
+		}
+	}
+
+	// execute query
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
+	var model {{ structureName }}
+	if err := model.ScanRow(row); err != nil {
+		return fmt.Errorf("failed to scan {{ structureName }}: %w", err)
+	}
+
+	return nil
 }
 `
 
@@ -434,6 +468,8 @@ type {{ storageName }} interface {
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*{{structureName}}, error)	
     // Count counts {{ structureName }} based on the provided options.
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
+	// Lock locks the {{ structureName }} for filtering rows.
+	LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error
 	// FindManyWithPagination finds multiple {{ structureName }} with pagination support.
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*{{structureName}}, *Paginator, error)
 	
