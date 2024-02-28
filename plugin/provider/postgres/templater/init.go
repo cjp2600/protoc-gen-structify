@@ -31,6 +31,10 @@ func NewInitTemplater(state *statepkg.State) statepkg.Templater {
 	}
 }
 
+func (i *initTemplater) TemplateName() string {
+	return ""
+}
+
 // BuildTemplate builds the template.
 func (i *initTemplater) BuildTemplate() string {
 	tmpl, err := helperpkg.ExecuteTemplate(
@@ -91,6 +95,8 @@ func (i *initTemplater) Imports() importpkg.ImportSet {
 		importpkg.ImportSQLDriver,
 		importpkg.ImportLibPQWOAlias,
 		importpkg.ImportStrings,
+		importpkg.ImportContext,
+		importpkg.ImportSquirrel,
 	)
 
 	return is

@@ -59,8 +59,8 @@ message User {
 
   string id = 1 [(structify.field) = {primary_key: true, uuid: true, default: "uuid_generate_v4()"}];
   string name = 2 [(structify.field) = {index: true}];
-  int32 age = 3;
-  string email = 4 [(structify.field) = {unique: true}];
+  int32 age = 3 [(structify.field) = {in_filter:true}];
+  string email = 4 [(structify.field) = {unique: true, in_filter: true}];
   optional string last_name = 5;
 
   Device device = 15  [(structify.field) = {relation: { field: "id", reference: "user_id", foreign: { cascade: true } } }];

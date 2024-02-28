@@ -34,9 +34,8 @@ func main() {
 	//
 	//  FindMany
 	//
-
 	builder := db.FilterBuilder(
-		db.UserAgeGreaterThan(20),
+		db.UserAgeGT(20),
 	) // where age > 20
 
 	users, err := userStorage.FindMany(ctx, builder)
@@ -56,7 +55,7 @@ func main() {
 	}
 
 	for _, user := range users {
-		fmt.Println(fmt.Sprintf("Name: %s, Age: %d", user.Name, user.Age))
+		fmt.Println(fmt.Sprintf("Age: %d", user.Age))
 	}
 
 	fmt.Println(fmt.Sprintf("Count: %+v", count))

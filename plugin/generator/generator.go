@@ -4,89 +4,124 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/golang/protobuf/proto"
+
 	"github.com/cjp2600/protoc-gen-structify/plugin/provider"
 	statepkg "github.com/cjp2600/protoc-gen-structify/plugin/state"
+	plugingo "github.com/golang/protobuf/protoc-gen-go/plugin"
 )
 
 // ContentGenerator is a type for generating content.
 type ContentGenerator interface {
-	Content() (string, error)
+	Files() ([]*plugingo.CodeGeneratorResponse_File, error)
 }
 
 // contentGenerator is the content generator.
 type contentGenerator struct {
-	builder strings.Builder
-	state   *statepkg.State
+	state *statepkg.State
 
 	// TemplateBuilder is the TemplateBuilder for the provider.
 	templateBuilder provider.TemplateBuilder
+	request         *Request
+}
+
+type Request struct {
+	BaseFileName string
+	FilePath     func(sourceFilePath string) string
 }
 
 // NewContentGenerator returns a new ContentGenerator.
 func NewContentGenerator(
 	state *statepkg.State,
 	templateBuilder provider.TemplateBuilder,
+	request *Request,
 ) ContentGenerator {
 	return &contentGenerator{
-		builder:         strings.Builder{},
 		state:           state,
 		templateBuilder: templateBuilder,
+		request:         request,
 	}
 }
 
-// Content returns the content.
-func (c *contentGenerator) Content() (string, error) {
+func (c *contentGenerator) Files() ([]*plugingo.CodeGeneratorResponse_File, error) {
+	var result []*plugingo.CodeGeneratorResponse_File
+	var baseBuilder strings.Builder
+	var baseFileName = c.request.FilePath(c.request.BaseFileName)
+
+	// get general basePath
 	initStatementTemplater, err := c.templateBuilder.GetInitStatement(c.state)
 	if err != nil {
-		return "", fmt.Errorf("failed to get init statement: %w", err)
-	}
-
-	entities, err := c.templateBuilder.GetEntities(c.state)
-	if err != nil {
-		return "", fmt.Errorf("failed to get entities: %w", err)
+		return nil, fmt.Errorf("failed to get init statement: %w", err)
 	}
 
 	finalizeStatementTemplater, err := c.templateBuilder.GetFinalizeStatement(c.state)
 	if err != nil {
-		return "", fmt.Errorf("failed to get finalize statement: %w", err)
+		return nil, fmt.Errorf("failed to get finalize statement: %w", err)
 	}
 
 	{
-		{
-			c.builder = c.buildMainComment()
-			c.builder = c.buildPackage()
-			c.builder = c.buildImports()
-		}
-
-		c.builder = c.buildTemplater(initStatementTemplater)
-		c.builder = c.buildTemplater(entities...)
-		c.builder = c.buildTemplater(finalizeStatementTemplater)
+		baseBuilder.WriteString(c.buildMainComment())
+		baseBuilder.WriteString(c.buildPackage())
+		baseBuilder.WriteString(c.buildImports())
 	}
 
-	// return the content
-	return c.builder.String(), nil
+	baseBuilder.WriteString(c.buildTemplater(initStatementTemplater))
+	baseBuilder.WriteString(c.buildTemplater(finalizeStatementTemplater))
+
+	// append base file
+	result = append(result, &plugingo.CodeGeneratorResponse_File{
+		Name:    proto.String(baseFileName),
+		Content: proto.String(baseBuilder.String()),
+	})
+
+	entities, err := c.templateBuilder.GetEntities(c.state)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get entities: %w", err)
+	}
+
+	for _, t := range entities {
+		if t == nil {
+			continue
+		}
+
+		var entityBuilder strings.Builder
+		entityBuilder.WriteString(c.buildPackage())
+		entityBuilder.WriteString(t.Imports().String())
+
+		block := c.buildBlock(t.BuildTemplate())
+		entityBuilder.WriteString(block.String())
+
+		entityFileName := c.request.FilePath(t.TemplateName())
+
+		result = append(result, &plugingo.CodeGeneratorResponse_File{
+			Name:    proto.String(entityFileName),
+			Content: proto.String(entityBuilder.String()),
+		})
+	}
+
+	return result, nil
 }
 
 // buildTemplater builds the templater.
-func (c *contentGenerator) buildTemplater(temps ...statepkg.Templater) strings.Builder {
+func (c *contentGenerator) buildTemplater(temps ...statepkg.Templater) string {
+	var builder strings.Builder
 	for _, t := range temps {
 		if t == nil {
 			continue
 		}
 
-		c.builder = c.buildBlock(t.BuildTemplate())
+		builder = c.buildBlock(t.BuildTemplate())
 	}
 
-	return c.builder
+	return builder.String()
 }
 
 // buildPackage builds the package name.
 // Example:
 //
 //	package example
-func (c *contentGenerator) buildPackage() strings.Builder {
-	c.builder.WriteString("package " + c.state.PackageName + "\n\n")
-	return c.builder
+func (c *contentGenerator) buildPackage() string {
+	return "package " + c.state.PackageName + "\n\n"
 }
 
 // buildImports builds the imports.
@@ -96,9 +131,9 @@ func (c *contentGenerator) buildPackage() strings.Builder {
 //		"fmt"
 //		"strings"
 //	)
-func (c *contentGenerator) buildImports() strings.Builder {
-	c.buildBlock(c.state.Imports.String())
-	return c.builder
+func (c *contentGenerator) buildImports() string {
+	block := c.buildBlock(c.state.Imports.String())
+	return block.String()
 }
 
 // buildMainComment builds the main comment.
@@ -108,24 +143,28 @@ func (c *contentGenerator) buildImports() strings.Builder {
 //	// source: example.proto
 //	// provider: mysql
 //	package example
-func (c *contentGenerator) buildMainComment() strings.Builder {
-	c.builder.WriteString("// Code generated by protoc-gen-structify. DO NOT EDIT.\n")
-	c.builder.WriteString("// source: ")
-	c.builder.WriteString(c.state.FileToGenerate + "\n")
-	c.builder.WriteString("// provider: ")
-	c.builder.WriteString(c.state.Provider + "\n")
-	c.builder.WriteString("// protoc-gen-structify: ")
-	c.builder.WriteString(c.state.Version + "\n")
-	c.builder.WriteString("// protoc: ")
-	c.builder.WriteString(c.state.ProtocVersion + "\n")
+func (c *contentGenerator) buildMainComment() string {
+	var builder strings.Builder
 
-	return c.builder
+	builder.WriteString("// Code generated by protoc-gen-structify. DO NOT EDIT.\n")
+	builder.WriteString("// source: ")
+	builder.WriteString(c.state.FileToGenerate + "\n")
+	builder.WriteString("// provider: ")
+	builder.WriteString(c.state.Provider + "\n")
+	builder.WriteString("// protoc-gen-structify: ")
+	builder.WriteString(c.state.Version + "\n")
+	builder.WriteString("// protoc: ")
+	builder.WriteString(c.state.ProtocVersion + "\n")
+
+	return builder.String()
 }
 
 // buildConditions builds the conditions.
 func (c *contentGenerator) buildBlock(block string) strings.Builder {
-	c.builder.WriteString(block)
-	c.builder.WriteString("\n")
+	var builder strings.Builder
 
-	return c.builder
+	builder.WriteString(block)
+	builder.WriteString("\n")
+
+	return builder
 }

@@ -1,7 +1,7 @@
 package tmpl
 
 const TableConditionsTemplate = `
-type Tabler interface {
+type Table interface {
 	TableName() string
 }
 
@@ -15,12 +15,20 @@ const (
 
 type JoinCondition struct {
 	Type  JoinType
-	Table Tabler
+	Table Table
 	On    FilterApplier
 }
 
-func Join(joinType JoinType, table Tabler, on FilterApplier) FilterApplier {
+func Join(joinType JoinType, table Table, on FilterApplier) FilterApplier {
 	return JoinCondition{Type: joinType, Table: table, On: on}
+}
+
+func toInterface[T any](s []T) []interface{} {
+	result := make([]interface{}, len(s))
+	for i, v := range s {
+		result[i] = v
+	}
+	return result
 }
 
 func (c JoinCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
@@ -122,19 +130,6 @@ func Eq(field string, value interface{}) FilterApplier {
 	return EqualsCondition{Field: field, Value: value}
 }
 
-{{ range $key, $fieldMess := messages }}
-  {{ range $field := $fieldMess.GetField }}
-   {{- if not ($field | isRelation) }}
-   {{- if not ($field | isJSON) }}
-	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Eq returns a condition that checks if the field equals the value.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Eq(value {{ $field | fieldType }}) FilterApplier {
-      return EqualsCondition{Field: "{{ $field.GetName }}", Value: value}
-    }
-  {{ end }}
-  {{ end }}
-  {{ end }}
-{{ end }}
-
 // NotEqualsCondition not equals condition.
 type NotEqualsCondition struct {
 	Field string
@@ -155,19 +150,6 @@ func (c NotEqualsCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder
 func NotEq(field string, value interface{}) FilterApplier {
 	return NotEqualsCondition{Field: field, Value: value}
 }
-
-{{ range $key, $fieldMess := messages }}
-  {{ range $field := $fieldMess.GetField }}
-   {{- if not ($field | isRelation) }}
-   {{- if not ($field | isJSON) }}
-	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotEq returns a condition that checks if the field equals the value.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotEq(value {{ $field | fieldType }}) FilterApplier {
-      return NotEqualsCondition{Field: "{{ $field.GetName }}", Value: value}
-    }
-  {{ end }}
-  {{ end }}
-  {{ end }}
-{{ end }}
 
 // GreaterThanCondition greaterThanCondition than condition.
 type GreaterThanCondition struct {
@@ -190,19 +172,6 @@ func GreaterThan(field string, value interface{}) FilterApplier {
 	return GreaterThanCondition{Field: field, Value: value}
 }
 
-{{ range $key, $fieldMess := messages }}
-  {{ range $field := $fieldMess.GetField }}
-   {{- if not ($field | isRelation) }}
-   {{- if not ($field | isJSON) }}
-	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}GreaterThan greaterThanCondition than condition.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}GreaterThan(value {{ $field | fieldType }}) FilterApplier {
-      return GreaterThanCondition{Field: "{{ $field.GetName }}", Value: value}
-    }
-  {{ end }}
-  {{ end }}
-  {{ end }}
-{{ end }}
-
 // LessThanCondition less than condition.
 type LessThanCondition struct {
 	Field string
@@ -223,19 +192,6 @@ func (c LessThanCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder 
 func LessThan(field string, value interface{}) FilterApplier {
 	return LessThanCondition{Field: field, Value: value}
 }
-
-{{ range $key, $fieldMess := messages }}
-  {{ range $field := $fieldMess.GetField }}
-   {{- if not ($field | isRelation) }}
-   {{- if not ($field | isJSON) }}
-	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}LessThan less than condition.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}LessThan(value {{ $field | fieldType }}) FilterApplier {
-      return LessThanCondition{Field: "{{ $field.GetName }}", Value: value}
-    }
-  {{ end }}
-  {{ end }}
-  {{ end }}
-{{ end }}
 
 // LessThanOrEqualCondition less than or equal condition.
 type GreaterThanOrEqualCondition struct {
@@ -258,19 +214,6 @@ func GreaterThanOrEq(field string, value interface{}) FilterApplier {
 	return GreaterThanOrEqualCondition{Field: field, Value: value}
 }
 
-{{ range $key, $fieldMess := messages }}
-  {{ range $field := $fieldMess.GetField }}
-   {{- if not ($field | isRelation) }}
-   {{- if not ($field | isJSON) }}
-	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}GreaterThanOrEq less than condition.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}GreaterThanOrEq(value {{ $field | fieldType }}) FilterApplier {
-      return GreaterThanOrEqualCondition{Field: "{{ $field.GetName }}", Value: value}
-    }
-  {{ end }}
-  {{ end }}
-  {{ end }}
-{{ end }}
-
 // LessThanOrEqualCondition less than or equal condition.
 type LessThanOrEqualCondition struct {
 	Field string
@@ -290,19 +233,6 @@ func (c LessThanOrEqualCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteB
 func LessThanOrEq(field string, value interface{}) FilterApplier {
 	return LessThanOrEqualCondition{Field: field, Value: value}
 }
-
-{{ range $key, $fieldMess := messages }}
-  {{ range $field := $fieldMess.GetField }}
-   {{- if not ($field | isRelation) }}
-   {{- if not ($field | isJSON) }}
-	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}LessThanOrEq less than condition.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}LessThanOrEq(value {{ $field | fieldType }}) FilterApplier {
-      return LessThanOrEqualCondition{Field: "{{ $field.GetName }}", Value: value}
-    }
-  {{ end }}
-  {{ end }}
-  {{ end }}
-{{ end }}
 
 // LikeCondition like condition.
 type LikeCondition struct {
@@ -325,19 +255,6 @@ func Like(field string, value interface{}) FilterApplier {
 	return LikeCondition{Field: field, Value: value}
 }
 
-{{ range $key, $fieldMess := messages }}
-  {{ range $field := $fieldMess.GetField }}
-   {{- if not ($field | isRelation) }}
-   {{- if not ($field | isJSON) }}
-	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Like less than condition.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Like(value {{ $field | fieldType }}) FilterApplier {
-      return LikeCondition{Field: "{{ $field.GetName }}", Value: value}
-    }
-  {{ end }}
-  {{ end }}
-  {{ end }}
-{{ end }}
-
 // NotLikeCondition not like condition.
 type NotLikeCondition struct {
 	Field string
@@ -359,19 +276,6 @@ func NotLike(field string, value interface{}) FilterApplier {
 	return NotLikeCondition{Field: field, Value: value}
 }
 
-{{ range $key, $fieldMess := messages }}
-  {{ range $field := $fieldMess.GetField }}
-   {{- if not ($field | isRelation) }}
-   {{- if not ($field | isJSON) }}
-	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotLike less than condition.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotLike(value {{ $field | fieldType }}) FilterApplier {
-      return NotLikeCondition{Field: "{{ $field.GetName }}", Value: value}
-    }
-  {{ end }}
-  {{ end }}
-  {{ end }}
-{{ end }}
-
 // IsNullCondition represents the IS NULL condition.
 type IsNullCondition struct {
 	Field string
@@ -392,19 +296,6 @@ func IsNull(field string) FilterApplier {
 	return IsNullCondition{Field: field}
 }
 
-{{ range $key, $fieldMess := messages }}
-  {{ range $field := $fieldMess.GetField }}
-   {{- if not ($field | isRelation) }}
-   {{- if not ($field | isJSON) }}
-	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}IsNull less than condition.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}IsNull() FilterApplier {
-      return IsNullCondition{Field: "{{ $field.GetName }}"}
-    }
-  {{ end }}
-  {{ end }}
-  {{ end }}
-{{ end }}
-
 // IsNotNullCondition represents the IS NOT NULL condition.
 type IsNotNullCondition struct {
 	Field string
@@ -424,19 +315,6 @@ func (c IsNotNullCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder
 func IsNotNull(field string) FilterApplier {
 	return IsNotNullCondition{Field: field}
 }
-
-{{ range $key, $fieldMess := messages }}
-  {{ range $field := $fieldMess.GetField }}
-   {{- if not ($field | isRelation) }}
-   {{- if not ($field | isJSON) }}
-	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}IsNotNull less than condition.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}IsNotNull() FilterApplier {
-      return IsNotNullCondition{Field: "{{ $field.GetName }}"}
-    }
-  {{ end }}
-  {{ end }}
-  {{ end }}
-{{ end }}
 
 // InCondition represents the IN condition.
 type InCondition struct {
@@ -459,19 +337,6 @@ func In(field string, values ...interface{}) FilterApplier {
 	return InCondition{Field: field, Values: values}
 }
 
-{{ range $key, $fieldMess := messages }}
-  {{ range $field := $fieldMess.GetField }}
-   {{- if not ($field | isRelation) }}
-   {{- if not ($field | isJSON) }}
-	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}In less than condition.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}In(values ...interface{}) FilterApplier {
-      return InCondition{Field: "{{ $field.GetName }}", Values: values}
-    }
-  {{ end }}
-  {{ end }}
-  {{ end }}
-{{ end }}
-
 // NotInCondition represents the NOT IN condition.
 type NotInCondition struct {
 	Field  string
@@ -492,19 +357,6 @@ func (c NotInCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 func NotIn(field string, values ...interface{}) FilterApplier {
 	return NotInCondition{Field: field, Values: values}
 }
-
-{{ range $key, $fieldMess := messages }}
-  {{ range $field := $fieldMess.GetField }}
-   {{- if not ($field | isRelation) }}
-   {{- if not ($field | isJSON) }}
-	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotIn less than condition.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotIn(values ...interface{}) FilterApplier {
-      return NotInCondition{Field: "{{ $field.GetName }}", Values: values}
-    }
-  {{ end }}
-  {{ end }}
-  {{ end }}
-{{ end }}
 
 // OrderCondition represents the ORDER BY condition.
 type OrderCondition struct {
@@ -532,16 +384,4 @@ func (c OrderCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query
 }
 
-{{ range $key, $fieldMess := messages }}
-  {{ range $field := $fieldMess.GetField }}
-   {{- if not ($field | isRelation) }}
-   {{- if not ($field | isJSON) }}
-	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotIn less than condition.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}OrderBy(asc bool) FilterApplier {
-      return OrderBy("{{ $field.GetName }}", asc)
-    }
-  {{ end }}
-  {{ end }}
-  {{ end }}
-{{ end }}
 `

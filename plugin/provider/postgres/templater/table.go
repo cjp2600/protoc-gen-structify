@@ -75,6 +75,10 @@ func (t *tableTemplater) BuildTemplate() string {
 			Body: tmplpkg.TableFindWithPaginationMethodTemplate,
 		},
 		helperpkg.IncludeTemplate{
+			Name: "table_conditions",
+			Body: tmplpkg.TableConditionFilters,
+		},
+		helperpkg.IncludeTemplate{
 			Name: "lock_method",
 			Body: tmplpkg.TableLockMethodTemplate,
 		},
@@ -87,18 +91,33 @@ func (t *tableTemplater) BuildTemplate() string {
 	return tmpl
 }
 
+func (t *tableTemplater) TemplateName() string {
+	if opts := helperpkg.GetMessageOptions(t.message); opts != nil {
+		if opts.Table != "" {
+			return opts.Table
+		}
+	}
+	return helperpkg.Plural(t.message.GetName())
+}
+
 // Imports returns the imports.
 func (t *tableTemplater) Imports() importpkg.ImportSet {
 	is := importpkg.ImportSet{}
 	is.Enable(
+		importpkg.ImportContext,
 		importpkg.ImportDb,
 		importpkg.ImportLibPQ,
-		importpkg.ImportStrconv,
 		importpkg.ImportFMT,
 		importpkg.ImportErrors,
 		importpkg.ImportSquirrel,
 		importpkg.ImportMath,
 	)
+
+	tmp := t.BuildTemplate()
+	switch {
+	case strings.Contains(tmp, "time.Time"):
+		is.Add(importpkg.ImportTime)
+	}
 
 	return is
 }
@@ -148,6 +167,29 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			}
 
 			return ""
+		},
+
+		// messages returns the messages.
+		"messages": func() statepkg.Messages {
+			newMess := t.message
+			var fields []*descriptorpb.FieldDescriptorProto
+			for _, f := range newMess.GetField() {
+				opts := helperpkg.GetFieldOptions(f)
+				if opts != nil {
+					if opts.GetPrimaryKey() {
+						fields = append(fields, f)
+					} else if opts.GetInFilter() {
+						fields = append(fields, f)
+					}
+				}
+			}
+			newMess.Field = fields
+			return statepkg.Messages{newMess}
+		},
+
+		// isJSON returns the field type.
+		"isJSON": func(f *descriptorpb.FieldDescriptorProto) bool {
+			return t.state.NestedMessages.IsJSON(f)
 		},
 
 		// isLastField returns true if the field is the last field.

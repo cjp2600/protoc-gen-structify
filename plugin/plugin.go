@@ -88,16 +88,16 @@ func (p *Plugin) Run() {
 	// 	- messages block
 	// 	- conditions block
 	//
-	generator := generatorpkg.NewContentGenerator(p.state, templBuilder)
-	content, err := generator.Content()
+	generator := generatorpkg.NewContentGenerator(p.state, templBuilder, &generatorpkg.Request{
+		BaseFileName: p.state.FileName,
+		FilePath:     p.fileName,
+	})
+	files, err := generator.Files()
 	if err != nil {
 		log.Fatalf("Failed to generate content: %v", err)
 	}
 
-	p.res.File = append(p.res.File, &plugingo.CodeGeneratorResponse_File{
-		Name:    proto.String(p.getGeneratedFilePath(p.req.GetFileToGenerate()[0])),
-		Content: proto.String(content),
-	})
+	p.res.File = append(p.res.File, files...)
 
 	// set supported features
 	p.res.SupportedFeatures = proto.Uint64(uint64(plugingo.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL))
@@ -150,18 +150,16 @@ func (p *Plugin) parsePathType() {
 	}
 }
 
-// getGeneratedFilePath gets the generated file path based on the source file path.
-func (p *Plugin) getGeneratedFilePath(sourceFilePath string) string {
-	generatedBaseName := p.state.FileName + GeneratedFilePostfix
+// fileName create file name ...
+func (p *Plugin) fileName(name string) string {
+	generatedBaseName := name + GeneratedFilePostfix
 
 	if p.pathType == PathTypeSourceRelative {
 		// The generated file will have the same base as the source file, and it will be located in the same directory.
-		fileDir := path.Dir(sourceFilePath)
+		fileDir := path.Dir(p.req.GetFileToGenerate()[0])
 		return path.Join(fileDir, generatedBaseName)
 	}
 
-	// If the path type is not source-relative, the generated file will have the same base as the source file,
-	// but it will be located in the current directory.
 	return generatedBaseName
 }
 

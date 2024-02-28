@@ -3,6 +3,7 @@ package tmpl
 const TableTemplate = `
 {{ template "storage" . }}
 {{ template "structure" . }}
+{{ template "table_conditions" . }}
 {{ template "create_method" . }}
 {{ template "update_method" . }}
 {{- if (hasPrimaryKey) }}
@@ -16,6 +17,190 @@ const TableTemplate = `
 {{ template "count_method" . }}
 {{ template "find_with_pagination" . }}
 {{ template "lock_method" . }}
+`
+
+const TableConditionFilters = `
+{{ range $key, $fieldMess := messages }}
+	{{- if len $fieldMess.GetField }}
+		// {{ $fieldMess.GetName | camelCase }}Filters is a struct that holds filters for {{ $fieldMess.GetName }}.
+		type {{structureName}}Filters struct {
+			{{ range $field := $fieldMess.GetField }}
+			{{- if not ($field | isRelation) }}
+			{{ $field | fieldName }} *{{ $field | fieldType }}
+			{{- end }}
+			{{- end }}
+		}
+	{{- end }}
+{{ end }}
+
+{{ range $key, $fieldMess := messages }}
+  {{ range $field := $fieldMess.GetField }}
+   {{- if not ($field | isRelation) }}
+   {{- if not ($field | isJSON) }}
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Eq returns a condition that checks if the field equals the value.
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Eq(value {{ $field | fieldType }}) FilterApplier {
+      return EqualsCondition{Field: "{{ $field.GetName }}", Value: value}
+    }
+  {{ end }}
+  {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ range $key, $fieldMess := messages }}
+  {{ range $field := $fieldMess.GetField }}
+   {{- if not ($field | isRelation) }}
+   {{- if not ($field | isJSON) }}
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotEq returns a condition that checks if the field equals the value.
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotEq(value {{ $field | fieldType }}) FilterApplier {
+      return NotEqualsCondition{Field: "{{ $field.GetName }}", Value: value}
+    }
+  {{ end }}
+  {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ range $key, $fieldMess := messages }}
+  {{ range $field := $fieldMess.GetField }}
+   {{- if not ($field | isRelation) }}
+   {{- if not ($field | isJSON) }}
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}GT greaterThanCondition than condition.
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}GT(value {{ $field | fieldType }}) FilterApplier {
+      return GreaterThanCondition{Field: "{{ $field.GetName }}", Value: value}
+    }
+  {{ end }}
+  {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ range $key, $fieldMess := messages }}
+  {{ range $field := $fieldMess.GetField }}
+   {{- if not ($field | isRelation) }}
+   {{- if not ($field | isJSON) }}
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}LT less than condition.
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}LT(value {{ $field | fieldType }}) FilterApplier {
+      return LessThanCondition{Field: "{{ $field.GetName }}", Value: value}
+    }
+  {{ end }}
+  {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ range $key, $fieldMess := messages }}
+  {{ range $field := $fieldMess.GetField }}
+   {{- if not ($field | isRelation) }}
+   {{- if not ($field | isJSON) }}
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}GTE greater than or equal condition.
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}GTE(value {{ $field | fieldType }}) FilterApplier {
+      return GreaterThanOrEqualCondition{Field: "{{ $field.GetName }}", Value: value}
+    }
+  {{ end }}
+  {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ range $key, $fieldMess := messages }}
+  {{ range $field := $fieldMess.GetField }}
+   {{- if not ($field | isRelation) }}
+   {{- if not ($field | isJSON) }}
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}LTE less than or equal condition.
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}LTE(value {{ $field | fieldType }}) FilterApplier {
+      return LessThanOrEqualCondition{Field: "{{ $field.GetName }}", Value: value}
+    }
+  {{ end }}
+  {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ range $key, $fieldMess := messages }}
+  {{ range $field := $fieldMess.GetField }}
+   {{- if not ($field | isRelation) }}
+   {{- if not ($field | isJSON) }}
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Like like condition %
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Like(value {{ $field | fieldType }}) FilterApplier {
+      return LikeCondition{Field: "{{ $field.GetName }}", Value: value}
+    }
+  {{ end }}
+  {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ range $key, $fieldMess := messages }}
+  {{ range $field := $fieldMess.GetField }}
+   {{- if not ($field | isRelation) }}
+   {{- if not ($field | isJSON) }}
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotLike not like condition
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotLike(value {{ $field | fieldType }}) FilterApplier {
+      return NotLikeCondition{Field: "{{ $field.GetName }}", Value: value}
+    }
+  {{ end }}
+  {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ range $key, $fieldMess := messages }}
+  {{ range $field := $fieldMess.GetField }}
+   {{- if not ($field | isRelation) }}
+   {{- if not ($field | isJSON) }}
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}IsNull is null condition 
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}IsNull() FilterApplier {
+      return IsNullCondition{Field: "{{ $field.GetName }}"}
+    }
+  {{ end }}
+  {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ range $key, $fieldMess := messages }}
+  {{ range $field := $fieldMess.GetField }}
+   {{- if not ($field | isRelation) }}
+   {{- if not ($field | isJSON) }}
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}IsNotNull is not null condition
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}IsNotNull() FilterApplier {
+      return IsNotNullCondition{Field: "{{ $field.GetName }}"}
+    }
+  {{ end }}
+  {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ range $key, $fieldMess := messages }}
+  {{ range $field := $fieldMess.GetField }}
+   {{- if not ($field | isRelation) }}
+   {{- if not ($field | isJSON) }}
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}In condition
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}In(values ...interface{}) FilterApplier {
+      return InCondition{Field: "{{ $field.GetName }}", Values: values}
+    }
+  {{ end }}
+  {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ range $key, $fieldMess := messages }}
+  {{ range $field := $fieldMess.GetField }}
+   {{- if not ($field | isRelation) }}
+   {{- if not ($field | isJSON) }}
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotIn not in condition
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotIn(values ...interface{}) FilterApplier {
+      return NotInCondition{Field: "{{ $field.GetName }}", Values: values}
+    }
+  {{ end }}
+  {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ range $key, $fieldMess := messages }}
+  {{ range $field := $fieldMess.GetField }}
+   {{- if not ($field | isRelation) }}
+   {{- if not ($field | isJSON) }}
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}OrderBy sorts the result in ascending order.
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}OrderBy(asc bool) FilterApplier {
+      return OrderBy("{{ $field.GetName }}", asc)
+    }
+  {{ end }}
+  {{ end }}
+  {{ end }}
+{{ end }}
 `
 
 const TableFindWithPaginationMethodTemplate = `
@@ -52,7 +237,7 @@ func (t *{{ storageName | lowerCamelCase }}) FindManyWithPagination(ctx context.
 `
 
 const TableLockMethodTemplate = `
-// Lock locks the {{ structureName }} for the given ID.
+// LockForUpdate lock locks the {{ structureName }} for the given ID.
 func (t *{{ storageName | lowerCamelCase }}) LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error {
 	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName()).Suffix("FOR UPDATE")
 
@@ -119,7 +304,7 @@ func (t *{{ storageName | lowerCamelCase }}) Count(ctx context.Context, builders
 `
 
 const TableFindOneMethodTemplate = `
-// findOne finds a single {{ structureName }} based on the provided options.
+// FindOne finds a single {{ structureName }} based on the provided options.
 func (t *{{ storageName | lowerCamelCase }}) FindOne(ctx context.Context, builders ...*QueryBuilder) (*{{structureName}}, error) {
 	// Use findMany but limit the results to 1
 	builders = append(builders, LimitBuilder(1))
@@ -137,7 +322,7 @@ func (t *{{ storageName | lowerCamelCase }}) FindOne(ctx context.Context, builde
 `
 
 const TableFindManyMethodTemplate = `
-// findMany finds multiple {{ structureName }} based on the provided options.
+// FindMany finds multiple {{ structureName }} based on the provided options.
 func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, builders ...*QueryBuilder) ([]*{{structureName}}, error) {
 	// build query
 	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName())
@@ -221,7 +406,7 @@ func (t *{{ storageName | lowerCamelCase }}) FindBy{{ getPrimaryKey.GetName | ca
 `
 
 const TableDeleteMethodTemplate = `
-// Delete removes an existing {{ structureName }} by its ID.
+// DeleteBy{{ getPrimaryKey.GetName | camelCase }} - deletes a {{ structureName }} by its {{ getPrimaryKey.GetName }}.
 func (t *{{ storageName | lowerCamelCase }}) DeleteBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, {{getPrimaryKey.GetName}} {{IDType}}, opts ...Option) error {
 	// set default options
 	options := &Options{}
@@ -320,7 +505,7 @@ func (t *{{ structureName }}) ScanRow(r *sql.Row) error {
 	return r.Scan({{ range $field := fields }} {{if not ($field | isRelation) }} &t.{{ $field | fieldName }}, {{ end }}{{ end }})
 }
 
-// ScanRow scans a single row into the {{ structureName }}.
+// ScanRows scans a single row into the {{ structureName }}.
 func (t *{{ structureName }}) ScanRows(r *sql.Rows) error {
 	return r.Scan(
 		{{- range $index, $field := fields }}
@@ -438,54 +623,34 @@ type {{ storageName | lowerCamelCase }} struct {
 }
 
 type {{ storageName }} interface {
-	// CreateTable creates the table.
 	CreateTable(ctx context.Context) error
-	// DropTable drops the table.
 	DropTable(ctx context.Context) error
-	// TruncateTable truncates the table.
 	TruncateTable(ctx context.Context) error
-	// UpgradeTable upgrades the table.
 	UpgradeTable(ctx context.Context) error
-	// Create creates a new {{ structureName }}.
 	{{- if (hasID) }}
 	Create(ctx context.Context, model *{{structureName}}, opts ...Option) (*{{IDType}}, error)
 	{{- else }} 
 	Create(ctx context.Context, model *{{structureName}}, opts ...Option) error
 	{{- end }}
-	// Update updates an existing {{ structureName }}.
 	Update(ctx context.Context, id {{IDType}}, updateData *{{structureName}}Update) error
 	{{- if (hasPrimaryKey) }}
-	// Delete removes an existing {{ structureName }} by its ID.
 	DeleteBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, {{getPrimaryKey.GetName}} {{IDType}}, opts ...Option) error
 	{{- end }}
 	{{- if (hasPrimaryKey) }}
-	// FindBy{{ getPrimaryKey.GetName | camelCase }} retrieves a {{ structureName }} by its {{ getPrimaryKey.GetName }}.
 	FindBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}, opts ...Option) (*{{ structureName }}, error)
 	{{- end }}
-	// FindMany finds multiple {{ structureName }} based on the provided options.
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*{{structureName}}, error)
-	// FindOne finds a single {{ structureName }} based on the provided options.
-	FindOne(ctx context.Context, builders ...*QueryBuilder) (*{{structureName}}, error)	
-    // Count counts {{ structureName }} based on the provided options.
+	FindOne(ctx context.Context, builders ...*QueryBuilder) (*{{structureName}}, error)
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
-	// Lock locks the {{ structureName }} for filtering rows.
 	LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error
-	// FindManyWithPagination finds multiple {{ structureName }} with pagination support.
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*{{structureName}}, *Paginator, error)
-	
-	//
-	// Lazy load relations methods 
-	//
-
 	{{- range $index, $field := fields }}
 	{{- if and ($field | isRelation) }}
-	// Load{{ $field | pluralFieldName }} loads the {{ $field | pluralFieldName }} relation.
 	Load{{ $field | pluralFieldName }} (ctx context.Context, model *{{structureName}}, builders ...*QueryBuilder) error
 	{{- end }}
 	{{- end }}
 	{{- range $index, $field := fields }}
 	{{- if and ($field | isRelation) }}
-	// LoadBatch{{ $field | pluralFieldName }} loads the {{ $field | pluralFieldName }} relation.
 	LoadBatch{{ $field | pluralFieldName }} (ctx context.Context, items []*{{structureName}}, builders ...*QueryBuilder) error
 	{{- end }}
 	{{- end }}

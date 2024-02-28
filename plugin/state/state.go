@@ -789,6 +789,7 @@ type MessageDescriptor struct {
 
 // Templater is an interface for generating templates.
 type Templater interface {
+	TemplateName() string
 	BuildTemplate() string
 	Imports() importpkg.ImportSet
 }

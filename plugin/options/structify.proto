@@ -68,6 +68,8 @@ message StructifyFieldOptions {
   Relation relation = 9;
   // json defines the field as json
   bool json = 10;
+  //
+  bool in_filter = 11;
 }
 
 // Relation defines the relation between two tables
