@@ -418,8 +418,11 @@ func (r Relations) Get(name string) (*Relation, bool) {
 }
 
 func (r Relations) Find(name string) (*Relation, bool) {
-	for k, v := range r {
-		if strings.EqualFold(k.String(), name) {
+	for _, v := range r {
+		if strings.EqualFold(v.RelationDescriptor.GetName(), name) {
+			return v, true
+		}
+		if strings.EqualFold(v.ParentDescriptor.GetName(), name) {
 			return v, true
 		}
 	}
@@ -444,6 +447,19 @@ func (r Relations) IsExist(f *descriptorpb.FieldDescriptorProto) bool {
 			}
 		}
 	}
+	return false
+}
+
+func (r Relations) FindByMessage(message *descriptorpb.DescriptorProto, f *descriptorpb.FieldDescriptorProto) bool {
+	if v, ok := r.Find(message.GetName()); ok {
+		if v.Field == f.GetName() {
+			return true
+		}
+		if v.Reference == f.GetName() {
+			return true
+		}
+	}
+
 	return false
 }
 
