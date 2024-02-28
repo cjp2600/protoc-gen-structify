@@ -30,6 +30,8 @@ type PostStorage interface {
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
 	LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Post, *Paginator, error)
+	LoadAuthor(ctx context.Context, model *Post, builders ...*QueryBuilder) error
+	LoadBatchAuthor(ctx context.Context, items []*Post, builders ...*QueryBuilder) error
 }
 
 // NewPostStorage returns a new postStorage.
@@ -48,7 +50,7 @@ func (t *postStorage) TableName() string {
 // Columns returns the columns for the table.
 func (t *postStorage) Columns() []string {
 	return []string{
-		"id",
+		"id", "title", "body", "author_id",
 	}
 }
 
@@ -67,8 +69,17 @@ func (t *postStorage) CreateTable(ctx context.Context) error {
 	sqlQuery := `
 		-- Table: posts
 		CREATE TABLE IF NOT EXISTS posts (
-		id  SERIAL PRIMARY KEY);
+		id  SERIAL PRIMARY KEY,
+		title TEXT NOT NULL,
+		body TEXT,
+		author_id UUID NOT NULL);
 		-- Other entities
+		CREATE UNIQUE INDEX IF NOT EXISTS posts_author_id_unique_idx ON posts USING btree (author_id);
+		CREATE INDEX IF NOT EXISTS posts_title_idx ON posts USING btree (title);
+		CREATE INDEX IF NOT EXISTS posts_author_id_idx ON posts USING btree (author_id);
+		-- Foreign keys for users
+		ALTER TABLE posts
+		ADD FOREIGN KEY (author_id) REFERENCES users(id);
 	`
 
 	_, err := t.db.ExecContext(ctx, sqlQuery)
@@ -101,9 +112,65 @@ func (t *postStorage) UpgradeTable(ctx context.Context) error {
 	return nil
 }
 
+// LoadAuthor loads the Author relation.
+func (t *postStorage) LoadAuthor(ctx context.Context, model *Post, builders ...*QueryBuilder) error {
+	if model == nil {
+		return errors.Wrap(ErrModelIsNil, "Post is nil")
+	}
+
+	// NewUserStorage creates a new UserStorage.
+	s := NewUserStorage(t.db)
+
+	// Add the filter for the relation
+	builders = append(builders, FilterBuilder(UserIdEq(model.AuthorId)))
+	relationModel, err := s.FindOne(ctx, builders...)
+	if err != nil {
+		return fmt.Errorf("failed to find UserStorage: %w", err)
+	}
+
+	model.Author = relationModel
+	return nil
+}
+
+// LoadBatchAuthor loads the Author relation.
+func (t *postStorage) LoadBatchAuthor(ctx context.Context, items []*Post, builders ...*QueryBuilder) error {
+	requestItems := make([]interface{}, len(items))
+	for i, item := range items {
+		requestItems[i] = item.AuthorId
+	}
+
+	// NewUserStorage creates a new UserStorage.
+	s := NewUserStorage(t.db)
+
+	// Add the filter for the relation
+	builders = append(builders, FilterBuilder(UserIdIn(requestItems...)))
+
+	results, err := s.FindMany(ctx, builders...)
+	if err != nil {
+		return fmt.Errorf("failed to find many UserStorage: %w", err)
+	}
+	resultMap := make(map[interface{}]*User)
+	for _, result := range results {
+		resultMap[result.Id] = result
+	}
+
+	// Assign User to items
+	for _, item := range items {
+		if v, ok := resultMap[item.AuthorId]; ok {
+			item.Author = v
+		}
+	}
+
+	return nil
+}
+
 // Post is a struct for the "posts" table.
 type Post struct {
-	Id int32 `db:"id"`
+	Id       int32  `db:"id"`
+	Title    string `db:"title"`
+	Body     string `db:"body"`
+	Author   *User
+	AuthorId string `db:"author_id"`
 }
 
 // TableName returns the table name.
@@ -113,19 +180,23 @@ func (t *Post) TableName() string {
 
 // ScanRow scans a row into a Post.
 func (t *Post) ScanRow(r *sql.Row) error {
-	return r.Scan(&t.Id)
+	return r.Scan(&t.Id, &t.Title, &t.Body, &t.AuthorId)
 }
 
 // ScanRows scans a single row into the Post.
 func (t *Post) ScanRows(r *sql.Rows) error {
 	return r.Scan(
 		&t.Id,
+		&t.Title,
+		&t.Body,
+		&t.AuthorId,
 	)
 }
 
 // PostFilters is a struct that holds filters for Post.
 type PostFilters struct {
-	Id *int32
+	Id       *int32
+	AuthorId *string
 }
 
 // PostIdEq returns a condition that checks if the field equals the value.
@@ -133,9 +204,19 @@ func PostIdEq(value int32) FilterApplier {
 	return EqualsCondition{Field: "id", Value: value}
 }
 
+// PostAuthorIdEq returns a condition that checks if the field equals the value.
+func PostAuthorIdEq(value string) FilterApplier {
+	return EqualsCondition{Field: "author_id", Value: value}
+}
+
 // PostIdNotEq returns a condition that checks if the field equals the value.
 func PostIdNotEq(value int32) FilterApplier {
 	return NotEqualsCondition{Field: "id", Value: value}
+}
+
+// PostAuthorIdNotEq returns a condition that checks if the field equals the value.
+func PostAuthorIdNotEq(value string) FilterApplier {
+	return NotEqualsCondition{Field: "author_id", Value: value}
 }
 
 // PostIdGT greaterThanCondition than condition.
@@ -143,9 +224,19 @@ func PostIdGT(value int32) FilterApplier {
 	return GreaterThanCondition{Field: "id", Value: value}
 }
 
+// PostAuthorIdGT greaterThanCondition than condition.
+func PostAuthorIdGT(value string) FilterApplier {
+	return GreaterThanCondition{Field: "author_id", Value: value}
+}
+
 // PostIdLT less than condition.
 func PostIdLT(value int32) FilterApplier {
 	return LessThanCondition{Field: "id", Value: value}
+}
+
+// PostAuthorIdLT less than condition.
+func PostAuthorIdLT(value string) FilterApplier {
+	return LessThanCondition{Field: "author_id", Value: value}
 }
 
 // PostIdGTE greater than or equal condition.
@@ -153,9 +244,19 @@ func PostIdGTE(value int32) FilterApplier {
 	return GreaterThanOrEqualCondition{Field: "id", Value: value}
 }
 
+// PostAuthorIdGTE greater than or equal condition.
+func PostAuthorIdGTE(value string) FilterApplier {
+	return GreaterThanOrEqualCondition{Field: "author_id", Value: value}
+}
+
 // PostIdLTE less than or equal condition.
 func PostIdLTE(value int32) FilterApplier {
 	return LessThanOrEqualCondition{Field: "id", Value: value}
+}
+
+// PostAuthorIdLTE less than or equal condition.
+func PostAuthorIdLTE(value string) FilterApplier {
+	return LessThanOrEqualCondition{Field: "author_id", Value: value}
 }
 
 // PostIdLike like condition %
@@ -163,9 +264,19 @@ func PostIdLike(value int32) FilterApplier {
 	return LikeCondition{Field: "id", Value: value}
 }
 
+// PostAuthorIdLike like condition %
+func PostAuthorIdLike(value string) FilterApplier {
+	return LikeCondition{Field: "author_id", Value: value}
+}
+
 // PostIdNotLike not like condition
 func PostIdNotLike(value int32) FilterApplier {
 	return NotLikeCondition{Field: "id", Value: value}
+}
+
+// PostAuthorIdNotLike not like condition
+func PostAuthorIdNotLike(value string) FilterApplier {
+	return NotLikeCondition{Field: "author_id", Value: value}
 }
 
 // PostIdIsNull is null condition
@@ -173,9 +284,19 @@ func PostIdIsNull() FilterApplier {
 	return IsNullCondition{Field: "id"}
 }
 
+// PostAuthorIdIsNull is null condition
+func PostAuthorIdIsNull() FilterApplier {
+	return IsNullCondition{Field: "author_id"}
+}
+
 // PostIdIsNotNull is not null condition
 func PostIdIsNotNull() FilterApplier {
 	return IsNotNullCondition{Field: "id"}
+}
+
+// PostAuthorIdIsNotNull is not null condition
+func PostAuthorIdIsNotNull() FilterApplier {
+	return IsNotNullCondition{Field: "author_id"}
 }
 
 // PostIdIn condition
@@ -183,14 +304,29 @@ func PostIdIn(values ...interface{}) FilterApplier {
 	return InCondition{Field: "id", Values: values}
 }
 
+// PostAuthorIdIn condition
+func PostAuthorIdIn(values ...interface{}) FilterApplier {
+	return InCondition{Field: "author_id", Values: values}
+}
+
 // PostIdNotIn not in condition
 func PostIdNotIn(values ...interface{}) FilterApplier {
 	return NotInCondition{Field: "id", Values: values}
 }
 
+// PostAuthorIdNotIn not in condition
+func PostAuthorIdNotIn(values ...interface{}) FilterApplier {
+	return NotInCondition{Field: "author_id", Values: values}
+}
+
 // PostIdOrderBy sorts the result in ascending order.
 func PostIdOrderBy(asc bool) FilterApplier {
 	return OrderBy("id", asc)
+}
+
+// PostAuthorIdOrderBy sorts the result in ascending order.
+func PostAuthorIdOrderBy(asc bool) FilterApplier {
+	return OrderBy("author_id", asc)
 }
 
 // Create creates a new Post.
@@ -206,8 +342,16 @@ func (t *postStorage) Create(ctx context.Context, model *Post, opts ...Option) (
 	}
 
 	query := t.queryBuilder.Insert("posts").
-		Columns().
-		Values()
+		Columns(
+			"title",
+			"body",
+			"author_id",
+		).
+		Values(
+			model.Title,
+			model.Body,
+			model.AuthorId,
+		)
 
 	// add RETURNING "id" to query
 	query = query.Suffix("RETURNING \"id\"")
@@ -232,6 +376,9 @@ func (t *postStorage) Create(ctx context.Context, model *Post, opts ...Option) (
 
 // PostUpdate is used to update an existing Post.
 type PostUpdate struct {
+	Title    *string
+	Body     *string
+	AuthorId *string
 }
 
 // Update updates an existing Post based on non-nil fields.
@@ -241,6 +388,15 @@ func (t *postStorage) Update(ctx context.Context, id int32, updateData *PostUpda
 	}
 
 	query := t.queryBuilder.Update("posts")
+	if updateData.Title != nil {
+		query = query.Set("title", updateData.Title)
+	}
+	if updateData.Body != nil {
+		query = query.Set("body", updateData.Body)
+	}
+	if updateData.AuthorId != nil {
+		query = query.Set("author_id", updateData.AuthorId)
+	}
 
 	query = query.Where("id = ?", id)
 

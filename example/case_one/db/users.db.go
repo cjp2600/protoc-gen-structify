@@ -8,6 +8,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 	"math"
+	"time"
 )
 
 // userStorage is a struct for the "users" table.
@@ -30,6 +31,14 @@ type UserStorage interface {
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
 	LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*User, *Paginator, error)
+	LoadDevice(ctx context.Context, model *User, builders ...*QueryBuilder) error
+	LoadSettings(ctx context.Context, model *User, builders ...*QueryBuilder) error
+	LoadAddresses(ctx context.Context, model *User, builders ...*QueryBuilder) error
+	LoadPosts(ctx context.Context, model *User, builders ...*QueryBuilder) error
+	LoadBatchDevice(ctx context.Context, items []*User, builders ...*QueryBuilder) error
+	LoadBatchSettings(ctx context.Context, items []*User, builders ...*QueryBuilder) error
+	LoadBatchAddresses(ctx context.Context, items []*User, builders ...*QueryBuilder) error
+	LoadBatchPosts(ctx context.Context, items []*User, builders ...*QueryBuilder) error
 }
 
 // NewUserStorage returns a new userStorage.
@@ -48,7 +57,7 @@ func (t *userStorage) TableName() string {
 // Columns returns the columns for the table.
 func (t *userStorage) Columns() []string {
 	return []string{
-		"id", "age", "email",
+		"id", "name", "age", "email", "last_name", "created_at", "updated_at", "notification_settings", "phones", "balls", "numrs", "comments",
 	}
 }
 
@@ -69,14 +78,33 @@ func (t *userStorage) CreateTable(ctx context.Context) error {
 		-- Table: users
 		CREATE TABLE IF NOT EXISTS users (
 		id UUID PRIMARY KEY NOT NULL DEFAULT uuid_generate_v4(),
+		name TEXT NOT NULL,
 		age INTEGER NOT NULL,
-		email TEXT NOT NULL);
+		email TEXT NOT NULL,
+		last_name TEXT,
+		created_at TIMESTAMP NOT NULL DEFAULT now(),
+		updated_at TIMESTAMP,
+		notification_settings JSONB,
+		phones JSONB,
+		balls JSONB,
+		numrs JSONB,
+		comments JSONB);
 		-- Other entities
 		COMMENT ON TABLE users IS 'This is a comment of User';
 		CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx ON users USING btree (email);
-		CREATE UNIQUE INDEX IF NOT EXISTS users_unique_idx_email ON users USING btree (
+		CREATE UNIQUE INDEX IF NOT EXISTS users_unique_idx_name_email ON users USING btree (
+            name, 
             email
     	);
+		CREATE INDEX IF NOT EXISTS users_name_idx ON users USING btree (name);
+		-- Foreign keys for devices
+		ALTER TABLE users
+		ADD FOREIGN KEY (id) REFERENCES devices(user_id)
+		ON DELETE CASCADE;
+		-- Foreign keys for settings
+		ALTER TABLE users
+		ADD FOREIGN KEY (id) REFERENCES settings(user_id)
+		ON DELETE CASCADE;
 	`
 
 	_, err := t.db.ExecContext(ctx, sqlQuery)
@@ -109,11 +137,232 @@ func (t *userStorage) UpgradeTable(ctx context.Context) error {
 	return nil
 }
 
+// LoadDevice loads the Device relation.
+func (t *userStorage) LoadDevice(ctx context.Context, model *User, builders ...*QueryBuilder) error {
+	if model == nil {
+		return errors.Wrap(ErrModelIsNil, "User is nil")
+	}
+
+	// NewDeviceStorage creates a new DeviceStorage.
+	s := NewDeviceStorage(t.db)
+
+	// Add the filter for the relation
+	builders = append(builders, FilterBuilder(DeviceUserIdEq(model.Id)))
+	relationModel, err := s.FindOne(ctx, builders...)
+	if err != nil {
+		return fmt.Errorf("failed to find DeviceStorage: %w", err)
+	}
+
+	model.Device = relationModel
+	return nil
+}
+
+// LoadSettings loads the Settings relation.
+func (t *userStorage) LoadSettings(ctx context.Context, model *User, builders ...*QueryBuilder) error {
+	if model == nil {
+		return errors.Wrap(ErrModelIsNil, "User is nil")
+	}
+
+	// NewSettingStorage creates a new SettingStorage.
+	s := NewSettingStorage(t.db)
+
+	// Add the filter for the relation
+	builders = append(builders, FilterBuilder(SettingUserIdEq(model.Id)))
+	relationModel, err := s.FindOne(ctx, builders...)
+	if err != nil {
+		return fmt.Errorf("failed to find SettingStorage: %w", err)
+	}
+
+	model.Settings = relationModel
+	return nil
+}
+
+// LoadAddresses loads the Addresses relation.
+func (t *userStorage) LoadAddresses(ctx context.Context, model *User, builders ...*QueryBuilder) error {
+	if model == nil {
+		return errors.Wrap(ErrModelIsNil, "User is nil")
+	}
+
+	// NewAddressStorage creates a new AddressStorage.
+	s := NewAddressStorage(t.db)
+
+	// Add the filter for the relation
+	builders = append(builders, FilterBuilder(AddressUserIdEq(model.Id)))
+	relationModels, err := s.FindMany(ctx, builders...)
+	if err != nil {
+		return fmt.Errorf("failed to find many AddressStorage: %w", err)
+	}
+
+	model.Addresses = relationModels
+	return nil
+}
+
+// LoadPosts loads the Posts relation.
+func (t *userStorage) LoadPosts(ctx context.Context, model *User, builders ...*QueryBuilder) error {
+	if model == nil {
+		return errors.Wrap(ErrModelIsNil, "User is nil")
+	}
+
+	// NewPostStorage creates a new PostStorage.
+	s := NewPostStorage(t.db)
+
+	// Add the filter for the relation
+	builders = append(builders, FilterBuilder(PostAuthorIdEq(model.Id)))
+	relationModels, err := s.FindMany(ctx, builders...)
+	if err != nil {
+		return fmt.Errorf("failed to find many PostStorage: %w", err)
+	}
+
+	model.Posts = relationModels
+	return nil
+}
+
+// LoadBatchDevice loads the Device relation.
+func (t *userStorage) LoadBatchDevice(ctx context.Context, items []*User, builders ...*QueryBuilder) error {
+	requestItems := make([]interface{}, len(items))
+	for i, item := range items {
+		requestItems[i] = item.Id
+	}
+
+	// NewDeviceStorage creates a new DeviceStorage.
+	s := NewDeviceStorage(t.db)
+
+	// Add the filter for the relation
+	builders = append(builders, FilterBuilder(DeviceUserIdIn(requestItems...)))
+
+	results, err := s.FindMany(ctx, builders...)
+	if err != nil {
+		return fmt.Errorf("failed to find many DeviceStorage: %w", err)
+	}
+	resultMap := make(map[interface{}]*Device)
+	for _, result := range results {
+		resultMap[result.UserId] = result
+	}
+
+	// Assign Device to items
+	for _, item := range items {
+		if v, ok := resultMap[item.Id]; ok {
+			item.Device = v
+		}
+	}
+
+	return nil
+}
+
+// LoadBatchSettings loads the Settings relation.
+func (t *userStorage) LoadBatchSettings(ctx context.Context, items []*User, builders ...*QueryBuilder) error {
+	requestItems := make([]interface{}, len(items))
+	for i, item := range items {
+		requestItems[i] = item.Id
+	}
+
+	// NewSettingStorage creates a new SettingStorage.
+	s := NewSettingStorage(t.db)
+
+	// Add the filter for the relation
+	builders = append(builders, FilterBuilder(SettingUserIdIn(requestItems...)))
+
+	results, err := s.FindMany(ctx, builders...)
+	if err != nil {
+		return fmt.Errorf("failed to find many SettingStorage: %w", err)
+	}
+	resultMap := make(map[interface{}]*Setting)
+	for _, result := range results {
+		resultMap[result.UserId] = result
+	}
+
+	// Assign Setting to items
+	for _, item := range items {
+		if v, ok := resultMap[item.Id]; ok {
+			item.Settings = v
+		}
+	}
+
+	return nil
+}
+
+// LoadBatchAddresses loads the Addresses relation.
+func (t *userStorage) LoadBatchAddresses(ctx context.Context, items []*User, builders ...*QueryBuilder) error {
+	requestItems := make([]interface{}, len(items))
+	for i, item := range items {
+		requestItems[i] = item.Id
+	}
+
+	// NewAddressStorage creates a new AddressStorage.
+	s := NewAddressStorage(t.db)
+
+	// Add the filter for the relation
+	builders = append(builders, FilterBuilder(AddressUserIdIn(requestItems...)))
+
+	results, err := s.FindMany(ctx, builders...)
+	if err != nil {
+		return fmt.Errorf("failed to find many AddressStorage: %w", err)
+	}
+	resultMap := make(map[interface{}][]*Address)
+	for _, result := range results {
+		resultMap[result.UserId] = append(resultMap[result.UserId], result)
+	}
+
+	// Assign Address to items
+	for _, item := range items {
+		if v, ok := resultMap[item.Id]; ok {
+			item.Addresses = v
+		}
+	}
+
+	return nil
+}
+
+// LoadBatchPosts loads the Posts relation.
+func (t *userStorage) LoadBatchPosts(ctx context.Context, items []*User, builders ...*QueryBuilder) error {
+	requestItems := make([]interface{}, len(items))
+	for i, item := range items {
+		requestItems[i] = item.Id
+	}
+
+	// NewPostStorage creates a new PostStorage.
+	s := NewPostStorage(t.db)
+
+	// Add the filter for the relation
+	builders = append(builders, FilterBuilder(PostAuthorIdIn(requestItems...)))
+
+	results, err := s.FindMany(ctx, builders...)
+	if err != nil {
+		return fmt.Errorf("failed to find many PostStorage: %w", err)
+	}
+	resultMap := make(map[interface{}][]*Post)
+	for _, result := range results {
+		resultMap[result.AuthorId] = append(resultMap[result.AuthorId], result)
+	}
+
+	// Assign Post to items
+	for _, item := range items {
+		if v, ok := resultMap[item.Id]; ok {
+			item.Posts = v
+		}
+	}
+
+	return nil
+}
+
 // User is a struct for the "users" table.
 type User struct {
-	Id    string `db:"id"`
-	Age   int32  `db:"age"`
-	Email string `db:"email"`
+	Id                   string  `db:"id"`
+	Name                 string  `db:"name"`
+	Age                  int32   `db:"age"`
+	Email                string  `db:"email"`
+	LastName             *string `db:"last_name"`
+	Device               *Device
+	Settings             *Setting
+	Addresses            []*Address
+	Posts                []*Post
+	CreatedAt            time.Time                `db:"created_at"`
+	UpdatedAt            *time.Time               `db:"updated_at"`
+	NotificationSettings *UserNotificationSetting `db:"notification_settings"`
+	Phones               UserPhonesRepeated       `db:"phones"`
+	Balls                UserBallsRepeated        `db:"balls"`
+	Numrs                UserNumrsRepeated        `db:"numrs"`
+	Comments             UserCommentsRepeated     `db:"comments"`
 }
 
 // TableName returns the table name.
@@ -123,15 +372,24 @@ func (t *User) TableName() string {
 
 // ScanRow scans a row into a User.
 func (t *User) ScanRow(r *sql.Row) error {
-	return r.Scan(&t.Id, &t.Age, &t.Email)
+	return r.Scan(&t.Id, &t.Name, &t.Age, &t.Email, &t.LastName, &t.CreatedAt, &t.UpdatedAt, &t.NotificationSettings, &t.Phones, &t.Balls, &t.Numrs, &t.Comments)
 }
 
 // ScanRows scans a single row into the User.
 func (t *User) ScanRows(r *sql.Rows) error {
 	return r.Scan(
 		&t.Id,
+		&t.Name,
 		&t.Age,
 		&t.Email,
+		&t.LastName,
+		&t.CreatedAt,
+		&t.UpdatedAt,
+		&t.NotificationSettings,
+		&t.Phones,
+		&t.Balls,
+		&t.Numrs,
+		&t.Comments,
 	)
 }
 
@@ -348,15 +606,53 @@ func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) (
 	for _, o := range opts {
 		o(options)
 	}
+	// get value of phones
+	phones, err := model.Phones.Value()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get phones value: %w", err)
+	}
+	// get value of balls
+	balls, err := model.Balls.Value()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get balls value: %w", err)
+	}
+	// get value of numrs
+	numrs, err := model.Numrs.Value()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get numrs value: %w", err)
+	}
+	// get value of comments
+	comments, err := model.Comments.Value()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get comments value: %w", err)
+	}
 
 	query := t.queryBuilder.Insert("users").
 		Columns(
+			"name",
 			"age",
 			"email",
+			"last_name",
+			"created_at",
+			"updated_at",
+			"notification_settings",
+			"phones",
+			"balls",
+			"numrs",
+			"comments",
 		).
 		Values(
+			model.Name,
 			model.Age,
 			model.Email,
+			model.LastName,
+			model.CreatedAt,
+			model.UpdatedAt,
+			model.NotificationSettings,
+			phones,
+			balls,
+			numrs,
+			comments,
 		)
 
 	// add RETURNING "id" to query
@@ -377,13 +673,49 @@ func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) (
 		return nil, fmt.Errorf("failed to create User: %w", err)
 	}
 
+	if options.relations && model.Device != nil {
+		s := NewDeviceStorage(t.db)
+		model.Device.UserId = id
+		err := s.Create(ctx, model.Device)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Device: %w", err)
+		}
+	}
+	if options.relations && model.Settings != nil {
+		s := NewSettingStorage(t.db)
+		model.Settings.UserId = id
+		_, err := s.Create(ctx, model.Settings)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Settings: %w", err)
+		}
+	}
+	if options.relations && model.Addresses != nil {
+		for _, item := range model.Addresses {
+			item.UserId = id
+			s := NewAddressStorage(t.db)
+			_, err := s.Create(ctx, item)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create Addresses: %w", err)
+			}
+		}
+	}
+
 	return &id, nil
 }
 
 // UserUpdate is used to update an existing User.
 type UserUpdate struct {
-	Age   *int32
-	Email *string
+	Name                 *string
+	Age                  *int32
+	Email                *string
+	LastName             *string
+	CreatedAt            *time.Time
+	UpdatedAt            *time.Time
+	NotificationSettings *UserNotificationSetting
+	Phones               *UserPhonesRepeated
+	Balls                *UserBallsRepeated
+	Numrs                *UserNumrsRepeated
+	Comments             *UserCommentsRepeated
 }
 
 // Update updates an existing User based on non-nil fields.
@@ -393,11 +725,54 @@ func (t *userStorage) Update(ctx context.Context, id string, updateData *UserUpd
 	}
 
 	query := t.queryBuilder.Update("users")
+	if updateData.Name != nil {
+		query = query.Set("name", updateData.Name)
+	}
 	if updateData.Age != nil {
 		query = query.Set("age", updateData.Age)
 	}
 	if updateData.Email != nil {
 		query = query.Set("email", updateData.Email)
+	}
+	if updateData.LastName != nil {
+		query = query.Set("last_name", updateData.LastName)
+	}
+	if updateData.CreatedAt != nil {
+		query = query.Set("created_at", updateData.CreatedAt)
+	}
+	if updateData.UpdatedAt != nil {
+		query = query.Set("updated_at", updateData.UpdatedAt)
+	}
+	if updateData.NotificationSettings != nil {
+		query = query.Set("notification_settings", updateData.NotificationSettings)
+	}
+	if updateData.Phones != nil {
+		value, err := updateData.Phones.Value()
+		if err != nil {
+			return fmt.Errorf("failed to get phones value: %w", err)
+		}
+		query = query.Set("phones", value)
+	}
+	if updateData.Balls != nil {
+		value, err := updateData.Balls.Value()
+		if err != nil {
+			return fmt.Errorf("failed to get balls value: %w", err)
+		}
+		query = query.Set("balls", value)
+	}
+	if updateData.Numrs != nil {
+		value, err := updateData.Numrs.Value()
+		if err != nil {
+			return fmt.Errorf("failed to get numrs value: %w", err)
+		}
+		query = query.Set("numrs", value)
+	}
+	if updateData.Comments != nil {
+		value, err := updateData.Comments.Value()
+		if err != nil {
+			return fmt.Errorf("failed to get comments value: %w", err)
+		}
+		query = query.Set("comments", value)
 	}
 
 	query = query.Where("id = ?", id)

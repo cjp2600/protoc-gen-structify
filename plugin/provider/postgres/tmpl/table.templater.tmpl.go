@@ -20,7 +20,7 @@ const TableTemplate = `
 `
 
 const TableConditionFilters = `
-{{ range $key, $fieldMess := messages }}
+{{ range $key, $fieldMess := messages_for_filter }}
 	{{- if len $fieldMess.GetField }}
 		// {{ $fieldMess.GetName | camelCase }}Filters is a struct that holds filters for {{ $fieldMess.GetName }}.
 		type {{structureName}}Filters struct {
@@ -33,7 +33,7 @@ const TableConditionFilters = `
 	{{- end }}
 {{ end }}
 
-{{ range $key, $fieldMess := messages }}
+{{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
@@ -46,7 +46,7 @@ const TableConditionFilters = `
   {{ end }}
 {{ end }}
 
-{{ range $key, $fieldMess := messages }}
+{{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
@@ -59,7 +59,7 @@ const TableConditionFilters = `
   {{ end }}
 {{ end }}
 
-{{ range $key, $fieldMess := messages }}
+{{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
@@ -72,7 +72,7 @@ const TableConditionFilters = `
   {{ end }}
 {{ end }}
 
-{{ range $key, $fieldMess := messages }}
+{{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
@@ -85,7 +85,7 @@ const TableConditionFilters = `
   {{ end }}
 {{ end }}
 
-{{ range $key, $fieldMess := messages }}
+{{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
@@ -98,7 +98,7 @@ const TableConditionFilters = `
   {{ end }}
 {{ end }}
 
-{{ range $key, $fieldMess := messages }}
+{{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
@@ -111,7 +111,7 @@ const TableConditionFilters = `
   {{ end }}
 {{ end }}
 
-{{ range $key, $fieldMess := messages }}
+{{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
@@ -124,7 +124,7 @@ const TableConditionFilters = `
   {{ end }}
 {{ end }}
 
-{{ range $key, $fieldMess := messages }}
+{{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
@@ -137,7 +137,7 @@ const TableConditionFilters = `
   {{ end }}
 {{ end }}
 
-{{ range $key, $fieldMess := messages }}
+{{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
@@ -150,7 +150,7 @@ const TableConditionFilters = `
   {{ end }}
 {{ end }}
 
-{{ range $key, $fieldMess := messages }}
+{{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
@@ -163,7 +163,7 @@ const TableConditionFilters = `
   {{ end }}
 {{ end }}
 
-{{ range $key, $fieldMess := messages }}
+{{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
@@ -176,7 +176,7 @@ const TableConditionFilters = `
   {{ end }}
 {{ end }}
 
-{{ range $key, $fieldMess := messages }}
+{{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
@@ -189,7 +189,7 @@ const TableConditionFilters = `
   {{ end }}
 {{ end }}
 
-{{ range $key, $fieldMess := messages }}
+{{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}

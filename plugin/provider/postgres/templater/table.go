@@ -171,14 +171,17 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 
 		// messages returns the messages.
 		"messages": func() statepkg.Messages {
-			newMess := t.message
+			return statepkg.Messages{t.message}
+		},
+
+		// messages returns the messages.
+		"messages_for_filter": func() statepkg.Messages {
+			newMess := helperpkg.CopyMessage(t.message)
 			var fields []*descriptorpb.FieldDescriptorProto
 			for _, f := range newMess.GetField() {
 				opts := helperpkg.GetFieldOptions(f)
 				if opts != nil {
-					if opts.GetPrimaryKey() {
-						fields = append(fields, f)
-					} else if opts.GetInFilter() {
+					if opts.GetPrimaryKey() || opts.GetInFilter() || t.state.Relations.FindBy(t.message, f) {
 						fields = append(fields, f)
 					}
 				}

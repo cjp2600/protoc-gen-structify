@@ -45,7 +45,9 @@ func (t *deviceStorage) TableName() string {
 
 // Columns returns the columns for the table.
 func (t *deviceStorage) Columns() []string {
-	return []string{}
+	return []string{
+		"name", "value", "user_id",
+	}
 }
 
 // DB returns the underlying sql.DB. This is useful for doing transactions.
@@ -62,8 +64,13 @@ func (t *deviceStorage) DB(ctx context.Context) QueryExecer {
 func (t *deviceStorage) CreateTable(ctx context.Context) error {
 	sqlQuery := `
 		-- Table: devices
-		CREATE TABLE IF NOT EXISTS devices ();
+		CREATE TABLE IF NOT EXISTS devices (
+		name TEXT,
+		value TEXT,
+		user_id UUID NOT NULL);
 		-- Other entities
+		CREATE UNIQUE INDEX IF NOT EXISTS devices_user_id_unique_idx ON devices USING btree (user_id);
+		CREATE INDEX IF NOT EXISTS devices_user_id_idx ON devices USING btree (user_id);
 	`
 
 	_, err := t.db.ExecContext(ctx, sqlQuery)
@@ -98,6 +105,9 @@ func (t *deviceStorage) UpgradeTable(ctx context.Context) error {
 
 // Device is a struct for the "devices" table.
 type Device struct {
+	Name   string `db:"name"`
+	Value  string `db:"value"`
+	UserId string `db:"user_id"`
 }
 
 // TableName returns the table name.
@@ -107,12 +117,86 @@ func (t *Device) TableName() string {
 
 // ScanRow scans a row into a Device.
 func (t *Device) ScanRow(r *sql.Row) error {
-	return r.Scan()
+	return r.Scan(&t.Name, &t.Value, &t.UserId)
 }
 
 // ScanRows scans a single row into the Device.
 func (t *Device) ScanRows(r *sql.Rows) error {
-	return r.Scan()
+	return r.Scan(
+		&t.Name,
+		&t.Value,
+		&t.UserId,
+	)
+}
+
+// DeviceFilters is a struct that holds filters for Device.
+type DeviceFilters struct {
+	UserId *string
+}
+
+// DeviceUserIdEq returns a condition that checks if the field equals the value.
+func DeviceUserIdEq(value string) FilterApplier {
+	return EqualsCondition{Field: "user_id", Value: value}
+}
+
+// DeviceUserIdNotEq returns a condition that checks if the field equals the value.
+func DeviceUserIdNotEq(value string) FilterApplier {
+	return NotEqualsCondition{Field: "user_id", Value: value}
+}
+
+// DeviceUserIdGT greaterThanCondition than condition.
+func DeviceUserIdGT(value string) FilterApplier {
+	return GreaterThanCondition{Field: "user_id", Value: value}
+}
+
+// DeviceUserIdLT less than condition.
+func DeviceUserIdLT(value string) FilterApplier {
+	return LessThanCondition{Field: "user_id", Value: value}
+}
+
+// DeviceUserIdGTE greater than or equal condition.
+func DeviceUserIdGTE(value string) FilterApplier {
+	return GreaterThanOrEqualCondition{Field: "user_id", Value: value}
+}
+
+// DeviceUserIdLTE less than or equal condition.
+func DeviceUserIdLTE(value string) FilterApplier {
+	return LessThanOrEqualCondition{Field: "user_id", Value: value}
+}
+
+// DeviceUserIdLike like condition %
+func DeviceUserIdLike(value string) FilterApplier {
+	return LikeCondition{Field: "user_id", Value: value}
+}
+
+// DeviceUserIdNotLike not like condition
+func DeviceUserIdNotLike(value string) FilterApplier {
+	return NotLikeCondition{Field: "user_id", Value: value}
+}
+
+// DeviceUserIdIsNull is null condition
+func DeviceUserIdIsNull() FilterApplier {
+	return IsNullCondition{Field: "user_id"}
+}
+
+// DeviceUserIdIsNotNull is not null condition
+func DeviceUserIdIsNotNull() FilterApplier {
+	return IsNotNullCondition{Field: "user_id"}
+}
+
+// DeviceUserIdIn condition
+func DeviceUserIdIn(values ...interface{}) FilterApplier {
+	return InCondition{Field: "user_id", Values: values}
+}
+
+// DeviceUserIdNotIn not in condition
+func DeviceUserIdNotIn(values ...interface{}) FilterApplier {
+	return NotInCondition{Field: "user_id", Values: values}
+}
+
+// DeviceUserIdOrderBy sorts the result in ascending order.
+func DeviceUserIdOrderBy(asc bool) FilterApplier {
+	return OrderBy("user_id", asc)
 }
 
 // Create creates a new Device.
@@ -128,8 +212,16 @@ func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Optio
 	}
 
 	query := t.queryBuilder.Insert("devices").
-		Columns().
-		Values()
+		Columns(
+			"name",
+			"value",
+			"user_id",
+		).
+		Values(
+			model.Name,
+			model.Value,
+			model.UserId,
+		)
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -150,6 +242,9 @@ func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Optio
 
 // DeviceUpdate is used to update an existing Device.
 type DeviceUpdate struct {
+	Name   *string
+	Value  *string
+	UserId *string
 }
 
 // Update updates an existing Device based on non-nil fields.
@@ -159,6 +254,15 @@ func (t *deviceStorage) Update(ctx context.Context, id int64, updateData *Device
 	}
 
 	query := t.queryBuilder.Update("devices")
+	if updateData.Name != nil {
+		query = query.Set("name", updateData.Name)
+	}
+	if updateData.Value != nil {
+		query = query.Set("value", updateData.Value)
+	}
+	if updateData.UserId != nil {
+		query = query.Set("user_id", updateData.UserId)
+	}
 
 	query = query.Where("id = ?", id)
 

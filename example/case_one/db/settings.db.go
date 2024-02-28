@@ -30,6 +30,8 @@ type SettingStorage interface {
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
 	LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Setting, *Paginator, error)
+	LoadUser(ctx context.Context, model *Setting, builders ...*QueryBuilder) error
+	LoadBatchUser(ctx context.Context, items []*Setting, builders ...*QueryBuilder) error
 }
 
 // NewSettingStorage returns a new settingStorage.
@@ -48,7 +50,7 @@ func (t *settingStorage) TableName() string {
 // Columns returns the columns for the table.
 func (t *settingStorage) Columns() []string {
 	return []string{
-		"id",
+		"id", "name", "value", "user_id",
 	}
 }
 
@@ -67,8 +69,14 @@ func (t *settingStorage) CreateTable(ctx context.Context) error {
 	sqlQuery := `
 		-- Table: settings
 		CREATE TABLE IF NOT EXISTS settings (
-		id  SERIAL PRIMARY KEY);
+		id  SERIAL PRIMARY KEY,
+		name TEXT NOT NULL,
+		value TEXT,
+		user_id UUID NOT NULL);
 		-- Other entities
+		CREATE UNIQUE INDEX IF NOT EXISTS settings_user_id_unique_idx ON settings USING btree (user_id);
+		CREATE INDEX IF NOT EXISTS settings_name_idx ON settings USING btree (name);
+		CREATE INDEX IF NOT EXISTS settings_user_id_idx ON settings USING btree (user_id);
 	`
 
 	_, err := t.db.ExecContext(ctx, sqlQuery)
@@ -101,9 +109,65 @@ func (t *settingStorage) UpgradeTable(ctx context.Context) error {
 	return nil
 }
 
+// LoadUser loads the User relation.
+func (t *settingStorage) LoadUser(ctx context.Context, model *Setting, builders ...*QueryBuilder) error {
+	if model == nil {
+		return errors.Wrap(ErrModelIsNil, "Setting is nil")
+	}
+
+	// NewUserStorage creates a new UserStorage.
+	s := NewUserStorage(t.db)
+
+	// Add the filter for the relation
+	builders = append(builders, FilterBuilder(UserIdEq(model.UserId)))
+	relationModel, err := s.FindOne(ctx, builders...)
+	if err != nil {
+		return fmt.Errorf("failed to find UserStorage: %w", err)
+	}
+
+	model.User = relationModel
+	return nil
+}
+
+// LoadBatchUser loads the User relation.
+func (t *settingStorage) LoadBatchUser(ctx context.Context, items []*Setting, builders ...*QueryBuilder) error {
+	requestItems := make([]interface{}, len(items))
+	for i, item := range items {
+		requestItems[i] = item.UserId
+	}
+
+	// NewUserStorage creates a new UserStorage.
+	s := NewUserStorage(t.db)
+
+	// Add the filter for the relation
+	builders = append(builders, FilterBuilder(UserIdIn(requestItems...)))
+
+	results, err := s.FindMany(ctx, builders...)
+	if err != nil {
+		return fmt.Errorf("failed to find many UserStorage: %w", err)
+	}
+	resultMap := make(map[interface{}]*User)
+	for _, result := range results {
+		resultMap[result.Id] = result
+	}
+
+	// Assign User to items
+	for _, item := range items {
+		if v, ok := resultMap[item.UserId]; ok {
+			item.User = v
+		}
+	}
+
+	return nil
+}
+
 // Setting is a struct for the "settings" table.
 type Setting struct {
-	Id int32 `db:"id"`
+	Id     int32  `db:"id"`
+	Name   string `db:"name"`
+	Value  string `db:"value"`
+	User   *User
+	UserId string `db:"user_id"`
 }
 
 // TableName returns the table name.
@@ -113,19 +177,23 @@ func (t *Setting) TableName() string {
 
 // ScanRow scans a row into a Setting.
 func (t *Setting) ScanRow(r *sql.Row) error {
-	return r.Scan(&t.Id)
+	return r.Scan(&t.Id, &t.Name, &t.Value, &t.UserId)
 }
 
 // ScanRows scans a single row into the Setting.
 func (t *Setting) ScanRows(r *sql.Rows) error {
 	return r.Scan(
 		&t.Id,
+		&t.Name,
+		&t.Value,
+		&t.UserId,
 	)
 }
 
 // SettingFilters is a struct that holds filters for Setting.
 type SettingFilters struct {
-	Id *int32
+	Id     *int32
+	UserId *string
 }
 
 // SettingIdEq returns a condition that checks if the field equals the value.
@@ -133,9 +201,19 @@ func SettingIdEq(value int32) FilterApplier {
 	return EqualsCondition{Field: "id", Value: value}
 }
 
+// SettingUserIdEq returns a condition that checks if the field equals the value.
+func SettingUserIdEq(value string) FilterApplier {
+	return EqualsCondition{Field: "user_id", Value: value}
+}
+
 // SettingIdNotEq returns a condition that checks if the field equals the value.
 func SettingIdNotEq(value int32) FilterApplier {
 	return NotEqualsCondition{Field: "id", Value: value}
+}
+
+// SettingUserIdNotEq returns a condition that checks if the field equals the value.
+func SettingUserIdNotEq(value string) FilterApplier {
+	return NotEqualsCondition{Field: "user_id", Value: value}
 }
 
 // SettingIdGT greaterThanCondition than condition.
@@ -143,9 +221,19 @@ func SettingIdGT(value int32) FilterApplier {
 	return GreaterThanCondition{Field: "id", Value: value}
 }
 
+// SettingUserIdGT greaterThanCondition than condition.
+func SettingUserIdGT(value string) FilterApplier {
+	return GreaterThanCondition{Field: "user_id", Value: value}
+}
+
 // SettingIdLT less than condition.
 func SettingIdLT(value int32) FilterApplier {
 	return LessThanCondition{Field: "id", Value: value}
+}
+
+// SettingUserIdLT less than condition.
+func SettingUserIdLT(value string) FilterApplier {
+	return LessThanCondition{Field: "user_id", Value: value}
 }
 
 // SettingIdGTE greater than or equal condition.
@@ -153,9 +241,19 @@ func SettingIdGTE(value int32) FilterApplier {
 	return GreaterThanOrEqualCondition{Field: "id", Value: value}
 }
 
+// SettingUserIdGTE greater than or equal condition.
+func SettingUserIdGTE(value string) FilterApplier {
+	return GreaterThanOrEqualCondition{Field: "user_id", Value: value}
+}
+
 // SettingIdLTE less than or equal condition.
 func SettingIdLTE(value int32) FilterApplier {
 	return LessThanOrEqualCondition{Field: "id", Value: value}
+}
+
+// SettingUserIdLTE less than or equal condition.
+func SettingUserIdLTE(value string) FilterApplier {
+	return LessThanOrEqualCondition{Field: "user_id", Value: value}
 }
 
 // SettingIdLike like condition %
@@ -163,9 +261,19 @@ func SettingIdLike(value int32) FilterApplier {
 	return LikeCondition{Field: "id", Value: value}
 }
 
+// SettingUserIdLike like condition %
+func SettingUserIdLike(value string) FilterApplier {
+	return LikeCondition{Field: "user_id", Value: value}
+}
+
 // SettingIdNotLike not like condition
 func SettingIdNotLike(value int32) FilterApplier {
 	return NotLikeCondition{Field: "id", Value: value}
+}
+
+// SettingUserIdNotLike not like condition
+func SettingUserIdNotLike(value string) FilterApplier {
+	return NotLikeCondition{Field: "user_id", Value: value}
 }
 
 // SettingIdIsNull is null condition
@@ -173,9 +281,19 @@ func SettingIdIsNull() FilterApplier {
 	return IsNullCondition{Field: "id"}
 }
 
+// SettingUserIdIsNull is null condition
+func SettingUserIdIsNull() FilterApplier {
+	return IsNullCondition{Field: "user_id"}
+}
+
 // SettingIdIsNotNull is not null condition
 func SettingIdIsNotNull() FilterApplier {
 	return IsNotNullCondition{Field: "id"}
+}
+
+// SettingUserIdIsNotNull is not null condition
+func SettingUserIdIsNotNull() FilterApplier {
+	return IsNotNullCondition{Field: "user_id"}
 }
 
 // SettingIdIn condition
@@ -183,14 +301,29 @@ func SettingIdIn(values ...interface{}) FilterApplier {
 	return InCondition{Field: "id", Values: values}
 }
 
+// SettingUserIdIn condition
+func SettingUserIdIn(values ...interface{}) FilterApplier {
+	return InCondition{Field: "user_id", Values: values}
+}
+
 // SettingIdNotIn not in condition
 func SettingIdNotIn(values ...interface{}) FilterApplier {
 	return NotInCondition{Field: "id", Values: values}
 }
 
+// SettingUserIdNotIn not in condition
+func SettingUserIdNotIn(values ...interface{}) FilterApplier {
+	return NotInCondition{Field: "user_id", Values: values}
+}
+
 // SettingIdOrderBy sorts the result in ascending order.
 func SettingIdOrderBy(asc bool) FilterApplier {
 	return OrderBy("id", asc)
+}
+
+// SettingUserIdOrderBy sorts the result in ascending order.
+func SettingUserIdOrderBy(asc bool) FilterApplier {
+	return OrderBy("user_id", asc)
 }
 
 // Create creates a new Setting.
@@ -206,8 +339,16 @@ func (t *settingStorage) Create(ctx context.Context, model *Setting, opts ...Opt
 	}
 
 	query := t.queryBuilder.Insert("settings").
-		Columns().
-		Values()
+		Columns(
+			"name",
+			"value",
+			"user_id",
+		).
+		Values(
+			model.Name,
+			model.Value,
+			model.UserId,
+		)
 
 	// add RETURNING "id" to query
 	query = query.Suffix("RETURNING \"id\"")
@@ -232,6 +373,9 @@ func (t *settingStorage) Create(ctx context.Context, model *Setting, opts ...Opt
 
 // SettingUpdate is used to update an existing Setting.
 type SettingUpdate struct {
+	Name   *string
+	Value  *string
+	UserId *string
 }
 
 // Update updates an existing Setting based on non-nil fields.
@@ -241,6 +385,15 @@ func (t *settingStorage) Update(ctx context.Context, id int32, updateData *Setti
 	}
 
 	query := t.queryBuilder.Update("settings")
+	if updateData.Name != nil {
+		query = query.Set("name", updateData.Name)
+	}
+	if updateData.Value != nil {
+		query = query.Set("value", updateData.Value)
+	}
+	if updateData.UserId != nil {
+		query = query.Set("user_id", updateData.UserId)
+	}
 
 	query = query.Where("id = ?", id)
 

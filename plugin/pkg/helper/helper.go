@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/jinzhu/copier"
 	"go/format"
 	"log"
 	"reflect"
@@ -37,6 +38,12 @@ func GetFieldOptions(f *descriptorpb.FieldDescriptorProto) *structify.StructifyF
 		}
 	}
 	return nil
+}
+
+func CopyMessage(src *descriptorpb.DescriptorProto) *descriptorpb.DescriptorProto {
+	var dst descriptorpb.DescriptorProto
+	copier.Copy(&dst, src)
+	return &dst
 }
 
 // HasIndex returns the index option for a field.

@@ -8,6 +8,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 	"math"
+	"time"
 )
 
 // addressStorage is a struct for the "addresses" table.
@@ -30,6 +31,8 @@ type AddressStorage interface {
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
 	LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Address, *Paginator, error)
+	LoadUser(ctx context.Context, model *Address, builders ...*QueryBuilder) error
+	LoadBatchUser(ctx context.Context, items []*Address, builders ...*QueryBuilder) error
 }
 
 // NewAddressStorage returns a new addressStorage.
@@ -48,7 +51,7 @@ func (t *addressStorage) TableName() string {
 // Columns returns the columns for the table.
 func (t *addressStorage) Columns() []string {
 	return []string{
-		"id",
+		"id", "street", "city", "state", "zip", "user_id", "created_at", "updated_at",
 	}
 }
 
@@ -68,8 +71,21 @@ func (t *addressStorage) CreateTable(ctx context.Context) error {
 		CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 		-- Table: addresses
 		CREATE TABLE IF NOT EXISTS addresses (
-		id UUID PRIMARY KEY NOT NULL DEFAULT uuid_generate_v4());
+		id UUID PRIMARY KEY NOT NULL DEFAULT uuid_generate_v4(),
+		street TEXT,
+		city TEXT NOT NULL,
+		state INTEGER,
+		zip BIGINT,
+		user_id UUID NOT NULL,
+		created_at TIMESTAMP NOT NULL DEFAULT now(),
+		updated_at TIMESTAMP);
 		-- Other entities
+		CREATE UNIQUE INDEX IF NOT EXISTS addresses_user_id_unique_idx ON addresses USING btree (user_id);
+		CREATE INDEX IF NOT EXISTS addresses_city_idx ON addresses USING btree (city);
+		CREATE INDEX IF NOT EXISTS addresses_user_id_idx ON addresses USING btree (user_id);
+		-- Foreign keys for users
+		ALTER TABLE addresses
+		ADD FOREIGN KEY (user_id) REFERENCES users(id);
 	`
 
 	_, err := t.db.ExecContext(ctx, sqlQuery)
@@ -102,9 +118,69 @@ func (t *addressStorage) UpgradeTable(ctx context.Context) error {
 	return nil
 }
 
+// LoadUser loads the User relation.
+func (t *addressStorage) LoadUser(ctx context.Context, model *Address, builders ...*QueryBuilder) error {
+	if model == nil {
+		return errors.Wrap(ErrModelIsNil, "Address is nil")
+	}
+
+	// NewUserStorage creates a new UserStorage.
+	s := NewUserStorage(t.db)
+
+	// Add the filter for the relation
+	builders = append(builders, FilterBuilder(UserIdEq(model.UserId)))
+	relationModel, err := s.FindOne(ctx, builders...)
+	if err != nil {
+		return fmt.Errorf("failed to find UserStorage: %w", err)
+	}
+
+	model.User = relationModel
+	return nil
+}
+
+// LoadBatchUser loads the User relation.
+func (t *addressStorage) LoadBatchUser(ctx context.Context, items []*Address, builders ...*QueryBuilder) error {
+	requestItems := make([]interface{}, len(items))
+	for i, item := range items {
+		requestItems[i] = item.UserId
+	}
+
+	// NewUserStorage creates a new UserStorage.
+	s := NewUserStorage(t.db)
+
+	// Add the filter for the relation
+	builders = append(builders, FilterBuilder(UserIdIn(requestItems...)))
+
+	results, err := s.FindMany(ctx, builders...)
+	if err != nil {
+		return fmt.Errorf("failed to find many UserStorage: %w", err)
+	}
+	resultMap := make(map[interface{}]*User)
+	for _, result := range results {
+		resultMap[result.Id] = result
+	}
+
+	// Assign User to items
+	for _, item := range items {
+		if v, ok := resultMap[item.UserId]; ok {
+			item.User = v
+		}
+	}
+
+	return nil
+}
+
 // Address is a struct for the "addresses" table.
 type Address struct {
-	Id string `db:"id"`
+	Id        string `db:"id"`
+	Street    string `db:"street"`
+	City      string `db:"city"`
+	State     int32  `db:"state"`
+	Zip       int64  `db:"zip"`
+	User      *User
+	UserId    string     `db:"user_id"`
+	CreatedAt time.Time  `db:"created_at"`
+	UpdatedAt *time.Time `db:"updated_at"`
 }
 
 // TableName returns the table name.
@@ -114,50 +190,27 @@ func (t *Address) TableName() string {
 
 // ScanRow scans a row into a Address.
 func (t *Address) ScanRow(r *sql.Row) error {
-	return r.Scan(&t.Id)
+	return r.Scan(&t.Id, &t.Street, &t.City, &t.State, &t.Zip, &t.UserId, &t.CreatedAt, &t.UpdatedAt)
 }
 
 // ScanRows scans a single row into the Address.
 func (t *Address) ScanRows(r *sql.Rows) error {
 	return r.Scan(
 		&t.Id,
+		&t.Street,
+		&t.City,
+		&t.State,
+		&t.Zip,
+		&t.UserId,
+		&t.CreatedAt,
+		&t.UpdatedAt,
 	)
 }
 
 // AddressFilters is a struct that holds filters for Address.
 type AddressFilters struct {
-	Id *string
-
-	queries []FilterApplier
-}
-
-func NewFilterAddress() *AddressFilters {
-	return &AddressFilters{}
-}
-
-func (f *AddressFilters) IdEq(v string) *AddressFilters {
-	f.queries = append(f.queries, AddressIdEq(v))
-	return f
-}
-
-func (f *AddressFilters) IdNotEq(v string) *AddressFilters {
-	f.queries = append(f.queries, AddressIdNotEq(v))
-	return f
-}
-
-func (f *AddressFilters) IdGT(v string) *AddressFilters {
-	f.queries = append(f.queries, AddressIdGT(v))
-	return f
-}
-
-func (f *AddressFilters) IdLT(v string) *AddressFilters {
-	f.queries = append(f.queries, AddressIdLT(v))
-	return f
-}
-
-func (f *AddressFilters) IdGTE(v string) *AddressFilters {
-	f.queries = append(f.queries, AddressIdGTE(v))
-	return f
+	Id     *string
+	UserId *string
 }
 
 // AddressIdEq returns a condition that checks if the field equals the value.
@@ -165,9 +218,19 @@ func AddressIdEq(value string) FilterApplier {
 	return EqualsCondition{Field: "id", Value: value}
 }
 
+// AddressUserIdEq returns a condition that checks if the field equals the value.
+func AddressUserIdEq(value string) FilterApplier {
+	return EqualsCondition{Field: "user_id", Value: value}
+}
+
 // AddressIdNotEq returns a condition that checks if the field equals the value.
 func AddressIdNotEq(value string) FilterApplier {
 	return NotEqualsCondition{Field: "id", Value: value}
+}
+
+// AddressUserIdNotEq returns a condition that checks if the field equals the value.
+func AddressUserIdNotEq(value string) FilterApplier {
+	return NotEqualsCondition{Field: "user_id", Value: value}
 }
 
 // AddressIdGT greaterThanCondition than condition.
@@ -175,9 +238,19 @@ func AddressIdGT(value string) FilterApplier {
 	return GreaterThanCondition{Field: "id", Value: value}
 }
 
+// AddressUserIdGT greaterThanCondition than condition.
+func AddressUserIdGT(value string) FilterApplier {
+	return GreaterThanCondition{Field: "user_id", Value: value}
+}
+
 // AddressIdLT less than condition.
 func AddressIdLT(value string) FilterApplier {
 	return LessThanCondition{Field: "id", Value: value}
+}
+
+// AddressUserIdLT less than condition.
+func AddressUserIdLT(value string) FilterApplier {
+	return LessThanCondition{Field: "user_id", Value: value}
 }
 
 // AddressIdGTE greater than or equal condition.
@@ -185,9 +258,19 @@ func AddressIdGTE(value string) FilterApplier {
 	return GreaterThanOrEqualCondition{Field: "id", Value: value}
 }
 
+// AddressUserIdGTE greater than or equal condition.
+func AddressUserIdGTE(value string) FilterApplier {
+	return GreaterThanOrEqualCondition{Field: "user_id", Value: value}
+}
+
 // AddressIdLTE less than or equal condition.
 func AddressIdLTE(value string) FilterApplier {
 	return LessThanOrEqualCondition{Field: "id", Value: value}
+}
+
+// AddressUserIdLTE less than or equal condition.
+func AddressUserIdLTE(value string) FilterApplier {
+	return LessThanOrEqualCondition{Field: "user_id", Value: value}
 }
 
 // AddressIdLike like condition %
@@ -195,9 +278,19 @@ func AddressIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "id", Value: value}
 }
 
+// AddressUserIdLike like condition %
+func AddressUserIdLike(value string) FilterApplier {
+	return LikeCondition{Field: "user_id", Value: value}
+}
+
 // AddressIdNotLike not like condition
 func AddressIdNotLike(value string) FilterApplier {
 	return NotLikeCondition{Field: "id", Value: value}
+}
+
+// AddressUserIdNotLike not like condition
+func AddressUserIdNotLike(value string) FilterApplier {
+	return NotLikeCondition{Field: "user_id", Value: value}
 }
 
 // AddressIdIsNull is null condition
@@ -205,9 +298,19 @@ func AddressIdIsNull() FilterApplier {
 	return IsNullCondition{Field: "id"}
 }
 
+// AddressUserIdIsNull is null condition
+func AddressUserIdIsNull() FilterApplier {
+	return IsNullCondition{Field: "user_id"}
+}
+
 // AddressIdIsNotNull is not null condition
 func AddressIdIsNotNull() FilterApplier {
 	return IsNotNullCondition{Field: "id"}
+}
+
+// AddressUserIdIsNotNull is not null condition
+func AddressUserIdIsNotNull() FilterApplier {
+	return IsNotNullCondition{Field: "user_id"}
 }
 
 // AddressIdIn condition
@@ -215,14 +318,29 @@ func AddressIdIn(values ...interface{}) FilterApplier {
 	return InCondition{Field: "id", Values: values}
 }
 
+// AddressUserIdIn condition
+func AddressUserIdIn(values ...interface{}) FilterApplier {
+	return InCondition{Field: "user_id", Values: values}
+}
+
 // AddressIdNotIn not in condition
 func AddressIdNotIn(values ...interface{}) FilterApplier {
 	return NotInCondition{Field: "id", Values: values}
 }
 
+// AddressUserIdNotIn not in condition
+func AddressUserIdNotIn(values ...interface{}) FilterApplier {
+	return NotInCondition{Field: "user_id", Values: values}
+}
+
 // AddressIdOrderBy sorts the result in ascending order.
 func AddressIdOrderBy(asc bool) FilterApplier {
 	return OrderBy("id", asc)
+}
+
+// AddressUserIdOrderBy sorts the result in ascending order.
+func AddressUserIdOrderBy(asc bool) FilterApplier {
+	return OrderBy("user_id", asc)
 }
 
 // Create creates a new Address.
@@ -238,8 +356,24 @@ func (t *addressStorage) Create(ctx context.Context, model *Address, opts ...Opt
 	}
 
 	query := t.queryBuilder.Insert("addresses").
-		Columns().
-		Values()
+		Columns(
+			"street",
+			"city",
+			"state",
+			"zip",
+			"user_id",
+			"created_at",
+			"updated_at",
+		).
+		Values(
+			model.Street,
+			model.City,
+			model.State,
+			model.Zip,
+			model.UserId,
+			model.CreatedAt,
+			model.UpdatedAt,
+		)
 
 	// add RETURNING "id" to query
 	query = query.Suffix("RETURNING \"id\"")
@@ -264,6 +398,13 @@ func (t *addressStorage) Create(ctx context.Context, model *Address, opts ...Opt
 
 // AddressUpdate is used to update an existing Address.
 type AddressUpdate struct {
+	Street    *string
+	City      *string
+	State     *int32
+	Zip       *int64
+	UserId    *string
+	CreatedAt *time.Time
+	UpdatedAt *time.Time
 }
 
 // Update updates an existing Address based on non-nil fields.
@@ -273,6 +414,27 @@ func (t *addressStorage) Update(ctx context.Context, id string, updateData *Addr
 	}
 
 	query := t.queryBuilder.Update("addresses")
+	if updateData.Street != nil {
+		query = query.Set("street", updateData.Street)
+	}
+	if updateData.City != nil {
+		query = query.Set("city", updateData.City)
+	}
+	if updateData.State != nil {
+		query = query.Set("state", updateData.State)
+	}
+	if updateData.Zip != nil {
+		query = query.Set("zip", updateData.Zip)
+	}
+	if updateData.UserId != nil {
+		query = query.Set("user_id", updateData.UserId)
+	}
+	if updateData.CreatedAt != nil {
+		query = query.Set("created_at", updateData.CreatedAt)
+	}
+	if updateData.UpdatedAt != nil {
+		query = query.Set("updated_at", updateData.UpdatedAt)
+	}
 
 	query = query.Where("id = ?", id)
 
