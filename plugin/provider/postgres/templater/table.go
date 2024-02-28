@@ -181,7 +181,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			for _, f := range newMess.GetField() {
 				opts := helperpkg.GetFieldOptions(f)
 				if opts != nil {
-					if opts.GetPrimaryKey() || opts.GetInFilter() || t.state.Relations.FindBy(t.message, f) {
+					if opts.GetPrimaryKey() || opts.GetInFilter() || t.state.Relations.FindBy(f) {
 						fields = append(fields, f)
 					}
 				}
