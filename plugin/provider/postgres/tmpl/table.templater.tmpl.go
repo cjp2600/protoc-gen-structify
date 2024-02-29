@@ -112,9 +112,23 @@ const TableConditionFilters = `
 {{ end }}
 
 {{ range $key, $fieldMess := messages_for_filter }}
+   {{ range $field := $fieldMess.GetField }}
+	{{- if not ($field | isRelation) }}
+	{{- if not ($field | isJSON) }}
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Between between condition.
+	func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Between(min, max {{ $field | fieldType }}) FilterApplier {
+		return BetweenCondition{Field: "{{ $field.GetName }}", Min: min, Max: max}
+	}
+	{{ end }}
+	{{ end }}
+	{{ end }}
+{{ end }}
+
+{{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
+   {{- if ($field | isValidLike) }}
 	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Like like condition %
     func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Like(value {{ $field | fieldType }}) FilterApplier {
       return LikeCondition{Field: "{{ $field.GetName }}", Value: value}
@@ -122,12 +136,14 @@ const TableConditionFilters = `
   {{ end }}
   {{ end }}
   {{ end }}
+  {{ end }}
 {{ end }}
 
 {{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
+   {{- if ($field | isValidLike) }}
 	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotLike not like condition
     func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotLike(value {{ $field | fieldType }}) FilterApplier {
       return NotLikeCondition{Field: "{{ $field.GetName }}", Value: value}
@@ -135,12 +151,14 @@ const TableConditionFilters = `
   {{ end }}
   {{ end }}
   {{ end }}
+  {{ end }}
 {{ end }}
 
 {{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
+   {{- if ($field | isValidNull) }}
 	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}IsNull is null condition 
     func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}IsNull() FilterApplier {
       return IsNullCondition{Field: "{{ $field.GetName }}"}
@@ -148,18 +166,21 @@ const TableConditionFilters = `
   {{ end }}
   {{ end }}
   {{ end }}
+  {{ end }}
 {{ end }}
 
 {{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
+   {{- if ($field | isValidNull) }}
 	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}IsNotNull is not null condition
     func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}IsNotNull() FilterApplier {
       return IsNotNullCondition{Field: "{{ $field.GetName }}"}
     }
-  {{ end }}
-  {{ end }}
+   {{ end }}
+   {{ end }}
+   {{ end }}
   {{ end }}
 {{ end }}
 

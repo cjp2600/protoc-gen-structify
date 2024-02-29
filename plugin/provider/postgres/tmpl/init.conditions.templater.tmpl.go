@@ -130,6 +130,28 @@ func Eq(field string, value interface{}) FilterApplier {
 	return EqualsCondition{Field: field, Value: value}
 }
 
+// BetweenCondition 
+type BetweenCondition struct {
+	Field string
+	Min   interface{}
+	Max   interface{}
+}
+
+// Apply applies the condition to the query.
+func (c BetweenCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s BETWEEN ? AND ?", c.Field), c.Min, c.Max))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c BetweenCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s BETWEEN ? AND ?", c.Field), c.Min, c.Max))
+}
+
+// Between returns a condition that checks if the field is between the min and max values.
+func Between(field string, min, max interface{}) FilterApplier {
+	return BetweenCondition{Field: field, Min: min, Max: max}
+}
+
 // NotEqualsCondition not equals condition.
 type NotEqualsCondition struct {
 	Field string

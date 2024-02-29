@@ -273,6 +273,16 @@ func AddressUserIdLTE(value string) FilterApplier {
 	return LessThanOrEqualCondition{Field: "user_id", Value: value}
 }
 
+// AddressIdBetween between condition.
+func AddressIdBetween(min, max string) FilterApplier {
+	return BetweenCondition{Field: "id", Min: min, Max: max}
+}
+
+// AddressUserIdBetween between condition.
+func AddressUserIdBetween(min, max string) FilterApplier {
+	return BetweenCondition{Field: "user_id", Min: min, Max: max}
+}
+
 // AddressIdLike like condition %
 func AddressIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "id", Value: value}
@@ -291,26 +301,6 @@ func AddressIdNotLike(value string) FilterApplier {
 // AddressUserIdNotLike not like condition
 func AddressUserIdNotLike(value string) FilterApplier {
 	return NotLikeCondition{Field: "user_id", Value: value}
-}
-
-// AddressIdIsNull is null condition
-func AddressIdIsNull() FilterApplier {
-	return IsNullCondition{Field: "id"}
-}
-
-// AddressUserIdIsNull is null condition
-func AddressUserIdIsNull() FilterApplier {
-	return IsNullCondition{Field: "user_id"}
-}
-
-// AddressIdIsNotNull is not null condition
-func AddressIdIsNotNull() FilterApplier {
-	return IsNotNullCondition{Field: "id"}
-}
-
-// AddressUserIdIsNotNull is not null condition
-func AddressUserIdIsNotNull() FilterApplier {
-	return IsNotNullCondition{Field: "user_id"}
 }
 
 // AddressIdIn condition

@@ -256,9 +256,14 @@ func SettingUserIdLTE(value string) FilterApplier {
 	return LessThanOrEqualCondition{Field: "user_id", Value: value}
 }
 
-// SettingIdLike like condition %
-func SettingIdLike(value int32) FilterApplier {
-	return LikeCondition{Field: "id", Value: value}
+// SettingIdBetween between condition.
+func SettingIdBetween(min, max int32) FilterApplier {
+	return BetweenCondition{Field: "id", Min: min, Max: max}
+}
+
+// SettingUserIdBetween between condition.
+func SettingUserIdBetween(min, max string) FilterApplier {
+	return BetweenCondition{Field: "user_id", Min: min, Max: max}
 }
 
 // SettingUserIdLike like condition %
@@ -266,34 +271,9 @@ func SettingUserIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "user_id", Value: value}
 }
 
-// SettingIdNotLike not like condition
-func SettingIdNotLike(value int32) FilterApplier {
-	return NotLikeCondition{Field: "id", Value: value}
-}
-
 // SettingUserIdNotLike not like condition
 func SettingUserIdNotLike(value string) FilterApplier {
 	return NotLikeCondition{Field: "user_id", Value: value}
-}
-
-// SettingIdIsNull is null condition
-func SettingIdIsNull() FilterApplier {
-	return IsNullCondition{Field: "id"}
-}
-
-// SettingUserIdIsNull is null condition
-func SettingUserIdIsNull() FilterApplier {
-	return IsNullCondition{Field: "user_id"}
-}
-
-// SettingIdIsNotNull is not null condition
-func SettingIdIsNotNull() FilterApplier {
-	return IsNotNullCondition{Field: "id"}
-}
-
-// SettingUserIdIsNotNull is not null condition
-func SettingUserIdIsNotNull() FilterApplier {
-	return IsNotNullCondition{Field: "user_id"}
 }
 
 // SettingIdIn condition

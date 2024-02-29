@@ -164,6 +164,11 @@ func DeviceUserIdLTE(value string) FilterApplier {
 	return LessThanOrEqualCondition{Field: "user_id", Value: value}
 }
 
+// DeviceUserIdBetween between condition.
+func DeviceUserIdBetween(min, max string) FilterApplier {
+	return BetweenCondition{Field: "user_id", Min: min, Max: max}
+}
+
 // DeviceUserIdLike like condition %
 func DeviceUserIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "user_id", Value: value}
@@ -172,16 +177,6 @@ func DeviceUserIdLike(value string) FilterApplier {
 // DeviceUserIdNotLike not like condition
 func DeviceUserIdNotLike(value string) FilterApplier {
 	return NotLikeCondition{Field: "user_id", Value: value}
-}
-
-// DeviceUserIdIsNull is null condition
-func DeviceUserIdIsNull() FilterApplier {
-	return IsNullCondition{Field: "user_id"}
-}
-
-// DeviceUserIdIsNotNull is not null condition
-func DeviceUserIdIsNotNull() FilterApplier {
-	return IsNotNullCondition{Field: "user_id"}
 }
 
 // DeviceUserIdIn condition

@@ -259,9 +259,14 @@ func PostAuthorIdLTE(value string) FilterApplier {
 	return LessThanOrEqualCondition{Field: "author_id", Value: value}
 }
 
-// PostIdLike like condition %
-func PostIdLike(value int32) FilterApplier {
-	return LikeCondition{Field: "id", Value: value}
+// PostIdBetween between condition.
+func PostIdBetween(min, max int32) FilterApplier {
+	return BetweenCondition{Field: "id", Min: min, Max: max}
+}
+
+// PostAuthorIdBetween between condition.
+func PostAuthorIdBetween(min, max string) FilterApplier {
+	return BetweenCondition{Field: "author_id", Min: min, Max: max}
 }
 
 // PostAuthorIdLike like condition %
@@ -269,34 +274,9 @@ func PostAuthorIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "author_id", Value: value}
 }
 
-// PostIdNotLike not like condition
-func PostIdNotLike(value int32) FilterApplier {
-	return NotLikeCondition{Field: "id", Value: value}
-}
-
 // PostAuthorIdNotLike not like condition
 func PostAuthorIdNotLike(value string) FilterApplier {
 	return NotLikeCondition{Field: "author_id", Value: value}
-}
-
-// PostIdIsNull is null condition
-func PostIdIsNull() FilterApplier {
-	return IsNullCondition{Field: "id"}
-}
-
-// PostAuthorIdIsNull is null condition
-func PostAuthorIdIsNull() FilterApplier {
-	return IsNullCondition{Field: "author_id"}
-}
-
-// PostIdIsNotNull is not null condition
-func PostIdIsNotNull() FilterApplier {
-	return IsNotNullCondition{Field: "id"}
-}
-
-// PostAuthorIdIsNotNull is not null condition
-func PostAuthorIdIsNotNull() FilterApplier {
-	return IsNotNullCondition{Field: "author_id"}
 }
 
 // PostIdIn condition

@@ -210,6 +210,79 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			return f == fields[len(fields)-1]
 		},
 
+		"isValidLike": func(f *descriptorpb.FieldDescriptorProto) bool {
+			switch *f.Type {
+			case descriptorpb.FieldDescriptorProto_TYPE_STRING:
+				return true
+			}
+			return false
+		},
+
+		"isValidNull": func(f *descriptorpb.FieldDescriptorProto) bool {
+			if f == nil {
+				return false
+			}
+			if opts := helperpkg.GetFieldOptions(f); opts != nil {
+				return opts.GetNullable()
+			}
+			return false
+		},
+
+		"isValidGT": func(f *descriptorpb.FieldDescriptorProto) bool {
+			if f == nil {
+				return false
+			}
+			switch *f.Type {
+			case descriptorpb.FieldDescriptorProto_TYPE_INT32:
+				return true
+			case descriptorpb.FieldDescriptorProto_TYPE_INT64:
+				return true
+			case descriptorpb.FieldDescriptorProto_TYPE_UINT32:
+				return true
+			case descriptorpb.FieldDescriptorProto_TYPE_UINT64:
+				return true
+			case descriptorpb.FieldDescriptorProto_TYPE_STRING:
+				return true
+			case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
+				return true
+			case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
+				parts := strings.Split(f.GetTypeName(), ".")
+				typName := parts[len(parts)-1]
+				if typName == "Timestamp" && parts[len(parts)-2] == "protobuf" && parts[len(parts)-3] == "google" {
+					return true
+				}
+			}
+			return false
+		},
+
+		// isValidEq returns the field type.
+		"isValidEq": func(f *descriptorpb.FieldDescriptorProto) bool {
+			switch *f.Type {
+			case descriptorpb.FieldDescriptorProto_TYPE_STRING:
+				return true
+			case descriptorpb.FieldDescriptorProto_TYPE_INT32:
+				return true
+			case descriptorpb.FieldDescriptorProto_TYPE_INT64:
+				return true
+			case descriptorpb.FieldDescriptorProto_TYPE_UINT32:
+				return true
+			case descriptorpb.FieldDescriptorProto_TYPE_UINT64:
+				return true
+			case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
+				return true
+			case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
+				return true
+			case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
+				parts := strings.Split(f.GetTypeName(), ".")
+				typName := parts[len(parts)-1]
+				if typName == "Timestamp" && parts[len(parts)-2] == "protobuf" && parts[len(parts)-3] == "google" {
+					return true
+				}
+			}
+
+			return false
+		},
+
 		// getDefaultValue returns the default value.
 		"getDefaultValue": func(f *descriptorpb.FieldDescriptorProto) string {
 			if opts := helperpkg.GetFieldOptions(f); opts != nil {

@@ -490,14 +490,24 @@ func UserEmailLTE(value string) FilterApplier {
 	return LessThanOrEqualCondition{Field: "email", Value: value}
 }
 
+// UserIdBetween between condition.
+func UserIdBetween(min, max string) FilterApplier {
+	return BetweenCondition{Field: "id", Min: min, Max: max}
+}
+
+// UserAgeBetween between condition.
+func UserAgeBetween(min, max int32) FilterApplier {
+	return BetweenCondition{Field: "age", Min: min, Max: max}
+}
+
+// UserEmailBetween between condition.
+func UserEmailBetween(min, max string) FilterApplier {
+	return BetweenCondition{Field: "email", Min: min, Max: max}
+}
+
 // UserIdLike like condition %
 func UserIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "id", Value: value}
-}
-
-// UserAgeLike like condition %
-func UserAgeLike(value int32) FilterApplier {
-	return LikeCondition{Field: "age", Value: value}
 }
 
 // UserEmailLike like condition %
@@ -510,44 +520,9 @@ func UserIdNotLike(value string) FilterApplier {
 	return NotLikeCondition{Field: "id", Value: value}
 }
 
-// UserAgeNotLike not like condition
-func UserAgeNotLike(value int32) FilterApplier {
-	return NotLikeCondition{Field: "age", Value: value}
-}
-
 // UserEmailNotLike not like condition
 func UserEmailNotLike(value string) FilterApplier {
 	return NotLikeCondition{Field: "email", Value: value}
-}
-
-// UserIdIsNull is null condition
-func UserIdIsNull() FilterApplier {
-	return IsNullCondition{Field: "id"}
-}
-
-// UserAgeIsNull is null condition
-func UserAgeIsNull() FilterApplier {
-	return IsNullCondition{Field: "age"}
-}
-
-// UserEmailIsNull is null condition
-func UserEmailIsNull() FilterApplier {
-	return IsNullCondition{Field: "email"}
-}
-
-// UserIdIsNotNull is not null condition
-func UserIdIsNotNull() FilterApplier {
-	return IsNotNullCondition{Field: "id"}
-}
-
-// UserAgeIsNotNull is not null condition
-func UserAgeIsNotNull() FilterApplier {
-	return IsNotNullCondition{Field: "age"}
-}
-
-// UserEmailIsNotNull is not null condition
-func UserEmailIsNotNull() FilterApplier {
-	return IsNotNullCondition{Field: "email"}
 }
 
 // UserIdIn condition
