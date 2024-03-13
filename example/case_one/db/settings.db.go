@@ -597,6 +597,9 @@ func (t *settingStorage) SelectForUpdate(ctx context.Context, builders ...*Query
 	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
 	var model Setting
 	if err := model.ScanRow(row); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrRowNotFound
+		}
 		return nil, fmt.Errorf("failed to scan Setting: %w", err)
 	}
 

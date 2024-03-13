@@ -441,6 +441,9 @@ func (t *deviceStorage) SelectForUpdate(ctx context.Context, builders ...*QueryB
 	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
 	var model Device
 	if err := model.ScanRow(row); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrRowNotFound
+		}
 		return nil, fmt.Errorf("failed to scan Device: %w", err)
 	}
 

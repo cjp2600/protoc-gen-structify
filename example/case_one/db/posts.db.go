@@ -600,6 +600,9 @@ func (t *postStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBui
 	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
 	var model Post
 	if err := model.ScanRow(row); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrRowNotFound
+		}
 		return nil, fmt.Errorf("failed to scan Post: %w", err)
 	}
 

@@ -282,9 +282,12 @@ func (t *{{ storageName | lowerCamelCase }}) SelectForUpdate(ctx context.Context
 
 	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
 	var model {{ structureName }}
-	if err := model.ScanRow(row); err != nil {
-		return nil, fmt.Errorf("failed to scan {{ structureName }}: %w", err)
-	}
+    if err := model.ScanRow(row); err != nil {
+        if errors.Is(err, sql.ErrNoRows){
+            return nil, ErrRowNotFound
+        }
+        return nil, fmt.Errorf("failed to scan {{ structureName }}: %w", err)
+    }
 
 	return &model, nil
 }
