@@ -26,7 +26,7 @@ type DeviceStorage interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*Device, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Device, error)
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
-	LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error
+	SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Device, error)
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Device, *Paginator, error)
 }
 
@@ -416,8 +416,8 @@ func (t *deviceStorage) FindManyWithPagination(ctx context.Context, limit int, p
 	return records, paginator, nil
 }
 
-// LockForUpdate lock locks the Device for the given ID.
-func (t *deviceStorage) LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error {
+// SelectForUpdate lock locks the Device for the given ID.
+func (t *deviceStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Device, error) {
 	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName()).Suffix("FOR UPDATE")
 
 	// apply options from builder
@@ -435,14 +435,14 @@ func (t *deviceStorage) LockForUpdate(ctx context.Context, builders ...*QueryBui
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 
 	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
 	var model Device
 	if err := model.ScanRow(row); err != nil {
-		return fmt.Errorf("failed to scan Device: %w", err)
+		return nil, fmt.Errorf("failed to scan Device: %w", err)
 	}
 
-	return nil
+	return &model, nil
 }

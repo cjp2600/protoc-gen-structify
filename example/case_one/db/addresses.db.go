@@ -29,7 +29,7 @@ type AddressStorage interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*Address, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Address, error)
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
-	LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error
+	SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Address, error)
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Address, *Paginator, error)
 	LoadUser(ctx context.Context, model *Address, builders ...*QueryBuilder) error
 	LoadBatchUser(ctx context.Context, items []*Address, builders ...*QueryBuilder) error
@@ -623,8 +623,8 @@ func (t *addressStorage) FindManyWithPagination(ctx context.Context, limit int, 
 	return records, paginator, nil
 }
 
-// LockForUpdate lock locks the Address for the given ID.
-func (t *addressStorage) LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error {
+// SelectForUpdate lock locks the Address for the given ID.
+func (t *addressStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Address, error) {
 	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName()).Suffix("FOR UPDATE")
 
 	// apply options from builder
@@ -642,14 +642,14 @@ func (t *addressStorage) LockForUpdate(ctx context.Context, builders ...*QueryBu
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 
 	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
 	var model Address
 	if err := model.ScanRow(row); err != nil {
-		return fmt.Errorf("failed to scan Address: %w", err)
+		return nil, fmt.Errorf("failed to scan Address: %w", err)
 	}
 
-	return nil
+	return &model, nil
 }

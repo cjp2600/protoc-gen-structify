@@ -29,7 +29,7 @@ type UserStorage interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*User, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*User, error)
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
-	LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error
+	SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*User, error)
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*User, *Paginator, error)
 	LoadDevice(ctx context.Context, model *User, builders ...*QueryBuilder) error
 	LoadSettings(ctx context.Context, model *User, builders ...*QueryBuilder) error
@@ -947,8 +947,8 @@ func (t *userStorage) FindManyWithPagination(ctx context.Context, limit int, pag
 	return records, paginator, nil
 }
 
-// LockForUpdate lock locks the User for the given ID.
-func (t *userStorage) LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error {
+// SelectForUpdate lock locks the User for the given ID.
+func (t *userStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*User, error) {
 	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName()).Suffix("FOR UPDATE")
 
 	// apply options from builder
@@ -966,14 +966,14 @@ func (t *userStorage) LockForUpdate(ctx context.Context, builders ...*QueryBuild
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 
 	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
 	var model User
 	if err := model.ScanRow(row); err != nil {
-		return fmt.Errorf("failed to scan User: %w", err)
+		return nil, fmt.Errorf("failed to scan User: %w", err)
 	}
 
-	return nil
+	return &model, nil
 }

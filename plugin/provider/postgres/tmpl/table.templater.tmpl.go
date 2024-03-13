@@ -258,8 +258,8 @@ func (t *{{ storageName | lowerCamelCase }}) FindManyWithPagination(ctx context.
 `
 
 const TableLockMethodTemplate = `
-// LockForUpdate lock locks the {{ structureName }} for the given ID.
-func (t *{{ storageName | lowerCamelCase }}) LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error {
+// SelectForUpdate lock locks the {{ structureName }} for the given ID.
+func (t *{{ storageName | lowerCamelCase }}) SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*{{structureName}}, error) {
 	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName()).Suffix("FOR UPDATE")
 
 	// apply options from builder
@@ -277,16 +277,16 @@ func (t *{{ storageName | lowerCamelCase }}) LockForUpdate(ctx context.Context, 
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 
 	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
 	var model {{ structureName }}
 	if err := model.ScanRow(row); err != nil {
-		return fmt.Errorf("failed to scan {{ structureName }}: %w", err)
+		return nil, fmt.Errorf("failed to scan {{ structureName }}: %w", err)
 	}
 
-	return nil
+	return &model, nil
 }
 `
 
@@ -663,7 +663,7 @@ type {{ storageName }} interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*{{structureName}}, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*{{structureName}}, error)
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
-	LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error
+	SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*{{structureName}}, error)
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*{{structureName}}, *Paginator, error)
 	{{- range $index, $field := fields }}
 	{{- if and ($field | isRelation) }}

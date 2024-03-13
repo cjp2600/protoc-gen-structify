@@ -28,7 +28,7 @@ type SettingStorage interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*Setting, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Setting, error)
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
-	LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error
+	SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Setting, error)
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Setting, *Paginator, error)
 	LoadUser(ctx context.Context, model *Setting, builders ...*QueryBuilder) error
 	LoadBatchUser(ctx context.Context, items []*Setting, builders ...*QueryBuilder) error
@@ -572,8 +572,8 @@ func (t *settingStorage) FindManyWithPagination(ctx context.Context, limit int, 
 	return records, paginator, nil
 }
 
-// LockForUpdate lock locks the Setting for the given ID.
-func (t *settingStorage) LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error {
+// SelectForUpdate lock locks the Setting for the given ID.
+func (t *settingStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Setting, error) {
 	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName()).Suffix("FOR UPDATE")
 
 	// apply options from builder
@@ -591,14 +591,14 @@ func (t *settingStorage) LockForUpdate(ctx context.Context, builders ...*QueryBu
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 
 	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
 	var model Setting
 	if err := model.ScanRow(row); err != nil {
-		return fmt.Errorf("failed to scan Setting: %w", err)
+		return nil, fmt.Errorf("failed to scan Setting: %w", err)
 	}
 
-	return nil
+	return &model, nil
 }

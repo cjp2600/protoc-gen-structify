@@ -28,7 +28,7 @@ type PostStorage interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*Post, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Post, error)
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
-	LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error
+	SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Post, error)
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Post, *Paginator, error)
 	LoadAuthor(ctx context.Context, model *Post, builders ...*QueryBuilder) error
 	LoadBatchAuthor(ctx context.Context, items []*Post, builders ...*QueryBuilder) error
@@ -575,8 +575,8 @@ func (t *postStorage) FindManyWithPagination(ctx context.Context, limit int, pag
 	return records, paginator, nil
 }
 
-// LockForUpdate lock locks the Post for the given ID.
-func (t *postStorage) LockForUpdate(ctx context.Context, builders ...*QueryBuilder) error {
+// SelectForUpdate lock locks the Post for the given ID.
+func (t *postStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Post, error) {
 	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName()).Suffix("FOR UPDATE")
 
 	// apply options from builder
@@ -594,14 +594,14 @@ func (t *postStorage) LockForUpdate(ctx context.Context, builders ...*QueryBuild
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 
 	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
 	var model Post
 	if err := model.ScanRow(row); err != nil {
-		return fmt.Errorf("failed to scan Post: %w", err)
+		return nil, fmt.Errorf("failed to scan Post: %w", err)
 	}
 
-	return nil
+	return &model, nil
 }
