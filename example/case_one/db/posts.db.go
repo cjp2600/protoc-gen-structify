@@ -24,6 +24,7 @@ type PostStorage interface {
 	Create(ctx context.Context, model *Post, opts ...Option) (*int32, error)
 	Update(ctx context.Context, id int32, updateData *PostUpdate) error
 	DeleteById(ctx context.Context, id int32, opts ...Option) error
+	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
 	FindById(ctx context.Context, id int32, opts ...Option) (*Post, error)
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*Post, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Post, error)
@@ -411,6 +412,41 @@ func (t *postStorage) DeleteById(ctx context.Context, id int32, opts ...Option) 
 	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return fmt.Errorf("failed to delete Post: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteMany removes entries from the posts table using the provided filters
+func (t *postStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilder) error {
+	// build query
+	query := t.queryBuilder.Delete("posts")
+
+	var withFilter bool
+	for _, builder := range builders {
+		if builder == nil {
+			continue
+		}
+
+		// apply filter options
+		for _, option := range builder.filterOptions {
+			query = option.ApplyDelete(query)
+			withFilter = true
+		}
+	}
+
+	if !withFilter {
+		return errors.New("filters are required for delete operation")
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return fmt.Errorf("failed to delete Address: %w", err)
 	}
 
 	return nil

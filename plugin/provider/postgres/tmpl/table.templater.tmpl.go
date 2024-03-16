@@ -452,6 +452,41 @@ func (t *{{ storageName | lowerCamelCase }}) DeleteBy{{ getPrimaryKey.GetName | 
 
 	return nil
 }
+
+// DeleteMany removes entries from the {{ tableName }} table using the provided filters
+func (t *{{ storageName | lowerCamelCase }}) DeleteMany(ctx context.Context, builders ...*QueryBuilder) error {
+	// build query
+	query := t.queryBuilder.Delete("{{ tableName }}")
+
+	var withFilter bool
+	for _, builder := range builders {
+		if builder == nil {
+			continue
+		}
+
+		// apply filter options
+		for _, option := range builder.filterOptions {
+			query = option.ApplyDelete(query)
+			withFilter = true
+		}
+	}
+
+	if !withFilter {
+		return errors.New("filters are required for delete operation")
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return fmt.Errorf("failed to delete Address: %w", err)
+	}
+	
+	return nil
+}
 `
 
 const TableUpdateMethodTemplate = `
@@ -660,6 +695,7 @@ type {{ storageName }} interface {
 	{{- if (hasPrimaryKey) }}
 	DeleteBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, {{getPrimaryKey.GetName}} {{IDType}}, opts ...Option) error
 	{{- end }}
+	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error 
 	{{- if (hasPrimaryKey) }}
 	FindBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}, opts ...Option) (*{{ structureName }}, error)
 	{{- end }}

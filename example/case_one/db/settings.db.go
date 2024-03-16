@@ -24,6 +24,7 @@ type SettingStorage interface {
 	Create(ctx context.Context, model *Setting, opts ...Option) (*int32, error)
 	Update(ctx context.Context, id int32, updateData *SettingUpdate) error
 	DeleteById(ctx context.Context, id int32, opts ...Option) error
+	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
 	FindById(ctx context.Context, id int32, opts ...Option) (*Setting, error)
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*Setting, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Setting, error)
@@ -408,6 +409,41 @@ func (t *settingStorage) DeleteById(ctx context.Context, id int32, opts ...Optio
 	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return fmt.Errorf("failed to delete Setting: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteMany removes entries from the settings table using the provided filters
+func (t *settingStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilder) error {
+	// build query
+	query := t.queryBuilder.Delete("settings")
+
+	var withFilter bool
+	for _, builder := range builders {
+		if builder == nil {
+			continue
+		}
+
+		// apply filter options
+		for _, option := range builder.filterOptions {
+			query = option.ApplyDelete(query)
+			withFilter = true
+		}
+	}
+
+	if !withFilter {
+		return errors.New("filters are required for delete operation")
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return fmt.Errorf("failed to delete Address: %w", err)
 	}
 
 	return nil

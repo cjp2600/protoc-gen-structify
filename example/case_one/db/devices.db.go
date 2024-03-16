@@ -23,6 +23,7 @@ type DeviceStorage interface {
 	UpgradeTable(ctx context.Context) error
 	Create(ctx context.Context, model *Device, opts ...Option) error
 	Update(ctx context.Context, id int64, updateData *DeviceUpdate) error
+	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*Device, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Device, error)
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)

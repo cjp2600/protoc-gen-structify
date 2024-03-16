@@ -25,6 +25,7 @@ type UserStorage interface {
 	Create(ctx context.Context, model *User, opts ...Option) (*string, error)
 	Update(ctx context.Context, id string, updateData *UserUpdate) error
 	DeleteById(ctx context.Context, id string, opts ...Option) error
+	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
 	FindById(ctx context.Context, id string, opts ...Option) (*User, error)
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*User, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*User, error)
@@ -783,6 +784,41 @@ func (t *userStorage) DeleteById(ctx context.Context, id string, opts ...Option)
 	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return fmt.Errorf("failed to delete User: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteMany removes entries from the users table using the provided filters
+func (t *userStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilder) error {
+	// build query
+	query := t.queryBuilder.Delete("users")
+
+	var withFilter bool
+	for _, builder := range builders {
+		if builder == nil {
+			continue
+		}
+
+		// apply filter options
+		for _, option := range builder.filterOptions {
+			query = option.ApplyDelete(query)
+			withFilter = true
+		}
+	}
+
+	if !withFilter {
+		return errors.New("filters are required for delete operation")
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return fmt.Errorf("failed to delete Address: %w", err)
 	}
 
 	return nil
