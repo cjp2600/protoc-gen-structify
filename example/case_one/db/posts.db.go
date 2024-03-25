@@ -16,23 +16,52 @@ type postStorage struct {
 	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
 }
 
-type PostStorage interface {
+// PostTableManager is an interface for managing the posts table.
+type PostTableManager interface {
 	CreateTable(ctx context.Context) error
 	DropTable(ctx context.Context) error
 	TruncateTable(ctx context.Context) error
 	UpgradeTable(ctx context.Context) error
+}
+
+// PostCRUDOperations is an interface for managing the posts table.
+type PostCRUDOperations interface {
 	Create(ctx context.Context, model *Post, opts ...Option) (*int32, error)
 	Update(ctx context.Context, id int32, updateData *PostUpdate) error
 	DeleteById(ctx context.Context, id int32, opts ...Option) error
-	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
 	FindById(ctx context.Context, id int32, opts ...Option) (*Post, error)
+}
+
+// PostSearchOperations is an interface for searching the posts table.
+type PostSearchOperations interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*Post, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Post, error)
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
 	SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Post, error)
+}
+
+// PostPaginationOperations is an interface for pagination operations.
+type PostPaginationOperations interface {
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Post, *Paginator, error)
+}
+
+type PostRelationLoading interface {
 	LoadAuthor(ctx context.Context, model *Post, builders ...*QueryBuilder) error
 	LoadBatchAuthor(ctx context.Context, items []*Post, builders ...*QueryBuilder) error
+}
+
+type PostAdvancedDeletion interface {
+	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
+}
+
+// PostStorage is a struct for the "posts" table.
+type PostStorage interface {
+	PostTableManager
+	PostCRUDOperations
+	PostSearchOperations
+	PostPaginationOperations
+	PostRelationLoading
+	PostAdvancedDeletion
 }
 
 // NewPostStorage returns a new postStorage.

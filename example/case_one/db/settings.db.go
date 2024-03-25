@@ -16,23 +16,52 @@ type settingStorage struct {
 	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
 }
 
-type SettingStorage interface {
+// SettingTableManager is an interface for managing the settings table.
+type SettingTableManager interface {
 	CreateTable(ctx context.Context) error
 	DropTable(ctx context.Context) error
 	TruncateTable(ctx context.Context) error
 	UpgradeTable(ctx context.Context) error
+}
+
+// SettingCRUDOperations is an interface for managing the settings table.
+type SettingCRUDOperations interface {
 	Create(ctx context.Context, model *Setting, opts ...Option) (*int32, error)
 	Update(ctx context.Context, id int32, updateData *SettingUpdate) error
 	DeleteById(ctx context.Context, id int32, opts ...Option) error
-	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
 	FindById(ctx context.Context, id int32, opts ...Option) (*Setting, error)
+}
+
+// SettingSearchOperations is an interface for searching the settings table.
+type SettingSearchOperations interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*Setting, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Setting, error)
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
 	SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Setting, error)
+}
+
+// SettingPaginationOperations is an interface for pagination operations.
+type SettingPaginationOperations interface {
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Setting, *Paginator, error)
+}
+
+type SettingRelationLoading interface {
 	LoadUser(ctx context.Context, model *Setting, builders ...*QueryBuilder) error
 	LoadBatchUser(ctx context.Context, items []*Setting, builders ...*QueryBuilder) error
+}
+
+type SettingAdvancedDeletion interface {
+	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
+}
+
+// SettingStorage is a struct for the "settings" table.
+type SettingStorage interface {
+	SettingTableManager
+	SettingCRUDOperations
+	SettingSearchOperations
+	SettingPaginationOperations
+	SettingRelationLoading
+	SettingAdvancedDeletion
 }
 
 // NewSettingStorage returns a new settingStorage.

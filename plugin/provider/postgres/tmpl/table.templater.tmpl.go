@@ -6,9 +6,7 @@ const TableTemplate = `
 {{ template "table_conditions" . }}
 {{ template "create_method" . }}
 {{ template "update_method" . }}
-{{- if (hasPrimaryKey) }}
 {{ template "delete_method" . }}
-{{- end }}
 {{- if (hasPrimaryKey) }}
 {{ template "get_by_id_method" . }}
 {{- end }}
@@ -430,6 +428,7 @@ func (t *{{ storageName | lowerCamelCase }}) FindBy{{ getPrimaryKey.GetName | ca
 `
 
 const TableDeleteMethodTemplate = `
+{{- if (hasPrimaryKey) }}
 // DeleteBy{{ getPrimaryKey.GetName | camelCase }} - deletes a {{ structureName }} by its {{ getPrimaryKey.GetName }}.
 func (t *{{ storageName | lowerCamelCase }}) DeleteBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, {{getPrimaryKey.GetName}} {{IDType}}, opts ...Option) error {
 	// set default options
@@ -452,6 +451,7 @@ func (t *{{ storageName | lowerCamelCase }}) DeleteBy{{ getPrimaryKey.GetName | 
 
 	return nil
 }
+{{- end }}
 
 // DeleteMany removes entries from the {{ tableName }} table using the provided filters
 func (t *{{ storageName | lowerCamelCase }}) DeleteMany(ctx context.Context, builders ...*QueryBuilder) error {
@@ -681,11 +681,16 @@ type {{ storageName | lowerCamelCase }} struct {
 	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
 }
 
-type {{ storageName }} interface {
+// {{structureName}}TableManager is an interface for managing the {{ tableName }} table.
+type {{structureName}}TableManager interface {
 	CreateTable(ctx context.Context) error
 	DropTable(ctx context.Context) error
 	TruncateTable(ctx context.Context) error
 	UpgradeTable(ctx context.Context) error
+}
+
+// {{structureName}}CRUDOperations is an interface for managing the {{ tableName }} table.
+type {{structureName}}CRUDOperations interface {
 	{{- if (hasID) }}
 	Create(ctx context.Context, model *{{structureName}}, opts ...Option) (*{{IDType}}, error)
 	{{- else }} 
@@ -695,15 +700,25 @@ type {{ storageName }} interface {
 	{{- if (hasPrimaryKey) }}
 	DeleteBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, {{getPrimaryKey.GetName}} {{IDType}}, opts ...Option) error
 	{{- end }}
-	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error 
 	{{- if (hasPrimaryKey) }}
 	FindBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}, opts ...Option) (*{{ structureName }}, error)
 	{{- end }}
+}
+
+// {{structureName}}SearchOperations is an interface for searching the {{ tableName }} table.
+type {{structureName}}SearchOperations interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*{{structureName}}, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*{{structureName}}, error)
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
 	SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*{{structureName}}, error)
+}
+
+// {{structureName}}PaginationOperations is an interface for pagination operations.
+type {{structureName}}PaginationOperations interface {
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*{{structureName}}, *Paginator, error)
+}
+
+type {{structureName}}RelationLoading interface {
 	{{- range $index, $field := fields }}
 	{{- if and ($field | isRelation) }}
 	Load{{ $field | pluralFieldName }} (ctx context.Context, model *{{structureName}}, builders ...*QueryBuilder) error
@@ -714,6 +729,20 @@ type {{ storageName }} interface {
 	LoadBatch{{ $field | pluralFieldName }} (ctx context.Context, items []*{{structureName}}, builders ...*QueryBuilder) error
 	{{- end }}
 	{{- end }}
+}
+
+type {{structureName}}AdvancedDeletion interface {
+	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
+}
+
+// {{ storageName }} is a struct for the "{{ tableName }}" table.
+type {{ storageName }} interface {
+    {{structureName}}TableManager
+	{{structureName}}CRUDOperations
+	{{structureName}}SearchOperations
+	{{structureName}}PaginationOperations
+	{{structureName}}RelationLoading
+	{{structureName}}AdvancedDeletion
 }
 
 // New{{ storageName }} returns a new {{ storageName | lowerCamelCase }}.

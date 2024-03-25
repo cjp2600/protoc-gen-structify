@@ -16,19 +16,48 @@ type deviceStorage struct {
 	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
 }
 
-type DeviceStorage interface {
+// DeviceTableManager is an interface for managing the devices table.
+type DeviceTableManager interface {
 	CreateTable(ctx context.Context) error
 	DropTable(ctx context.Context) error
 	TruncateTable(ctx context.Context) error
 	UpgradeTable(ctx context.Context) error
+}
+
+// DeviceCRUDOperations is an interface for managing the devices table.
+type DeviceCRUDOperations interface {
 	Create(ctx context.Context, model *Device, opts ...Option) error
 	Update(ctx context.Context, id int64, updateData *DeviceUpdate) error
-	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
+}
+
+// DeviceSearchOperations is an interface for searching the devices table.
+type DeviceSearchOperations interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*Device, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Device, error)
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
 	SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Device, error)
+}
+
+// DevicePaginationOperations is an interface for pagination operations.
+type DevicePaginationOperations interface {
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Device, *Paginator, error)
+}
+
+type DeviceRelationLoading interface {
+}
+
+type DeviceAdvancedDeletion interface {
+	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
+}
+
+// DeviceStorage is a struct for the "devices" table.
+type DeviceStorage interface {
+	DeviceTableManager
+	DeviceCRUDOperations
+	DeviceSearchOperations
+	DevicePaginationOperations
+	DeviceRelationLoading
+	DeviceAdvancedDeletion
 }
 
 // NewDeviceStorage returns a new deviceStorage.
@@ -270,6 +299,41 @@ func (t *deviceStorage) Update(ctx context.Context, id int64, updateData *Device
 	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update Device: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteMany removes entries from the devices table using the provided filters
+func (t *deviceStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilder) error {
+	// build query
+	query := t.queryBuilder.Delete("devices")
+
+	var withFilter bool
+	for _, builder := range builders {
+		if builder == nil {
+			continue
+		}
+
+		// apply filter options
+		for _, option := range builder.filterOptions {
+			query = option.ApplyDelete(query)
+			withFilter = true
+		}
+	}
+
+	if !withFilter {
+		return errors.New("filters are required for delete operation")
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+
+	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return fmt.Errorf("failed to delete Address: %w", err)
 	}
 
 	return nil

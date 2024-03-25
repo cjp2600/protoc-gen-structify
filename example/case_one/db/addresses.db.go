@@ -17,23 +17,52 @@ type addressStorage struct {
 	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
 }
 
-type AddressStorage interface {
+// AddressTableManager is an interface for managing the addresses table.
+type AddressTableManager interface {
 	CreateTable(ctx context.Context) error
 	DropTable(ctx context.Context) error
 	TruncateTable(ctx context.Context) error
 	UpgradeTable(ctx context.Context) error
+}
+
+// AddressCRUDOperations is an interface for managing the addresses table.
+type AddressCRUDOperations interface {
 	Create(ctx context.Context, model *Address, opts ...Option) (*string, error)
 	Update(ctx context.Context, id string, updateData *AddressUpdate) error
 	DeleteById(ctx context.Context, id string, opts ...Option) error
-	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
 	FindById(ctx context.Context, id string, opts ...Option) (*Address, error)
+}
+
+// AddressSearchOperations is an interface for searching the addresses table.
+type AddressSearchOperations interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*Address, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Address, error)
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
 	SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Address, error)
+}
+
+// AddressPaginationOperations is an interface for pagination operations.
+type AddressPaginationOperations interface {
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Address, *Paginator, error)
+}
+
+type AddressRelationLoading interface {
 	LoadUser(ctx context.Context, model *Address, builders ...*QueryBuilder) error
 	LoadBatchUser(ctx context.Context, items []*Address, builders ...*QueryBuilder) error
+}
+
+type AddressAdvancedDeletion interface {
+	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
+}
+
+// AddressStorage is a struct for the "addresses" table.
+type AddressStorage interface {
+	AddressTableManager
+	AddressCRUDOperations
+	AddressSearchOperations
+	AddressPaginationOperations
+	AddressRelationLoading
+	AddressAdvancedDeletion
 }
 
 // NewAddressStorage returns a new addressStorage.

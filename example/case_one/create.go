@@ -9,6 +9,18 @@ import (
 	"github.com/cjp2600/protoc-gen-structify/example/case_one/db"
 )
 
+type userServiceStr struct {
+	store db.UserCRUDOperations // use minimal interface
+}
+
+func newUserService(store db.UserCRUDOperations) *userServiceStr {
+	return &userServiceStr{store: store}
+}
+
+func (u *userServiceStr) Create(ctx context.Context, user *db.User, relations db.Option) (*string, error) {
+	return u.store.Create(ctx, user, db.WithRelations())
+}
+
 func main() {
 	connection, err := db.Open(db.Dsn(
 		"localhost",
@@ -29,6 +41,7 @@ func main() {
 
 	store := db.NewBlogStorages(connection)
 	userStorage := store.GetUserStorage()
+	userService := newUserService(userStorage)
 	{
 		if err := store.CreateTables(ctx); err != nil {
 			panic(err)
@@ -39,7 +52,7 @@ func main() {
 	err = store.TxManager().ExecFuncWithTx(ctx, func(ctx context.Context) error {
 
 		// Create user with all fields and relations
-		id, err := userStorage.Create(ctx, &db.User{
+		id, err := userService.Create(ctx, &db.User{
 			Name:  "John",
 			Age:   21,
 			Email: "example@mail.com",

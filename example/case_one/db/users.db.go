@@ -17,21 +17,36 @@ type userStorage struct {
 	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
 }
 
-type UserStorage interface {
+// UserTableManager is an interface for managing the users table.
+type UserTableManager interface {
 	CreateTable(ctx context.Context) error
 	DropTable(ctx context.Context) error
 	TruncateTable(ctx context.Context) error
 	UpgradeTable(ctx context.Context) error
+}
+
+// UserCRUDOperations is an interface for managing the users table.
+type UserCRUDOperations interface {
 	Create(ctx context.Context, model *User, opts ...Option) (*string, error)
 	Update(ctx context.Context, id string, updateData *UserUpdate) error
 	DeleteById(ctx context.Context, id string, opts ...Option) error
-	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
 	FindById(ctx context.Context, id string, opts ...Option) (*User, error)
+}
+
+// UserSearchOperations is an interface for searching the users table.
+type UserSearchOperations interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*User, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*User, error)
 	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
 	SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*User, error)
+}
+
+// UserPaginationOperations is an interface for pagination operations.
+type UserPaginationOperations interface {
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*User, *Paginator, error)
+}
+
+type UserRelationLoading interface {
 	LoadDevice(ctx context.Context, model *User, builders ...*QueryBuilder) error
 	LoadSettings(ctx context.Context, model *User, builders ...*QueryBuilder) error
 	LoadAddresses(ctx context.Context, model *User, builders ...*QueryBuilder) error
@@ -40,6 +55,20 @@ type UserStorage interface {
 	LoadBatchSettings(ctx context.Context, items []*User, builders ...*QueryBuilder) error
 	LoadBatchAddresses(ctx context.Context, items []*User, builders ...*QueryBuilder) error
 	LoadBatchPosts(ctx context.Context, items []*User, builders ...*QueryBuilder) error
+}
+
+type UserAdvancedDeletion interface {
+	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
+}
+
+// UserStorage is a struct for the "users" table.
+type UserStorage interface {
+	UserTableManager
+	UserCRUDOperations
+	UserSearchOperations
+	UserPaginationOperations
+	UserRelationLoading
+	UserAdvancedDeletion
 }
 
 // NewUserStorage returns a new userStorage.
