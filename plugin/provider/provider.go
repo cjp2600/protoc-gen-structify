@@ -3,10 +3,12 @@ package provider
 import (
 	"errors"
 
+	plugingo "github.com/golang/protobuf/protoc-gen-go/plugin"
+
 	helperpkg "github.com/cjp2600/protoc-gen-structify/plugin/pkg/helper"
 	"github.com/cjp2600/protoc-gen-structify/plugin/provider/postgres"
+	"github.com/cjp2600/protoc-gen-structify/plugin/provider/sqlite"
 	statepkg "github.com/cjp2600/protoc-gen-structify/plugin/state"
-	plugingo "github.com/golang/protobuf/protoc-gen-go/plugin"
 )
 
 // TemplateBuilder is a type for providing content.
@@ -28,8 +30,8 @@ func GetTemplateBuilder(request *plugingo.CodeGeneratorRequest) (TemplateBuilder
 		switch ParseFromString(opts.GetProvider()) {
 		case Postgres:
 			return &postgres.Postgres{}, nil
-		case Mysql:
-			// Return MySQL provider
+		case Sqlite:
+			return &sqlite.Sqlite{}, nil
 		}
 	}
 	return nil, ErrUnsupportedProvider

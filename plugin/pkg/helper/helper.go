@@ -180,6 +180,47 @@ func PostgresType(goType string, options *structify.StructifyFieldOptions, isJso
 	return t
 }
 
+func SQLiteType(goType string, options *structify.StructifyFieldOptions, isJson bool) string {
+	t := GoTypeToSQLiteType(goType)
+
+	if options != nil {
+		if options.Uuid {
+			return "TEXT"
+		}
+		if options.Json {
+			return "TEXT"
+		}
+	}
+
+	if isJson {
+		return "TEXT"
+	}
+
+	return t
+}
+
+// GoTypeToSQLiteType returns the postgres type for the given type.
+func GoTypeToSQLiteType(goType string) string {
+	goType = strings.TrimPrefix(goType, "*")
+	switch goType {
+	case "string":
+		return "TEXT"
+	case "bool":
+		return "INTEGER" // В SQLite булевы значения представлены как 0 (ложь) и 1 (истина)
+	case "int", "int32", "int64":
+		return "INTEGER" // SQLite использует динамический тип INTEGER, который поддерживает различные размеры
+	case "float32", "float64":
+		return "REAL" // В SQLite для чисел с плавающей точкой используется REAL
+	case "time.Time":
+		return "TEXT" // В SQLite даты часто хранятся в текстовом формате в ISO8601
+	case "[]byte":
+		return "BLOB" // Для двоичных данных в SQLite используется тип BLOB
+	// Добавьте дополнительные кейсы по мере необходимости
+	default:
+		return "TEXT" // Текстовый тип используется как общий тип по умолчанию
+	}
+}
+
 // GoTypeToPostgresType returns the postgres type for the given type.
 func GoTypeToPostgresType(goType string) string {
 	goType = strings.TrimPrefix(goType, "*")
@@ -241,6 +282,15 @@ func ClearPointer(s string) string {
 	s = strings.ReplaceAll(s, "[]", "")
 	s = strings.ReplaceAll(s, "*", "")
 	return s
+}
+
+func ConvertTypeSQLite(field *descriptorpb.FieldDescriptorProto) string {
+	converted := ConvertType(field)
+	if strings.Contains(converted, "time.Time") {
+		converted = strings.ReplaceAll(converted, "time.Time", "string")
+	}
+
+	return converted
 }
 
 // ConvertType converts a protobuf type to a Go type.

@@ -601,6 +601,19 @@ const TableCreateMethodTemplate = `
 		{{ if (hasID) }}return nil, errors.New("model is nil") {{ else }}return errors.New("model is nil") {{ end }}
 	}
 
+	{{- range $index, $field := fields }}
+	{{- if and ($field | isUUID) ($field | isPrimaryKey) (not ($field | isAutoIncrement)) }}
+	if model.{{ $field | fieldName }} == "" {
+		uuidStr, err := uuid.NewUUID()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate uuid for {{ structureName }}: %w", err)
+		}
+
+		model.{{ $field | fieldName }} = uuidStr.String()
+	}
+	{{- end}}
+	{{- end}}
+
 	// set default options
 	options := &Options{}
 	for _, o := range opts {
@@ -659,10 +672,6 @@ const TableCreateMethodTemplate = `
 	{{ if (hasID) }}var id {{IDType}}
 	err = t.DB(ctx).QueryRowContext(ctx,sqlQuery, args...).Scan(&id) {{ else }} _, err = t.DB(ctx).ExecContext(ctx,sqlQuery, args...) {{ end }}
 	if err != nil {
-		if IsPgUniqueViolation(err) {
-			{{ if (hasID) }}return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error()) {{ else }}return errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error()) {{ end }}
-		}
-
 		{{ if (hasID) }} return nil, fmt.Errorf("failed to create {{ structureName }}: %w", err) {{ else }} return fmt.Errorf("failed to create {{ structureName }}: %w", err) {{ end }}
 	}
 
@@ -803,63 +812,44 @@ func (t *{{ storageName | lowerCamelCase }}) DB(ctx context.Context) QueryExecer
 	return db
 }
 
-// createTable creates the table.
+// createTable creates the table in SQLite.
 func (t *{{ storageName | lowerCamelCase }}) CreateTable(ctx context.Context) error {
-	sqlQuery := ` + "`" + `
-		{{- range $index, $field := fields }}
-		{{- if ($field | isDefaultUUID ) }}
-		CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-		{{- end}}
-		{{- end}}
-		-- Table: {{ tableName }}
-		CREATE TABLE IF NOT EXISTS {{ tableName }} (
-		{{- range $index, $field := fields }}
-		{{- if not ($field | isRelation) }}
-		{{ $field | sourceName }} {{if ($field | isAutoIncrement) }} SERIAL{{else}}{{ $field | postgresType }}{{end}}{{if $field | isPrimaryKey }} PRIMARY KEY{{end}}{{ if and (isNotNull $field) (not (isAutoIncrement $field)) }} NOT NULL{{ end }}{{if ($field | getDefaultValue) }} DEFAULT {{$field | getDefaultValue}}{{end}}{{if not ( $field | isLastField )}},{{end}}
-		{{- end}}
-		{{- end}});
-		-- Other entities
-		{{- if (comment) }}
-		COMMENT ON TABLE {{ tableName }} IS '{{ comment }}';
-		{{- end}}
-		{{- range $index, $field := fields }}
-		{{- if ($field | hasUnique) }}
-		CREATE UNIQUE INDEX IF NOT EXISTS {{ tableName }}_{{ $field | sourceName }}_unique_idx ON {{ tableName }} USING btree ({{ $field | sourceName }});
-		{{- end}}
-		{{- end}}
+    sqlQuery := ` + "`" + `
+        -- Table: {{ tableName }}
+        CREATE TABLE IF NOT EXISTS {{ tableName }} (
+        {{- range $index, $field := fields }}
+        {{- if not ($field | isRelation) }}
+        {{ $field | sourceName }} {{if ($field | isAutoIncrement) }} INTEGER PRIMARY KEY AUTOINCREMENT{{else}}{{ $field | sqliteType }}{{end}}{{if and (isNotNull $field) (not (isAutoIncrement $field)) }} NOT NULL{{ end }}{{if ($field | getDefaultValue) }} DEFAULT {{$field | getDefaultValue}}{{end}}{{if not ( $field | isLastField )}},{{end}}
+        {{- end}}
+        {{- end}});
 
-		{{- range $index, $fields := getStructureUniqueIndexes }}
-		CREATE UNIQUE INDEX IF NOT EXISTS {{ tableName }}_unique_idx_{{ $fields | sliceToString }} ON {{ tableName }} USING btree (
+        -- Indexes and Unique constraints
+        {{- range $index, $field := fields }}
+        {{- if ($field | hasUnique) }}
+        CREATE UNIQUE INDEX IF NOT EXISTS {{ tableName }}_{{ $field | sourceName }}_unique_idx ON {{ tableName }} ({{ $field | sourceName }});
+        {{- end}}
+        {{- end}}
+
+        {{- range $index, $fields := getStructureUniqueIndexes }}
+        CREATE UNIQUE INDEX IF NOT EXISTS {{ tableName }}_unique_idx_{{ $fields | sliceToString }} ON {{ tableName }} (
         {{- $length := sub (len $fields) 1 }}
         {{- range $i, $field := $fields }}
             {{ $field | sourceName }}{{ if lt $i $length }}, {{ end }}
         {{- end }}
-    	);
-		{{- end }}
-
-
-		{{- range $index, $field := fields }}
-		{{- if ($field | hasIndex) }}
-		CREATE INDEX IF NOT EXISTS {{ tableName }}_{{ $field | sourceName }}_idx ON {{ tableName }} USING btree ({{ $field | sourceName }});
-		{{- end}}
-		{{- end}}
-		{{- range $index, $field := fields }}
-		{{- if ($field | isRelation) }}
-		{{- if ($field | isForeign) }}
-		-- Foreign keys for {{ $field | relationTableName }}
-		ALTER TABLE {{ tableName }}
-		ADD FOREIGN KEY ({{ $field | getFieldSource }}) REFERENCES {{ $field | relationTableName }}({{ $field | getRefSource }})
-		{{- if ($field | isCascade) }}
-		ON DELETE CASCADE;
-		{{- else }}; 
+        );
         {{- end}}
-		{{- end}}
-		{{- end}}
-		{{- end }}
-	` + "`" + `
 
-	_, err := t.db.ExecContext(ctx,sqlQuery)
-	return err
+        {{- range $index, $field := fields }}
+        {{- if ($field | hasIndex) }}
+        CREATE INDEX IF NOT EXISTS {{ tableName }}_{{ $field | sourceName }}_idx ON {{ tableName }} ({{ $field | sourceName }});
+        {{- end}}
+        {{- end}}
+        
+        -- SQLite handles foreign key constraints differently and should be part of table creation
+    ` + "`" + `
+    
+    _, err := t.db.ExecContext(ctx, sqlQuery)
+    return err
 }
 
 // DropTable drops the table.

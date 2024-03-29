@@ -100,18 +100,21 @@ func (t *deviceStorage) DB(ctx context.Context) QueryExecer {
 	return db
 }
 
-// createTable creates the table.
+// createTable creates the table in SQLite.
 func (t *deviceStorage) CreateTable(ctx context.Context) error {
 	sqlQuery := `
-		-- Table: devices
-		CREATE TABLE IF NOT EXISTS devices (
-		name TEXT,
-		value TEXT,
-		user_id UUID NOT NULL);
-		-- Other entities
-		CREATE UNIQUE INDEX IF NOT EXISTS devices_user_id_unique_idx ON devices USING btree (user_id);
-		CREATE INDEX IF NOT EXISTS devices_user_id_idx ON devices USING btree (user_id);
-	`
+        -- Table: devices
+        CREATE TABLE IF NOT EXISTS devices (
+        name TEXT,
+        value TEXT,
+        user_id TEXT NOT NULL);
+
+        -- Indexes and Unique constraints
+        CREATE UNIQUE INDEX IF NOT EXISTS devices_user_id_unique_idx ON devices (user_id);
+        CREATE INDEX IF NOT EXISTS devices_user_id_idx ON devices (user_id);
+        
+        -- SQLite handles foreign key constraints differently and should be part of table creation
+    `
 
 	_, err := t.db.ExecContext(ctx, sqlQuery)
 	return err
@@ -265,10 +268,6 @@ func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Optio
 
 	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		if IsPgUniqueViolation(err) {
-			return errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
-		}
-
 		return fmt.Errorf("failed to create Device: %w", err)
 	}
 

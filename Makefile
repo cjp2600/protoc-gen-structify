@@ -27,6 +27,17 @@ endif
 	--structify_out=. --structify_opt=paths=source_relative,include_connection=true \
 	$(f)
 
+.PHONY: build-example-sqlite
+build-example-sqlite: build ## Build example: make build-example f=example/blog.proto
+ifndef f
+f = example/case_two/db/blog.proto
+endif
+	@$(PROTOC) -I/usr/local/include -I.  \
+	-I$(GOPATH)/src   \
+	--plugin=protoc-gen-structify=$(GOBIN)/structify \
+	--structify_out=. --structify_opt=paths=source_relative,include_connection=true \
+	$(f)
+
 .PHONY: install-protoc
 install-protoc: $(GOBIN) ## Install protocol buffer compiler
 	@if [ ! -f $(PROTOC) ]; then \

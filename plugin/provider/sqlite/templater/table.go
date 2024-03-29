@@ -2,14 +2,15 @@ package templater
 
 import (
 	"fmt"
-	"google.golang.org/protobuf/types/descriptorpb"
 	"log"
 	"strings"
 	"text/template"
 
+	"google.golang.org/protobuf/types/descriptorpb"
+
 	importpkg "github.com/cjp2600/protoc-gen-structify/plugin/import"
 	helperpkg "github.com/cjp2600/protoc-gen-structify/plugin/pkg/helper"
-	tmplpkg "github.com/cjp2600/protoc-gen-structify/plugin/provider/postgres/tmpl"
+	tmplpkg "github.com/cjp2600/protoc-gen-structify/plugin/provider/sqlite/tmpl"
 	statepkg "github.com/cjp2600/protoc-gen-structify/plugin/state"
 )
 
@@ -118,9 +119,12 @@ func (t *tableTemplater) Imports() importpkg.ImportSet {
 	)
 
 	tmp := t.BuildTemplate()
-	switch {
-	case strings.Contains(tmp, "time.Time"):
+	if strings.Contains(tmp, "time.Time") {
 		is.Add(importpkg.ImportTime)
+	}
+
+	if strings.Contains(tmp, "uuid.NewUUID()") {
+		is.Add(importpkg.ImportGoogleUUID)
 	}
 
 	return is
@@ -159,7 +163,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 				}
 			}
 
-			return helperpkg.ConvertType(f)
+			return helperpkg.ConvertTypeSQLite(f)
 		},
 
 		// comment returns the comment.
@@ -290,7 +294,16 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 		// getDefaultValue returns the default value.
 		"getDefaultValue": func(f *descriptorpb.FieldDescriptorProto) string {
 			if opts := helperpkg.GetFieldOptions(f); opts != nil {
-				return opts.GetDefault()
+				val := opts.GetDefault()
+				if strings.Contains(val, "uuid") {
+					return ""
+				}
+				if strings.Contains(val, "now") {
+					return "CURRENT_TIMESTAMP"
+				}
+
+				return val
+
 			}
 			return ""
 		},
@@ -346,6 +359,13 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			return false
 		},
 
+		"isUUID": func(f *descriptorpb.FieldDescriptorProto) bool {
+			if opts := helperpkg.GetFieldOptions(f); opts != nil {
+				return opts.GetUuid()
+			}
+			return false
+		},
+
 		// isNotNull returns true if the field is not null.
 		"isNotNull": func(f *descriptorpb.FieldDescriptorProto) bool {
 			if opts := helperpkg.GetFieldOptions(f); opts != nil {
@@ -358,7 +378,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 		"isDefaultUUID": func(f *descriptorpb.FieldDescriptorProto) bool {
 			if opts := helperpkg.GetFieldOptions(f); opts != nil {
 				if strings.Contains(opts.GetDefault(), "uuid_generate") {
-					return true
+					return false
 				}
 			}
 			return false
@@ -374,7 +394,12 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 
 		// postgresType returns the postgres type.
 		"postgresType": func(f *descriptorpb.FieldDescriptorProto) string {
-			return helperpkg.PostgresType(helperpkg.ConvertType(f), helperpkg.GetFieldOptions(f), t.state.NestedMessages.IsJSON(f))
+			return helperpkg.SQLiteType(helperpkg.ConvertTypeSQLite(f), helperpkg.GetFieldOptions(f), t.state.NestedMessages.IsJSON(f))
+		},
+
+		// sqliteType returns the postgres type.
+		"sqliteType": func(f *descriptorpb.FieldDescriptorProto) string {
+			return helperpkg.SQLiteType(helperpkg.ConvertTypeSQLite(f), helperpkg.GetFieldOptions(f), t.state.NestedMessages.IsJSON(f))
 		},
 
 		// storageName returns the upper camel case storage name.
@@ -417,7 +442,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 
 		// hasRelationOptions returns true if the field has relation options.
 		"hasRelationOptions": func(f *descriptorpb.FieldDescriptorProto) bool {
-			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(f))
+			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertTypeSQLite(f))
 			_, ok := t.state.Relations.Get(relName)
 
 			if ok {
@@ -438,7 +463,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 		// hasRelation returns true if the message has relation.
 		"hasRelation": func() bool {
 			for _, f := range t.message.GetField() {
-				relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(f))
+				relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertTypeSQLite(f))
 				_, ok := t.state.Relations.Get(relName)
 				if ok {
 					return true
@@ -449,7 +474,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 
 		// relation returns the relation.
 		"relation": func(f *descriptorpb.FieldDescriptorProto) *statepkg.Relation {
-			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(f))
+			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertTypeSQLite(f))
 			relation, ok := t.state.Relations.Get(relName)
 			if !ok {
 				return nil
@@ -460,7 +485,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 
 		// relationName returns the relation name.
 		"relationStorageName": func(f *descriptorpb.FieldDescriptorProto) string {
-			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(f))
+			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertTypeSQLite(f))
 			relation, ok := t.state.Relations.Get(relName)
 
 			if ok {
@@ -470,7 +495,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 		},
 
 		"relationStructureName": func(f *descriptorpb.FieldDescriptorProto) string {
-			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(f))
+			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertTypeSQLite(f))
 			relation, ok := t.state.Relations.Get(relName)
 
 			if ok {
@@ -480,7 +505,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 		},
 
 		"relationTableName": func(f *descriptorpb.FieldDescriptorProto) string {
-			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(f))
+			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertTypeSQLite(f))
 			relation, ok := t.state.Relations.Get(relName)
 
 			if ok {
@@ -497,7 +522,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 
 		// relationName returns the relation name.
 		"hasIDFromRelation": func(f *descriptorpb.FieldDescriptorProto) bool {
-			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(f))
+			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertTypeSQLite(f))
 			relation, ok := t.state.Relations.Get(relName)
 
 			if ok {
@@ -546,7 +571,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 		},
 
 		"getFieldID": func(fl *descriptorpb.FieldDescriptorProto) string {
-			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(fl))
+			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertTypeSQLite(fl))
 			relation, ok := t.state.Relations.Get(relName)
 
 			if ok {
@@ -576,7 +601,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 		},
 
 		"getRefID": func(fl *descriptorpb.FieldDescriptorProto) string {
-			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(fl))
+			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertTypeSQLite(fl))
 			relation, ok := t.state.Relations.Get(relName)
 
 			if ok {
@@ -607,7 +632,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 		},
 
 		"getRefSource": func(fl *descriptorpb.FieldDescriptorProto) string {
-			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(fl))
+			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertTypeSQLite(fl))
 			relation, ok := t.state.Relations.Get(relName)
 
 			if ok {
@@ -656,7 +681,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 		},
 
 		"getFieldSource": func(fl *descriptorpb.FieldDescriptorProto) string {
-			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(fl))
+			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertTypeSQLite(fl))
 			relation, ok := t.state.Relations.Get(relName)
 
 			if ok {
@@ -698,7 +723,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 		"IDType": func() string {
 			for _, f := range t.message.GetField() {
 				if f.GetName() == "id" {
-					return helperpkg.ConvertType(f)
+					return helperpkg.ConvertTypeSQLite(f)
 				}
 			}
 			return "int64"
@@ -706,7 +731,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 
 		// relationAllowSubCreating returns true if the relation allows sub creating.
 		"relationAllowSubCreating": func(f *descriptorpb.FieldDescriptorProto) bool {
-			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(f))
+			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertTypeSQLite(f))
 			relation, ok := t.state.Relations.Get(relName)
 
 			if ok {

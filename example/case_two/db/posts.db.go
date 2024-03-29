@@ -104,23 +104,23 @@ func (t *postStorage) DB(ctx context.Context) QueryExecer {
 	return db
 }
 
-// createTable creates the table.
+// createTable creates the table in SQLite.
 func (t *postStorage) CreateTable(ctx context.Context) error {
 	sqlQuery := `
-		-- Table: posts
-		CREATE TABLE IF NOT EXISTS posts (
-		id  SERIAL PRIMARY KEY,
-		title TEXT NOT NULL,
-		body TEXT,
-		author_id UUID NOT NULL);
-		-- Other entities
-		CREATE UNIQUE INDEX IF NOT EXISTS posts_author_id_unique_idx ON posts USING btree (author_id);
-		CREATE INDEX IF NOT EXISTS posts_title_idx ON posts USING btree (title);
-		CREATE INDEX IF NOT EXISTS posts_author_id_idx ON posts USING btree (author_id);
-		-- Foreign keys for users
-		ALTER TABLE posts
-		ADD FOREIGN KEY (author_id) REFERENCES users(id);
-	`
+        -- Table: posts
+        CREATE TABLE IF NOT EXISTS posts (
+        id  INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        body TEXT,
+        author_id TEXT NOT NULL);
+
+        -- Indexes and Unique constraints
+        CREATE UNIQUE INDEX IF NOT EXISTS posts_author_id_unique_idx ON posts (author_id);
+        CREATE INDEX IF NOT EXISTS posts_title_idx ON posts (title);
+        CREATE INDEX IF NOT EXISTS posts_author_id_idx ON posts (author_id);
+        
+        -- SQLite handles foreign key constraints differently and should be part of table creation
+    `
 
 	_, err := t.db.ExecContext(ctx, sqlQuery)
 	return err
@@ -384,10 +384,6 @@ func (t *postStorage) Create(ctx context.Context, model *Post, opts ...Option) (
 	var id int32
 	err = t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
 	if err != nil {
-		if IsPgUniqueViolation(err) {
-			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
-		}
-
 		return nil, fmt.Errorf("failed to create Post: %w", err)
 	}
 

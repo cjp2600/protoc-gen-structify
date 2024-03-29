@@ -46,13 +46,22 @@ type AddressPaginationOperations interface {
 	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Address, *Paginator, error)
 }
 
+// AddressRelationLoading is an interface for loading relations.
 type AddressRelationLoading interface {
 	LoadUser(ctx context.Context, model *Address, builders ...*QueryBuilder) error
 	LoadBatchUser(ctx context.Context, items []*Address, builders ...*QueryBuilder) error
 }
 
+// AddressAdvancedDeletion is an interface for advanced deletion operations.
 type AddressAdvancedDeletion interface {
 	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
+}
+
+// AddressRawQueryOperations is an interface for executing raw queries.
+type AddressRawQueryOperations interface {
+	Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
+	QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 }
 
 // AddressStorage is a struct for the "addresses" table.
@@ -63,6 +72,7 @@ type AddressStorage interface {
 	AddressPaginationOperations
 	AddressRelationLoading
 	AddressAdvancedDeletion
+	AddressRawQueryOperations
 }
 
 // NewAddressStorage returns a new addressStorage.
@@ -720,4 +730,19 @@ func (t *addressStorage) SelectForUpdate(ctx context.Context, builders ...*Query
 	}
 
 	return &model, nil
+}
+
+// Query executes a raw query and returns the result.
+func (t *addressStorage) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return t.DB(ctx).ExecContext(ctx, query, args...)
+}
+
+// QueryRow executes a raw query and returns the result.
+func (t *addressStorage) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	return t.DB(ctx).QueryRowContext(ctx, query, args...)
+}
+
+// QueryRows executes a raw query and returns the result.
+func (t *addressStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	return t.DB(ctx).QueryContext(ctx, query, args...)
 }

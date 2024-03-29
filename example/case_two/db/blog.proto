@@ -7,7 +7,7 @@ package db;
 
 // main db options
 option (structify.db) = {
-  provider: "postgres"
+  provider: "sqlite"
   url_env: "DATABASE_URL"
 };
 
@@ -113,7 +113,7 @@ message Address {
   int32 state = 4;
   int64 zip = 5;
   User user = 6 [(structify.field) = {relation: { field: "user_id", reference: "id", foreign: { cascade: false }  } }];
-  string user_id = 7 [(structify.field) = {index: true, uuid: true, unique: true}];
+  string user_id = 7 [(structify.field) = {index: true, uuid: true}];
 
   google.protobuf.Timestamp created_at = 8 [(structify.field) = {default: "now()"}];
   optional google.protobuf.Timestamp updated_at = 9;

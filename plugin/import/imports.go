@@ -61,18 +61,21 @@ func (i Import) alias() string {
 }
 
 var (
-	ImportDb           = Import{"database/sql", ""}
-	ImportLibPQ        = Import{"github.com/lib/pq", "_"}
-	ImportLibPQWOAlias = Import{"github.com/lib/pq", ""}
-	ImportStrings      = Import{"strings", ""}
-	ImportMath         = Import{"math", ""}
-	ImportSquirrel     = Import{"github.com/Masterminds/squirrel", "sq"}
-	ImportFMT          = Import{"fmt", ""}
-	ImportErrors       = Import{"github.com/pkg/errors", ""}
-	ImportContext      = Import{"context", ""}
-	ImportStrconv      = Import{"strconv", ""}
-	ImportSync         = Import{"sync", ""}
-	ImportTime         = Import{"time", ""}
-	ImportJson         = Import{"encoding/json", ""}
-	ImportSQLDriver    = Import{"database/sql/driver", ""}
+	ImportDb                = Import{"database/sql", ""}
+	ImportLibPQ             = Import{"github.com/lib/pq", "_"}
+	ImportLibPQWOAlias      = Import{"github.com/lib/pq", ""}
+	ImportLibSqlite3        = Import{"github.com/mattn/go-sqlite3", "_"}
+	ImportLibSqlite3WOAlias = Import{"github.com/mattn/go-sqlite3", ""}
+	ImportStrings           = Import{"strings", ""}
+	ImportMath              = Import{"math", ""}
+	ImportSquirrel          = Import{"github.com/Masterminds/squirrel", "sq"}
+	ImportFMT               = Import{"fmt", ""}
+	ImportErrors            = Import{"github.com/pkg/errors", ""}
+	ImportContext           = Import{"context", ""}
+	ImportStrconv           = Import{"strconv", ""}
+	ImportSync              = Import{"sync", ""}
+	ImportTime              = Import{"time", ""}
+	ImportJson              = Import{"encoding/json", ""}
+	ImportSQLDriver         = Import{"database/sql/driver", ""}
+	ImportGoogleUUID        = Import{"github.com/google/uuid", ""}
 )

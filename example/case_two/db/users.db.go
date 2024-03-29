@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 	sq "github.com/Masterminds/squirrel"
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 	"math"
-	"time"
 )
 
 // userStorage is a struct for the "users" table.
@@ -111,41 +111,34 @@ func (t *userStorage) DB(ctx context.Context) QueryExecer {
 	return db
 }
 
-// createTable creates the table.
+// createTable creates the table in SQLite.
 func (t *userStorage) CreateTable(ctx context.Context) error {
 	sqlQuery := `
-		CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-		-- Table: users
-		CREATE TABLE IF NOT EXISTS users (
-		id UUID PRIMARY KEY NOT NULL DEFAULT uuid_generate_v4(),
-		name TEXT NOT NULL,
-		age INTEGER NOT NULL,
-		email TEXT NOT NULL,
-		last_name TEXT,
-		created_at TIMESTAMP NOT NULL DEFAULT now(),
-		updated_at TIMESTAMP,
-		notification_settings JSONB,
-		phones JSONB,
-		balls JSONB,
-		numrs JSONB,
-		comments JSONB);
-		-- Other entities
-		COMMENT ON TABLE users IS 'This is a comment of User';
-		CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx ON users USING btree (email);
-		CREATE UNIQUE INDEX IF NOT EXISTS users_unique_idx_name_email ON users USING btree (
+        -- Table: users
+        CREATE TABLE IF NOT EXISTS users (
+        id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        age INTEGER NOT NULL,
+        email TEXT NOT NULL,
+        last_name TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT,
+        notification_settings TEXT,
+        phones TEXT,
+        balls TEXT,
+        numrs TEXT,
+        comments TEXT);
+
+        -- Indexes and Unique constraints
+        CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx ON users (email);
+        CREATE UNIQUE INDEX IF NOT EXISTS users_unique_idx_name_email ON users (
             name, 
             email
-    	);
-		CREATE INDEX IF NOT EXISTS users_name_idx ON users USING btree (name);
-		-- Foreign keys for devices
-		ALTER TABLE users
-		ADD FOREIGN KEY (id) REFERENCES devices(user_id)
-		ON DELETE CASCADE;
-		-- Foreign keys for settings
-		ALTER TABLE users
-		ADD FOREIGN KEY (id) REFERENCES settings(user_id)
-		ON DELETE CASCADE;
-	`
+        );
+        CREATE INDEX IF NOT EXISTS users_name_idx ON users (name);
+        
+        -- SQLite handles foreign key constraints differently and should be part of table creation
+    `
 
 	_, err := t.db.ExecContext(ctx, sqlQuery)
 	return err
@@ -396,8 +389,8 @@ type User struct {
 	Settings             *Setting
 	Addresses            []*Address
 	Posts                []*Post
-	CreatedAt            time.Time                `db:"created_at"`
-	UpdatedAt            *time.Time               `db:"updated_at"`
+	CreatedAt            string                   `db:"created_at"`
+	UpdatedAt            *string                  `db:"updated_at"`
 	NotificationSettings *UserNotificationSetting `db:"notification_settings"`
 	Phones               UserPhonesRepeated       `db:"phones"`
 	Balls                UserBallsRepeated        `db:"balls"`
@@ -676,6 +669,14 @@ func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) (
 	if model == nil {
 		return nil, errors.New("model is nil")
 	}
+	if model.Id == "" {
+		uuidStr, err := uuid.NewUUID()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate uuid for User: %w", err)
+		}
+
+		model.Id = uuidStr.String()
+	}
 
 	// set default options
 	options := &Options{}
@@ -705,6 +706,7 @@ func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) (
 
 	query := t.queryBuilder.Insert("users").
 		Columns(
+			"id",
 			"name",
 			"age",
 			"email",
@@ -718,6 +720,7 @@ func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) (
 			"comments",
 		).
 		Values(
+			model.Id,
 			model.Name,
 			model.Age,
 			model.Email,
@@ -742,10 +745,6 @@ func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) (
 	var id string
 	err = t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
 	if err != nil {
-		if IsPgUniqueViolation(err) {
-			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
-		}
-
 		return nil, fmt.Errorf("failed to create User: %w", err)
 	}
 
@@ -785,8 +784,8 @@ type UserUpdate struct {
 	Age                  *int32
 	Email                *string
 	LastName             *string
-	CreatedAt            *time.Time
-	UpdatedAt            *time.Time
+	CreatedAt            *string
+	UpdatedAt            *string
 	NotificationSettings *UserNotificationSetting
 	Phones               *UserPhonesRepeated
 	Balls                *UserBallsRepeated

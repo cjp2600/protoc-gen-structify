@@ -104,20 +104,23 @@ func (t *settingStorage) DB(ctx context.Context) QueryExecer {
 	return db
 }
 
-// createTable creates the table.
+// createTable creates the table in SQLite.
 func (t *settingStorage) CreateTable(ctx context.Context) error {
 	sqlQuery := `
-		-- Table: settings
-		CREATE TABLE IF NOT EXISTS settings (
-		id  SERIAL PRIMARY KEY,
-		name TEXT NOT NULL,
-		value TEXT,
-		user_id UUID NOT NULL);
-		-- Other entities
-		CREATE UNIQUE INDEX IF NOT EXISTS settings_user_id_unique_idx ON settings USING btree (user_id);
-		CREATE INDEX IF NOT EXISTS settings_name_idx ON settings USING btree (name);
-		CREATE INDEX IF NOT EXISTS settings_user_id_idx ON settings USING btree (user_id);
-	`
+        -- Table: settings
+        CREATE TABLE IF NOT EXISTS settings (
+        id  INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        value TEXT,
+        user_id TEXT NOT NULL);
+
+        -- Indexes and Unique constraints
+        CREATE UNIQUE INDEX IF NOT EXISTS settings_user_id_unique_idx ON settings (user_id);
+        CREATE INDEX IF NOT EXISTS settings_name_idx ON settings (name);
+        CREATE INDEX IF NOT EXISTS settings_user_id_idx ON settings (user_id);
+        
+        -- SQLite handles foreign key constraints differently and should be part of table creation
+    `
 
 	_, err := t.db.ExecContext(ctx, sqlQuery)
 	return err
@@ -381,10 +384,6 @@ func (t *settingStorage) Create(ctx context.Context, model *Setting, opts ...Opt
 	var id int32
 	err = t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
 	if err != nil {
-		if IsPgUniqueViolation(err) {
-			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
-		}
-
 		return nil, fmt.Errorf("failed to create Setting: %w", err)
 	}
 
