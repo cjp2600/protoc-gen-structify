@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cjp2600/protoc-gen-structify/example/case_one/db"
@@ -41,4 +42,13 @@ func main() {
 		}
 		return nil
 	})
+}
+
+func mainR() {
+	fmt.Println("Hello")
+	var items = []string{"1", "2"}
+
+	for _, item := range items {
+		fmt.Print(item)
+	}
 }

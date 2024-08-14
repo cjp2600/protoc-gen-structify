@@ -26,6 +26,15 @@ message Post {
   string author_id = 5 [(structify.field) = {index: true, uuid: true, unique: true}];
 }
 
+message Message {
+  string id = 1 [(structify.field) = {primary_key: true, uuid: true, default: "uuid_generate_v4()"}];
+  string from_user_id = 2 [(structify.field) = {index: true, uuid: true, unique: true}];
+  string to_user_id = 3 [(structify.field) = {index: true, uuid: true, unique: true}];
+
+  User from_user = 4 [(structify.field) = {relation: { field: "from_user_id", reference: "id", foreign: { cascade: false } } }];
+  User to_user = 5 [(structify.field) = {relation: { field: "to_user_id", reference: "id", foreign: { cascade: false } } }];
+}
+
 
 /**
   * @structify.table users

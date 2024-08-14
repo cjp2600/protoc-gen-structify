@@ -578,6 +578,12 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 				rd := relation.RelationDescriptor
 				pd := relation.ParentDescriptor
 
+				if opts := helperpkg.GetFieldOptions(fl); opts != nil {
+					if opts.GetRelation().Field != "" {
+						return helperpkg.UpperCamelCase(opts.GetRelation().Field)
+					}
+				}
+
 				if relation.UseTag {
 					return helperpkg.UpperCamelCase(relation.Field)
 				}
