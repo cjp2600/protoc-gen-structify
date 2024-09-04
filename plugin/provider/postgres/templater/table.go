@@ -415,6 +415,32 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			return t.state.IsRelation(f)
 		},
 
+		// isOptional returns true if the field is marked as optional.
+		"isOptional": func(f *descriptorpb.FieldDescriptorProto) bool {
+			// Construct the relation name based on the message and the field type.
+			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(f))
+
+			// Retrieve the relation from the state using the constructed name.
+			relation, ok := t.state.Relations.Get(relName)
+			if !ok {
+				return false
+			}
+
+			pd := relation.ParentDescriptor
+			for _, fld := range pd.GetField() {
+				if opts := helperpkg.GetFieldOptions(f); opts != nil {
+					if opts.GetRelation().Field != "" {
+						if opts.GetRelation().Field == fld.GetName() {
+							return helperpkg.IsOptional(fld)
+						}
+					}
+				}
+			}
+
+			// Check if the relation descriptor is marked as optional.
+			return false
+		},
+
 		// hasRelationOptions returns true if the field has relation options.
 		"hasRelationOptions": func(f *descriptorpb.FieldDescriptorProto) bool {
 			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertType(f))

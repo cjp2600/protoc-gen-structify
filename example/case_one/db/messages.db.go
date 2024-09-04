@@ -47,8 +47,10 @@ type MessagePaginationOperations interface {
 
 // MessageRelationLoading is an interface for loading relations.
 type MessageRelationLoading interface {
+	LoadBot(ctx context.Context, model *Message, builders ...*QueryBuilder) error
 	LoadFromUser(ctx context.Context, model *Message, builders ...*QueryBuilder) error
 	LoadToUser(ctx context.Context, model *Message, builders ...*QueryBuilder) error
+	LoadBatchBot(ctx context.Context, items []*Message, builders ...*QueryBuilder) error
 	LoadBatchFromUser(ctx context.Context, items []*Message, builders ...*QueryBuilder) error
 	LoadBatchToUser(ctx context.Context, items []*Message, builders ...*QueryBuilder) error
 }
@@ -92,7 +94,7 @@ func (t *messageStorage) TableName() string {
 // Columns returns the columns for the table.
 func (t *messageStorage) Columns() []string {
 	return []string{
-		"id", "from_user_id", "to_user_id",
+		"id", "from_user_id", "to_user_id", "bot_id",
 	}
 }
 
@@ -114,7 +116,8 @@ func (t *messageStorage) CreateTable(ctx context.Context) error {
 		CREATE TABLE IF NOT EXISTS messages (
 		id UUID PRIMARY KEY NOT NULL DEFAULT uuid_generate_v4(),
 		from_user_id UUID NOT NULL,
-		to_user_id UUID NOT NULL);
+		to_user_id UUID NOT NULL,
+		bot_id UUID NOT NULL);
 		-- Other entities
 		CREATE UNIQUE INDEX IF NOT EXISTS messages_from_user_id_unique_idx ON messages USING btree (from_user_id);
 		CREATE UNIQUE INDEX IF NOT EXISTS messages_to_user_id_unique_idx ON messages USING btree (to_user_id);
@@ -158,6 +161,30 @@ func (t *messageStorage) UpgradeTable(ctx context.Context) error {
 	return nil
 }
 
+// LoadBot loads the Bot relation.
+func (t *messageStorage) LoadBot(ctx context.Context, model *Message, builders ...*QueryBuilder) error {
+	if model == nil {
+		return errors.Wrap(ErrModelIsNil, "Message is nil")
+	}
+
+	// NewBotStorage creates a new BotStorage.
+	s := NewBotStorage(t.db)
+	// Check if the optional field is nil
+	if model.BotId == nil {
+		// If nil, do not attempt to load the relation
+		return nil
+	}
+	// Add the filter for the relation with dereferenced value
+	builders = append(builders, FilterBuilder(BotIdEq(*model.BotId)))
+	relationModel, err := s.FindOne(ctx, builders...)
+	if err != nil {
+		return fmt.Errorf("failed to find BotStorage: %w", err)
+	}
+
+	model.Bot = relationModel
+	return nil
+}
+
 // LoadFromUser loads the FromUser relation.
 func (t *messageStorage) LoadFromUser(ctx context.Context, model *Message, builders ...*QueryBuilder) error {
 	if model == nil {
@@ -166,8 +193,7 @@ func (t *messageStorage) LoadFromUser(ctx context.Context, model *Message, build
 
 	// NewUserStorage creates a new UserStorage.
 	s := NewUserStorage(t.db)
-
-	// Add the filter for the relation
+	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(UserIdEq(model.FromUserId)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
@@ -186,8 +212,7 @@ func (t *messageStorage) LoadToUser(ctx context.Context, model *Message, builder
 
 	// NewUserStorage creates a new UserStorage.
 	s := NewUserStorage(t.db)
-
-	// Add the filter for the relation
+	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(UserIdEq(model.ToUserId)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
@@ -195,6 +220,38 @@ func (t *messageStorage) LoadToUser(ctx context.Context, model *Message, builder
 	}
 
 	model.ToUser = relationModel
+	return nil
+}
+
+// LoadBatchBot loads the Bot relation.
+func (t *messageStorage) LoadBatchBot(ctx context.Context, items []*Message, builders ...*QueryBuilder) error {
+	requestItems := make([]interface{}, len(items))
+	for i, item := range items {
+		requestItems[i] = item.BotId
+	}
+
+	// NewBotStorage creates a new BotStorage.
+	s := NewBotStorage(t.db)
+
+	// Add the filter for the relation
+	builders = append(builders, FilterBuilder(BotIdIn(requestItems...)))
+
+	results, err := s.FindMany(ctx, builders...)
+	if err != nil {
+		return fmt.Errorf("failed to find many BotStorage: %w", err)
+	}
+	resultMap := make(map[interface{}]*Bot)
+	for _, result := range results {
+		resultMap[result.Id] = result
+	}
+
+	// Assign Bot to items
+	for _, item := range items {
+		if v, ok := resultMap[item.BotId]; ok {
+			item.Bot = v
+		}
+	}
+
 	return nil
 }
 
@@ -264,9 +321,11 @@ func (t *messageStorage) LoadBatchToUser(ctx context.Context, items []*Message, 
 
 // Message is a struct for the "messages" table.
 type Message struct {
-	Id         string `db:"id"`
-	FromUserId string `db:"from_user_id"`
-	ToUserId   string `db:"to_user_id"`
+	Id         string  `db:"id"`
+	FromUserId string  `db:"from_user_id"`
+	ToUserId   string  `db:"to_user_id"`
+	BotId      *string `db:"bot_id"`
+	Bot        *Bot
 	FromUser   *User
 	ToUser     *User
 }
@@ -278,7 +337,7 @@ func (t *Message) TableName() string {
 
 // ScanRow scans a row into a Message.
 func (t *Message) ScanRow(r *sql.Row) error {
-	return r.Scan(&t.Id, &t.FromUserId, &t.ToUserId)
+	return r.Scan(&t.Id, &t.FromUserId, &t.ToUserId, &t.BotId)
 }
 
 // ScanRows scans a single row into the Message.
@@ -287,6 +346,7 @@ func (t *Message) ScanRows(r *sql.Rows) error {
 		&t.Id,
 		&t.FromUserId,
 		&t.ToUserId,
+		&t.BotId,
 	)
 }
 
@@ -294,6 +354,7 @@ func (t *Message) ScanRows(r *sql.Rows) error {
 type MessageFilters struct {
 	Id       *string
 	ToUserId *string
+	BotId    **string
 }
 
 // MessageIdEq returns a condition that checks if the field equals the value.
@@ -306,6 +367,11 @@ func MessageToUserIdEq(value string) FilterApplier {
 	return EqualsCondition{Field: "to_user_id", Value: value}
 }
 
+// MessageBotIdEq returns a condition that checks if the field equals the value.
+func MessageBotIdEq(value *string) FilterApplier {
+	return EqualsCondition{Field: "bot_id", Value: value}
+}
+
 // MessageIdNotEq returns a condition that checks if the field equals the value.
 func MessageIdNotEq(value string) FilterApplier {
 	return NotEqualsCondition{Field: "id", Value: value}
@@ -314,6 +380,11 @@ func MessageIdNotEq(value string) FilterApplier {
 // MessageToUserIdNotEq returns a condition that checks if the field equals the value.
 func MessageToUserIdNotEq(value string) FilterApplier {
 	return NotEqualsCondition{Field: "to_user_id", Value: value}
+}
+
+// MessageBotIdNotEq returns a condition that checks if the field equals the value.
+func MessageBotIdNotEq(value *string) FilterApplier {
+	return NotEqualsCondition{Field: "bot_id", Value: value}
 }
 
 // MessageIdGT greaterThanCondition than condition.
@@ -326,6 +397,11 @@ func MessageToUserIdGT(value string) FilterApplier {
 	return GreaterThanCondition{Field: "to_user_id", Value: value}
 }
 
+// MessageBotIdGT greaterThanCondition than condition.
+func MessageBotIdGT(value *string) FilterApplier {
+	return GreaterThanCondition{Field: "bot_id", Value: value}
+}
+
 // MessageIdLT less than condition.
 func MessageIdLT(value string) FilterApplier {
 	return LessThanCondition{Field: "id", Value: value}
@@ -334,6 +410,11 @@ func MessageIdLT(value string) FilterApplier {
 // MessageToUserIdLT less than condition.
 func MessageToUserIdLT(value string) FilterApplier {
 	return LessThanCondition{Field: "to_user_id", Value: value}
+}
+
+// MessageBotIdLT less than condition.
+func MessageBotIdLT(value *string) FilterApplier {
+	return LessThanCondition{Field: "bot_id", Value: value}
 }
 
 // MessageIdGTE greater than or equal condition.
@@ -346,6 +427,11 @@ func MessageToUserIdGTE(value string) FilterApplier {
 	return GreaterThanOrEqualCondition{Field: "to_user_id", Value: value}
 }
 
+// MessageBotIdGTE greater than or equal condition.
+func MessageBotIdGTE(value *string) FilterApplier {
+	return GreaterThanOrEqualCondition{Field: "bot_id", Value: value}
+}
+
 // MessageIdLTE less than or equal condition.
 func MessageIdLTE(value string) FilterApplier {
 	return LessThanOrEqualCondition{Field: "id", Value: value}
@@ -354,6 +440,11 @@ func MessageIdLTE(value string) FilterApplier {
 // MessageToUserIdLTE less than or equal condition.
 func MessageToUserIdLTE(value string) FilterApplier {
 	return LessThanOrEqualCondition{Field: "to_user_id", Value: value}
+}
+
+// MessageBotIdLTE less than or equal condition.
+func MessageBotIdLTE(value *string) FilterApplier {
+	return LessThanOrEqualCondition{Field: "bot_id", Value: value}
 }
 
 // MessageIdBetween between condition.
@@ -366,6 +457,11 @@ func MessageToUserIdBetween(min, max string) FilterApplier {
 	return BetweenCondition{Field: "to_user_id", Min: min, Max: max}
 }
 
+// MessageBotIdBetween between condition.
+func MessageBotIdBetween(min, max *string) FilterApplier {
+	return BetweenCondition{Field: "bot_id", Min: min, Max: max}
+}
+
 // MessageIdLike like condition %
 func MessageIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "id", Value: value}
@@ -374,6 +470,11 @@ func MessageIdLike(value string) FilterApplier {
 // MessageToUserIdLike like condition %
 func MessageToUserIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "to_user_id", Value: value}
+}
+
+// MessageBotIdLike like condition %
+func MessageBotIdLike(value *string) FilterApplier {
+	return LikeCondition{Field: "bot_id", Value: value}
 }
 
 // MessageIdNotLike not like condition
@@ -386,6 +487,11 @@ func MessageToUserIdNotLike(value string) FilterApplier {
 	return NotLikeCondition{Field: "to_user_id", Value: value}
 }
 
+// MessageBotIdNotLike not like condition
+func MessageBotIdNotLike(value *string) FilterApplier {
+	return NotLikeCondition{Field: "bot_id", Value: value}
+}
+
 // MessageIdIn condition
 func MessageIdIn(values ...interface{}) FilterApplier {
 	return InCondition{Field: "id", Values: values}
@@ -394,6 +500,11 @@ func MessageIdIn(values ...interface{}) FilterApplier {
 // MessageToUserIdIn condition
 func MessageToUserIdIn(values ...interface{}) FilterApplier {
 	return InCondition{Field: "to_user_id", Values: values}
+}
+
+// MessageBotIdIn condition
+func MessageBotIdIn(values ...interface{}) FilterApplier {
+	return InCondition{Field: "bot_id", Values: values}
 }
 
 // MessageIdNotIn not in condition
@@ -406,6 +517,11 @@ func MessageToUserIdNotIn(values ...interface{}) FilterApplier {
 	return NotInCondition{Field: "to_user_id", Values: values}
 }
 
+// MessageBotIdNotIn not in condition
+func MessageBotIdNotIn(values ...interface{}) FilterApplier {
+	return NotInCondition{Field: "bot_id", Values: values}
+}
+
 // MessageIdOrderBy sorts the result in ascending order.
 func MessageIdOrderBy(asc bool) FilterApplier {
 	return OrderBy("id", asc)
@@ -414,6 +530,11 @@ func MessageIdOrderBy(asc bool) FilterApplier {
 // MessageToUserIdOrderBy sorts the result in ascending order.
 func MessageToUserIdOrderBy(asc bool) FilterApplier {
 	return OrderBy("to_user_id", asc)
+}
+
+// MessageBotIdOrderBy sorts the result in ascending order.
+func MessageBotIdOrderBy(asc bool) FilterApplier {
+	return OrderBy("bot_id", asc)
 }
 
 // Create creates a new Message.
@@ -432,10 +553,12 @@ func (t *messageStorage) Create(ctx context.Context, model *Message, opts ...Opt
 		Columns(
 			"from_user_id",
 			"to_user_id",
+			"bot_id",
 		).
 		Values(
 			model.FromUserId,
 			model.ToUserId,
+			model.BotId,
 		)
 
 	// add RETURNING "id" to query
@@ -463,6 +586,7 @@ func (t *messageStorage) Create(ctx context.Context, model *Message, opts ...Opt
 type MessageUpdate struct {
 	FromUserId *string
 	ToUserId   *string
+	BotId      *string
 }
 
 // Update updates an existing Message based on non-nil fields.
@@ -477,6 +601,9 @@ func (t *messageStorage) Update(ctx context.Context, id string, updateData *Mess
 	}
 	if updateData.ToUserId != nil {
 		query = query.Set("to_user_id", updateData.ToUserId)
+	}
+	if updateData.BotId != nil {
+		query = query.Set("bot_id", updateData.BotId)
 	}
 
 	query = query.Where("id = ?", id)

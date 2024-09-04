@@ -881,7 +881,7 @@ func (t *{{ storageName | lowerCamelCase }}) UpgradeTable(ctx context.Context) e
 {{- range $index, $field := fields }}
 {{- if and ($field | isRelation) }}
 // Load{{ $field | pluralFieldName }} loads the {{ $field | pluralFieldName }} relation.
-func (t *{{ storageName | lowerCamelCase }}) Load{{ $field | pluralFieldName }} (ctx context.Context, model *{{structureName}}, builders ...*QueryBuilder) error {
+func (t *{{ storageName | lowerCamelCase }}) Load{{ $field | pluralFieldName }}(ctx context.Context, model *{{structureName}}, builders ...*QueryBuilder) error {
 	if model == nil {
 		return errors.Wrap(ErrModelIsNil, "{{structureName}} is nil")
 	}
@@ -889,8 +889,19 @@ func (t *{{ storageName | lowerCamelCase }}) Load{{ $field | pluralFieldName }} 
 	// New{{ $field | relationStorageName }} creates a new {{ $field | relationStorageName }}.
 	s := New{{ $field | relationStorageName }}(t.db)
 
-	// Add the filter for the relation
-	builders = append(builders, FilterBuilder({{ $field | relationStructureName  }}{{ $field | getRefID }}Eq(model.{{ $field | getFieldID }})))
+	{{- if ($field | isOptional) }}
+		// Check if the optional field is nil
+		if model.{{ $field | getFieldID }} == nil {
+			// If nil, do not attempt to load the relation
+			return nil
+		}
+		// Add the filter for the relation with dereferenced value
+		builders = append(builders, FilterBuilder({{ $field | relationStructureName }}{{ $field | getRefID }}Eq(*model.{{ $field | getFieldID }})))
+	{{- else }}
+		// Add the filter for the relation without dereferencing
+		builders = append(builders, FilterBuilder({{ $field | relationStructureName }}{{ $field | getRefID }}Eq(model.{{ $field | getFieldID }})))
+	{{- end }}
+
 	{{- if ($field | isRepeated) }}
 		relationModels, err := s.FindMany(ctx, builders...)
 		if err != nil {

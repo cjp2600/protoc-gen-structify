@@ -440,6 +440,11 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			return t.state.IsRelation(f)
 		},
 
+		// isOptional returns true if the field is marked as optional.
+		"isOptional": func(f *descriptorpb.FieldDescriptorProto) bool {
+			return helperpkg.IsOptional(f)
+		},
+
 		// hasRelationOptions returns true if the field has relation options.
 		"hasRelationOptions": func(f *descriptorpb.FieldDescriptorProto) bool {
 			relName := t.message.GetName() + "::" + helperpkg.ClearPointer(helperpkg.ConvertTypeSQLite(f))

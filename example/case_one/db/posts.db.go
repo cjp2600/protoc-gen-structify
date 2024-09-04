@@ -160,8 +160,7 @@ func (t *postStorage) LoadAuthor(ctx context.Context, model *Post, builders ...*
 
 	// NewUserStorage creates a new UserStorage.
 	s := NewUserStorage(t.db)
-
-	// Add the filter for the relation
+	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(UserIdEq(model.AuthorId)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {

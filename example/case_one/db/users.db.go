@@ -185,8 +185,7 @@ func (t *userStorage) LoadDevice(ctx context.Context, model *User, builders ...*
 
 	// NewDeviceStorage creates a new DeviceStorage.
 	s := NewDeviceStorage(t.db)
-
-	// Add the filter for the relation
+	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(DeviceUserIdEq(model.Id)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
@@ -205,8 +204,7 @@ func (t *userStorage) LoadSettings(ctx context.Context, model *User, builders ..
 
 	// NewSettingStorage creates a new SettingStorage.
 	s := NewSettingStorage(t.db)
-
-	// Add the filter for the relation
+	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(SettingUserIdEq(model.Id)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
@@ -225,8 +223,7 @@ func (t *userStorage) LoadAddresses(ctx context.Context, model *User, builders .
 
 	// NewAddressStorage creates a new AddressStorage.
 	s := NewAddressStorage(t.db)
-
-	// Add the filter for the relation
+	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(AddressUserIdEq(model.Id)))
 	relationModels, err := s.FindMany(ctx, builders...)
 	if err != nil {
@@ -245,8 +242,7 @@ func (t *userStorage) LoadPosts(ctx context.Context, model *User, builders ...*Q
 
 	// NewPostStorage creates a new PostStorage.
 	s := NewPostStorage(t.db)
-
-	// Add the filter for the relation
+	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(PostAuthorIdEq(model.Id)))
 	relationModels, err := s.FindMany(ctx, builders...)
 	if err != nil {

@@ -166,8 +166,7 @@ func (t *addressStorage) LoadUser(ctx context.Context, model *Address, builders 
 
 	// NewUserStorage creates a new UserStorage.
 	s := NewUserStorage(t.db)
-
-	// Add the filter for the relation
+	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(UserIdEq(model.UserId)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
