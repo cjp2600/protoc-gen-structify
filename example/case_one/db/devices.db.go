@@ -277,8 +277,11 @@ func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Optio
 
 // DeviceUpdate is used to update an existing Device.
 type DeviceUpdate struct {
-	Name   *string
-	Value  *string
+	// Use regular pointer types for non-optional fields
+	Name *string
+	// Use regular pointer types for non-optional fields
+	Value *string
+	// Use regular pointer types for non-optional fields
 	UserId *string
 }
 
@@ -289,14 +292,17 @@ func (t *deviceStorage) Update(ctx context.Context, id int64, updateData *Device
 	}
 
 	query := t.queryBuilder.Update("devices")
+	// Handle fields that are not optional using a nil check
 	if updateData.Name != nil {
-		query = query.Set("name", updateData.Name)
+		query = query.Set("name", *updateData.Name) // Dereference pointer value
 	}
+	// Handle fields that are not optional using a nil check
 	if updateData.Value != nil {
-		query = query.Set("value", updateData.Value)
+		query = query.Set("value", *updateData.Value) // Dereference pointer value
 	}
+	// Handle fields that are not optional using a nil check
 	if updateData.UserId != nil {
-		query = query.Set("user_id", updateData.UserId)
+		query = query.Set("user_id", *updateData.UserId) // Dereference pointer value
 	}
 
 	query = query.Where("id = ?", id)

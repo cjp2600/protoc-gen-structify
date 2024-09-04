@@ -293,6 +293,63 @@ func ConvertTypeSQLite(field *descriptorpb.FieldDescriptorProto) string {
 	return converted
 }
 
+// ConvertToNullType converts a field descriptor type to its corresponding nullable type.
+func ConvertToNullType(field *descriptorpb.FieldDescriptorProto) string {
+	var typ = field.GetTypeName()
+
+	switch *field.Type {
+	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE:
+		typ = "null.Float"
+	case descriptorpb.FieldDescriptorProto_TYPE_FLOAT:
+		typ = "null.Float"
+	case descriptorpb.FieldDescriptorProto_TYPE_INT64:
+		typ = "null.Int"
+	case descriptorpb.FieldDescriptorProto_TYPE_UINT64:
+		typ = "null.Int"
+	case descriptorpb.FieldDescriptorProto_TYPE_INT32:
+		typ = "null.Int"
+	case descriptorpb.FieldDescriptorProto_TYPE_FIXED64:
+		typ = "null.Int"
+	case descriptorpb.FieldDescriptorProto_TYPE_FIXED32:
+		typ = "null.Int"
+	case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
+		typ = "null.Bool"
+	case descriptorpb.FieldDescriptorProto_TYPE_STRING:
+		typ = "null.String"
+	case descriptorpb.FieldDescriptorProto_TYPE_GROUP:
+		typ = "error" // Group type is deprecated and not recommended.
+	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
+		parts := strings.Split(typ, ".")
+		typName := parts[len(parts)-1]
+		if typName == "Timestamp" && parts[len(parts)-2] == "protobuf" && parts[len(parts)-3] == "google" {
+			typ = "null.Time"
+		} else {
+			typ = "null." + UpperCamelCase(typName)
+		}
+	case descriptorpb.FieldDescriptorProto_TYPE_BYTES:
+		typ = "null.Bytes"
+	case descriptorpb.FieldDescriptorProto_TYPE_UINT32:
+		typ = "null.Int"
+	case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
+		typ = "null.Int" // Enums are represented as integers in Go.
+	case descriptorpb.FieldDescriptorProto_TYPE_SFIXED32:
+		typ = "null.Int"
+	case descriptorpb.FieldDescriptorProto_TYPE_SFIXED64:
+		typ = "null.Int"
+	case descriptorpb.FieldDescriptorProto_TYPE_SINT32:
+		typ = "null.Int"
+	case descriptorpb.FieldDescriptorProto_TYPE_SINT64:
+		typ = "null.Int"
+	}
+
+	// Check if the field is repeated, and adjust the type accordingly.
+	if IsRepeated(field) {
+		typ = "[]" + typ
+	}
+
+	return typ
+}
+
 // ConvertType converts a protobuf type to a Go type.
 func ConvertType(field *descriptorpb.FieldDescriptorProto) string {
 	var typ = field.GetTypeName()

@@ -397,8 +397,11 @@ func (t *postStorage) Create(ctx context.Context, model *Post, opts ...Option) (
 
 // PostUpdate is used to update an existing Post.
 type PostUpdate struct {
-	Title    *string
-	Body     *string
+	// Use regular pointer types for non-optional fields
+	Title *string
+	// Use regular pointer types for non-optional fields
+	Body *string
+	// Use regular pointer types for non-optional fields
 	AuthorId *string
 }
 
@@ -409,14 +412,17 @@ func (t *postStorage) Update(ctx context.Context, id int32, updateData *PostUpda
 	}
 
 	query := t.queryBuilder.Update("posts")
+	// Handle fields that are not optional using a nil check
 	if updateData.Title != nil {
-		query = query.Set("title", updateData.Title)
+		query = query.Set("title", *updateData.Title) // Dereference pointer value
 	}
+	// Handle fields that are not optional using a nil check
 	if updateData.Body != nil {
-		query = query.Set("body", updateData.Body)
+		query = query.Set("body", *updateData.Body) // Dereference pointer value
 	}
+	// Handle fields that are not optional using a nil check
 	if updateData.AuthorId != nil {
-		query = query.Set("author_id", updateData.AuthorId)
+		query = query.Set("author_id", *updateData.AuthorId) // Dereference pointer value
 	}
 
 	query = query.Where("id = ?", id)

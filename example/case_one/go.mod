@@ -6,6 +6,7 @@ require (
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/lib/pq v1.10.9
 	github.com/pkg/errors v0.9.1
+	gopkg.in/guregu/null.v4 v4.0.0
 )
 
 require (

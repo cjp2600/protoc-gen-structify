@@ -394,6 +394,55 @@ func (c *{{ storageName | lowerCamelCase }}) UpgradeTables(ctx context.Context) 
 `
 
 const TypesTemplate = `
+// NullableJSON represents a JSON field that can be null.
+type NullableJSON[T any] struct {
+	Data T
+	Valid bool // Valid is true if the field is not NULL
+}
+
+// NewNullableJSON creates a new NullableJSON with a value.
+func NewNullableJSON[T any](v T) NullableJSON[T] {
+	return NullableJSON[T]{Data: v, Valid: true}
+}
+
+// Scan implements the sql.Scanner interface.
+func (n *NullableJSON[T]) Scan(value interface{}) error {
+	if value == nil {
+		n.Valid = false
+		return nil
+	}
+
+	bytes, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("cannot scan type %T into NullableJSON", value)
+	}
+
+	if err := json.Unmarshal(bytes, &n.Data); err != nil {
+		n.Valid = false
+		return fmt.Errorf("failed to unmarshal JSON: %w", err)
+	}
+
+	n.Valid = true
+	return nil
+}
+
+func (n *NullableJSON[T]) Value() (driver.Value, error) {
+	if !n.Valid {
+		return nil, nil
+	}
+
+	return json.Marshal(n.Data)
+}
+
+// ValueOrZero returns the value if valid, otherwise returns the zero value of type T.
+func (n NullableJSON[T]) ValueOrZero() T {
+	if !n.Valid {
+		var zero T // This declares a variable of type T initialized to its zero value
+		return zero
+	}
+	return n.Data
+}
+
 {{ range $key, $field := nestedMessages }}
 // {{ $key }} is a JSON type nested in another message.
 type {{ $field.StructureName }} struct {

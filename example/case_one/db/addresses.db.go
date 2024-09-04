@@ -7,6 +7,7 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
+	"gopkg.in/guregu/null.v4"
 	"math"
 	"time"
 )
@@ -429,13 +430,20 @@ func (t *addressStorage) Create(ctx context.Context, model *Address, opts ...Opt
 
 // AddressUpdate is used to update an existing Address.
 type AddressUpdate struct {
-	Street    *string
-	City      *string
-	State     *int32
-	Zip       *int64
-	UserId    *string
+	// Use regular pointer types for non-optional fields
+	Street *string
+	// Use regular pointer types for non-optional fields
+	City *string
+	// Use regular pointer types for non-optional fields
+	State *int32
+	// Use regular pointer types for non-optional fields
+	Zip *int64
+	// Use regular pointer types for non-optional fields
+	UserId *string
+	// Use regular pointer types for non-optional fields
 	CreatedAt *time.Time
-	UpdatedAt *time.Time
+	// Use null types for optional fields
+	UpdatedAt null.Time
 }
 
 // Update updates an existing Address based on non-nil fields.
@@ -445,26 +453,38 @@ func (t *addressStorage) Update(ctx context.Context, id string, updateData *Addr
 	}
 
 	query := t.queryBuilder.Update("addresses")
+	// Handle fields that are not optional using a nil check
 	if updateData.Street != nil {
-		query = query.Set("street", updateData.Street)
+		query = query.Set("street", *updateData.Street) // Dereference pointer value
 	}
+	// Handle fields that are not optional using a nil check
 	if updateData.City != nil {
-		query = query.Set("city", updateData.City)
+		query = query.Set("city", *updateData.City) // Dereference pointer value
 	}
+	// Handle fields that are not optional using a nil check
 	if updateData.State != nil {
-		query = query.Set("state", updateData.State)
+		query = query.Set("state", *updateData.State) // Dereference pointer value
 	}
+	// Handle fields that are not optional using a nil check
 	if updateData.Zip != nil {
-		query = query.Set("zip", updateData.Zip)
+		query = query.Set("zip", *updateData.Zip) // Dereference pointer value
 	}
+	// Handle fields that are not optional using a nil check
 	if updateData.UserId != nil {
-		query = query.Set("user_id", updateData.UserId)
+		query = query.Set("user_id", *updateData.UserId) // Dereference pointer value
 	}
+	// Handle fields that are not optional using a nil check
 	if updateData.CreatedAt != nil {
-		query = query.Set("created_at", updateData.CreatedAt)
+		query = query.Set("created_at", *updateData.CreatedAt) // Dereference pointer value
 	}
-	if updateData.UpdatedAt != nil {
-		query = query.Set("updated_at", updateData.UpdatedAt)
+	// Handle fields that are optional and can be explicitly set to NULL
+	if updateData.UpdatedAt.Valid {
+		// Handle null.Time specifically
+		if updateData.UpdatedAt.Time.IsZero() {
+			query = query.Set("updated_at", nil) // Explicitly set NULL if time is zero
+		} else {
+			query = query.Set("updated_at", updateData.UpdatedAt.Time)
+		}
 	}
 
 	query = query.Where("id = ?", id)

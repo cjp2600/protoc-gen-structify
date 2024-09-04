@@ -69,6 +69,7 @@ var (
 	ImportStrings           = Import{"strings", ""}
 	ImportMath              = Import{"math", ""}
 	ImportSquirrel          = Import{"github.com/Masterminds/squirrel", "sq"}
+	ImportNull              = Import{"gopkg.in/guregu/null.v4", ""}
 	ImportFMT               = Import{"fmt", ""}
 	ImportErrors            = Import{"github.com/pkg/errors", ""}
 	ImportContext           = Import{"context", ""}

@@ -127,6 +127,26 @@ const TableConditionFilters = `
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
+   {{- if ($field | isCurrentOptional) }}
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}IsNull checks if the {{ $field.GetName }} is NULL.
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}IsNull() FilterApplier {
+      return IsNullCondition{Field: "{{ $field.GetName }}"}
+    }
+
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}IsNotNull checks if the {{ $field.GetName }} is NOT NULL.
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}IsNotNull() FilterApplier {
+      return IsNotNullCondition{Field: "{{ $field.GetName }}"}
+    }
+   {{ end }}
+   {{ end }}
+   {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ range $key, $fieldMess := messages_for_filter }}
+  {{ range $field := $fieldMess.GetField }}
+   {{- if not ($field | isRelation) }}
+   {{- if not ($field | isJSON) }}
    {{- if ($field | isValidLike) }}
 	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Like like condition %
     func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Like(value {{ $field | fieldType }}) FilterApplier {
@@ -514,11 +534,17 @@ type {{ structureName }}Update struct {
 	{{- if not ($field | isRelation) }}
 	{{- if not ($field | isAutoIncrement) }}
 	{{- if not ($field | isPrimary) }}
-	{{ $field | fieldName }} {{- if not ($field | findPointer) }}*{{- end }}{{ $field | fieldType }}
-	{{- end}}
-	{{- end}}
-	{{- end}}
-	{{- end}}
+	{{- if ($field | isCurrentOptional) }}
+		// Use null types for optional fields
+		{{ $field | fieldName }} {{ $field | fieldTypeToNullType }}
+	{{- else }}
+		// Use regular pointer types for non-optional fields
+		{{ $field | fieldName }} {{- if not ($field | findPointer) }}*{{- end }}{{ $field | fieldType }}
+	{{- end }}
+	{{- end }}
+	{{- end }}
+	{{- end }}
+	{{- end }}
 }
 
 // Update updates an existing {{ structureName }} based on non-nil fields.
@@ -533,21 +559,53 @@ func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{ID
 	{{- if not ($field | isRelation) }}
 	{{- if not ($field | isAutoIncrement) }}
 	{{- if not ($field | isPrimary) }}
-	if updateData.{{ $field | fieldName }} != nil {
-		{{- if ($field | isRepeated) }}
-		value, err := updateData.{{ $field | fieldName }}.Value()
-		if err != nil {
-			return fmt.Errorf("failed to get {{ $field | fieldName | lowerCamelCase }} value: %w", err)
+	{{- if ($field | isCurrentOptional) }}
+		// Handle fields that are optional and can be explicitly set to NULL
+		if updateData.{{ $field | fieldName }}.Valid {
+			{{- if (eq ($field | fieldTypeToNullType) "null.String") }}
+			// Handle null.String specifically
+			if updateData.{{ $field | fieldName }}.String == "" {
+				query = query.Set("{{ $field | sourceName }}", nil) // Explicitly set NULL for empty string
+			} else {
+				query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.ValueOrZero())
+			}
+			{{- else if (eq ($field | fieldTypeToNullType) "null.Int") }}
+			// Handle null.Int specifically
+			query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.ValueOrZero())
+			{{- else if (eq ($field | fieldTypeToNullType) "null.Float") }}
+			// Handle null.Float specifically
+			query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.ValueOrZero())
+			{{- else if (eq ($field | fieldTypeToNullType) "null.Bool") }}
+			// Handle null.Bool specifically
+			query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.ValueOrZero())
+			{{- else if (eq ($field | fieldTypeToNullType) "null.Time") }}
+			// Handle null.Time specifically
+			if updateData.{{ $field | fieldName }}.Time.IsZero() {
+				query = query.Set("{{ $field | sourceName }}", nil) // Explicitly set NULL if time is zero
+			} else {
+				query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.Time)
+			}
+			{{- else if ($field | isJSON) }}
+			if updateData.{{ $field | fieldName }}.Data == nil {
+				query = query.Set("{{ $field | sourceName }}", nil) // Explicitly set NULL
+			} else {
+				query = query.Set("{{ $field | sourceName }}", *updateData.{{ $field | fieldName }}.Data)
+			}
+			{{- else }}
+			// Handle other null types
+			// ... add more specific handling here if needed
+			{{- end }}
 		}
-		query = query.Set("{{ $field | sourceName }}", value)
-		{{- else }}
-		query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }})
-		{{- end}}
-	}
-	{{- end}}
-	{{- end}}
-	{{- end}}
-	{{- end}}
+	{{- else }}
+		// Handle fields that are not optional using a nil check
+		if updateData.{{ $field | fieldName }} != nil {
+			query = query.Set("{{ $field | sourceName }}", *updateData.{{ $field | fieldName }}) // Dereference pointer value
+		}
+	{{- end }}
+	{{- end }}
+	{{- end }}
+	{{- end }}
+	{{- end }}
 
 	query = query.Where("id = ?", id)
 
@@ -556,7 +614,7 @@ func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{ID
 		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	_, err = t.DB(ctx).ExecContext(ctx,sqlQuery, args...)
+	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update {{ structureName }}: %w", err)
 	}

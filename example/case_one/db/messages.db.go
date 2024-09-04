@@ -7,6 +7,7 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
+	"gopkg.in/guregu/null.v4"
 	"math"
 )
 
@@ -480,6 +481,16 @@ func MessageBotIdBetween(min, max *string) FilterApplier {
 	return BetweenCondition{Field: "bot_id", Min: min, Max: max}
 }
 
+// MessageBotIdIsNull checks if the bot_id is NULL.
+func MessageBotIdIsNull() FilterApplier {
+	return IsNullCondition{Field: "bot_id"}
+}
+
+// MessageBotIdIsNotNull checks if the bot_id is NOT NULL.
+func MessageBotIdIsNotNull() FilterApplier {
+	return IsNotNullCondition{Field: "bot_id"}
+}
+
 // MessageIdLike like condition %
 func MessageIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "id", Value: value}
@@ -602,9 +613,12 @@ func (t *messageStorage) Create(ctx context.Context, model *Message, opts ...Opt
 
 // MessageUpdate is used to update an existing Message.
 type MessageUpdate struct {
+	// Use regular pointer types for non-optional fields
 	FromUserId *string
-	ToUserId   *string
-	BotId      *string
+	// Use regular pointer types for non-optional fields
+	ToUserId *string
+	// Use null types for optional fields
+	BotId null.String
 }
 
 // Update updates an existing Message based on non-nil fields.
@@ -614,14 +628,22 @@ func (t *messageStorage) Update(ctx context.Context, id string, updateData *Mess
 	}
 
 	query := t.queryBuilder.Update("messages")
+	// Handle fields that are not optional using a nil check
 	if updateData.FromUserId != nil {
-		query = query.Set("from_user_id", updateData.FromUserId)
+		query = query.Set("from_user_id", *updateData.FromUserId) // Dereference pointer value
 	}
+	// Handle fields that are not optional using a nil check
 	if updateData.ToUserId != nil {
-		query = query.Set("to_user_id", updateData.ToUserId)
+		query = query.Set("to_user_id", *updateData.ToUserId) // Dereference pointer value
 	}
-	if updateData.BotId != nil {
-		query = query.Set("bot_id", updateData.BotId)
+	// Handle fields that are optional and can be explicitly set to NULL
+	if updateData.BotId.Valid {
+		// Handle null.String specifically
+		if updateData.BotId.String == "" {
+			query = query.Set("bot_id", nil) // Explicitly set NULL for empty string
+		} else {
+			query = query.Set("bot_id", updateData.BotId.ValueOrZero())
+		}
 	}
 
 	query = query.Where("id = ?", id)
