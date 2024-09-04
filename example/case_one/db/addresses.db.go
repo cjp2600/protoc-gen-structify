@@ -179,9 +179,10 @@ func (t *addressStorage) LoadUser(ctx context.Context, model *Address, builders 
 
 // LoadBatchUser loads the User relation.
 func (t *addressStorage) LoadBatchUser(ctx context.Context, items []*Address, builders ...*QueryBuilder) error {
-	requestItems := make([]interface{}, len(items))
-	for i, item := range items {
-		requestItems[i] = item.UserId
+	requestItems := make([]interface{}, 0, len(items))
+	for _, item := range items {
+		// Append the value directly for non-optional fields
+		requestItems = append(requestItems, item.UserId)
 	}
 
 	// NewUserStorage creates a new UserStorage.
@@ -201,6 +202,7 @@ func (t *addressStorage) LoadBatchUser(ctx context.Context, items []*Address, bu
 
 	// Assign User to items
 	for _, item := range items {
+		// Assign the relation directly for non-optional fields
 		if v, ok := resultMap[item.UserId]; ok {
 			item.User = v
 		}

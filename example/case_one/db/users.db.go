@@ -255,9 +255,10 @@ func (t *userStorage) LoadPosts(ctx context.Context, model *User, builders ...*Q
 
 // LoadBatchDevice loads the Device relation.
 func (t *userStorage) LoadBatchDevice(ctx context.Context, items []*User, builders ...*QueryBuilder) error {
-	requestItems := make([]interface{}, len(items))
-	for i, item := range items {
-		requestItems[i] = item.Id
+	requestItems := make([]interface{}, 0, len(items))
+	for _, item := range items {
+		// Append the value directly for non-optional fields
+		requestItems = append(requestItems, item.Id)
 	}
 
 	// NewDeviceStorage creates a new DeviceStorage.
@@ -277,6 +278,7 @@ func (t *userStorage) LoadBatchDevice(ctx context.Context, items []*User, builde
 
 	// Assign Device to items
 	for _, item := range items {
+		// Assign the relation directly for non-optional fields
 		if v, ok := resultMap[item.Id]; ok {
 			item.Device = v
 		}
@@ -287,9 +289,10 @@ func (t *userStorage) LoadBatchDevice(ctx context.Context, items []*User, builde
 
 // LoadBatchSettings loads the Settings relation.
 func (t *userStorage) LoadBatchSettings(ctx context.Context, items []*User, builders ...*QueryBuilder) error {
-	requestItems := make([]interface{}, len(items))
-	for i, item := range items {
-		requestItems[i] = item.Id
+	requestItems := make([]interface{}, 0, len(items))
+	for _, item := range items {
+		// Append the value directly for non-optional fields
+		requestItems = append(requestItems, item.Id)
 	}
 
 	// NewSettingStorage creates a new SettingStorage.
@@ -309,6 +312,7 @@ func (t *userStorage) LoadBatchSettings(ctx context.Context, items []*User, buil
 
 	// Assign Setting to items
 	for _, item := range items {
+		// Assign the relation directly for non-optional fields
 		if v, ok := resultMap[item.Id]; ok {
 			item.Settings = v
 		}
@@ -319,9 +323,10 @@ func (t *userStorage) LoadBatchSettings(ctx context.Context, items []*User, buil
 
 // LoadBatchAddresses loads the Addresses relation.
 func (t *userStorage) LoadBatchAddresses(ctx context.Context, items []*User, builders ...*QueryBuilder) error {
-	requestItems := make([]interface{}, len(items))
-	for i, item := range items {
-		requestItems[i] = item.Id
+	requestItems := make([]interface{}, 0, len(items))
+	for _, item := range items {
+		// Append the value directly for non-optional fields
+		requestItems = append(requestItems, item.Id)
 	}
 
 	// NewAddressStorage creates a new AddressStorage.
@@ -341,6 +346,7 @@ func (t *userStorage) LoadBatchAddresses(ctx context.Context, items []*User, bui
 
 	// Assign Address to items
 	for _, item := range items {
+		// Assign the relation directly for non-optional fields
 		if v, ok := resultMap[item.Id]; ok {
 			item.Addresses = v
 		}
@@ -351,9 +357,10 @@ func (t *userStorage) LoadBatchAddresses(ctx context.Context, items []*User, bui
 
 // LoadBatchPosts loads the Posts relation.
 func (t *userStorage) LoadBatchPosts(ctx context.Context, items []*User, builders ...*QueryBuilder) error {
-	requestItems := make([]interface{}, len(items))
-	for i, item := range items {
-		requestItems[i] = item.Id
+	requestItems := make([]interface{}, 0, len(items))
+	for _, item := range items {
+		// Append the value directly for non-optional fields
+		requestItems = append(requestItems, item.Id)
 	}
 
 	// NewPostStorage creates a new PostStorage.
@@ -373,6 +380,7 @@ func (t *userStorage) LoadBatchPosts(ctx context.Context, items []*User, builder
 
 	// Assign Post to items
 	for _, item := range items {
+		// Assign the relation directly for non-optional fields
 		if v, ok := resultMap[item.Id]; ok {
 			item.Posts = v
 		}

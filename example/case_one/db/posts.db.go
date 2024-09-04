@@ -173,9 +173,10 @@ func (t *postStorage) LoadAuthor(ctx context.Context, model *Post, builders ...*
 
 // LoadBatchAuthor loads the Author relation.
 func (t *postStorage) LoadBatchAuthor(ctx context.Context, items []*Post, builders ...*QueryBuilder) error {
-	requestItems := make([]interface{}, len(items))
-	for i, item := range items {
-		requestItems[i] = item.AuthorId
+	requestItems := make([]interface{}, 0, len(items))
+	for _, item := range items {
+		// Append the value directly for non-optional fields
+		requestItems = append(requestItems, item.AuthorId)
 	}
 
 	// NewUserStorage creates a new UserStorage.
@@ -195,6 +196,7 @@ func (t *postStorage) LoadBatchAuthor(ctx context.Context, items []*Post, builde
 
 	// Assign User to items
 	for _, item := range items {
+		// Assign the relation directly for non-optional fields
 		if v, ok := resultMap[item.AuthorId]; ok {
 			item.Author = v
 		}

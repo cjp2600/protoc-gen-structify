@@ -178,9 +178,10 @@ func (t *botStorage) LoadUser(ctx context.Context, model *Bot, builders ...*Quer
 
 // LoadBatchUser loads the User relation.
 func (t *botStorage) LoadBatchUser(ctx context.Context, items []*Bot, builders ...*QueryBuilder) error {
-	requestItems := make([]interface{}, len(items))
-	for i, item := range items {
-		requestItems[i] = item.UserId
+	requestItems := make([]interface{}, 0, len(items))
+	for _, item := range items {
+		// Append the value directly for non-optional fields
+		requestItems = append(requestItems, item.UserId)
 	}
 
 	// NewUserStorage creates a new UserStorage.
@@ -200,6 +201,7 @@ func (t *botStorage) LoadBatchUser(ctx context.Context, items []*Bot, builders .
 
 	// Assign User to items
 	for _, item := range items {
+		// Assign the relation directly for non-optional fields
 		if v, ok := resultMap[item.UserId]; ok {
 			item.User = v
 		}

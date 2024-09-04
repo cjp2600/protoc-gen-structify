@@ -225,16 +225,25 @@ func (t *messageStorage) LoadToUser(ctx context.Context, model *Message, builder
 
 // LoadBatchBot loads the Bot relation.
 func (t *messageStorage) LoadBatchBot(ctx context.Context, items []*Message, builders ...*QueryBuilder) error {
-	requestItems := make([]interface{}, len(items))
-	for i, item := range items {
-		requestItems[i] = item.BotId
+	requestItems := make([]interface{}, 0, len(items))
+	for _, item := range items {
+		// Check if the field is nil for optional fields
+		if item.BotId == nil {
+			// Skip nil values for optional fields
+			continue
+		}
+		// Append dereferenced value for optional fields
+		requestItems = append(requestItems, *item.BotId)
 	}
 
 	// NewBotStorage creates a new BotStorage.
 	s := NewBotStorage(t.db)
 
 	// Add the filter for the relation
-	builders = append(builders, FilterBuilder(BotIdIn(requestItems...)))
+	// Ensure that requestItems are not empty before adding the builder
+	if len(requestItems) > 0 {
+		builders = append(builders, FilterBuilder(BotIdIn(requestItems...)))
+	}
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
@@ -247,7 +256,12 @@ func (t *messageStorage) LoadBatchBot(ctx context.Context, items []*Message, bui
 
 	// Assign Bot to items
 	for _, item := range items {
-		if v, ok := resultMap[item.BotId]; ok {
+		// Skip assignment if the field is nil
+		if item.BotId == nil {
+			continue
+		}
+		// Assign the relation if it exists in the resultMap
+		if v, ok := resultMap[*item.BotId]; ok {
 			item.Bot = v
 		}
 	}
@@ -257,9 +271,10 @@ func (t *messageStorage) LoadBatchBot(ctx context.Context, items []*Message, bui
 
 // LoadBatchFromUser loads the FromUser relation.
 func (t *messageStorage) LoadBatchFromUser(ctx context.Context, items []*Message, builders ...*QueryBuilder) error {
-	requestItems := make([]interface{}, len(items))
-	for i, item := range items {
-		requestItems[i] = item.FromUserId
+	requestItems := make([]interface{}, 0, len(items))
+	for _, item := range items {
+		// Append the value directly for non-optional fields
+		requestItems = append(requestItems, item.FromUserId)
 	}
 
 	// NewUserStorage creates a new UserStorage.
@@ -279,6 +294,7 @@ func (t *messageStorage) LoadBatchFromUser(ctx context.Context, items []*Message
 
 	// Assign User to items
 	for _, item := range items {
+		// Assign the relation directly for non-optional fields
 		if v, ok := resultMap[item.FromUserId]; ok {
 			item.FromUser = v
 		}
@@ -289,9 +305,10 @@ func (t *messageStorage) LoadBatchFromUser(ctx context.Context, items []*Message
 
 // LoadBatchToUser loads the ToUser relation.
 func (t *messageStorage) LoadBatchToUser(ctx context.Context, items []*Message, builders ...*QueryBuilder) error {
-	requestItems := make([]interface{}, len(items))
-	for i, item := range items {
-		requestItems[i] = item.ToUserId
+	requestItems := make([]interface{}, 0, len(items))
+	for _, item := range items {
+		// Append the value directly for non-optional fields
+		requestItems = append(requestItems, item.ToUserId)
 	}
 
 	// NewUserStorage creates a new UserStorage.
@@ -311,6 +328,7 @@ func (t *messageStorage) LoadBatchToUser(ctx context.Context, items []*Message, 
 
 	// Assign User to items
 	for _, item := range items {
+		// Assign the relation directly for non-optional fields
 		if v, ok := resultMap[item.ToUserId]; ok {
 			item.ToUser = v
 		}

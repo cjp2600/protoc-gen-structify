@@ -925,17 +925,35 @@ func (t *{{ storageName | lowerCamelCase }}) Load{{ $field | pluralFieldName }}(
 {{- range $index, $field := fields }}
 {{- if and ($field | isRelation) }}
 // LoadBatch{{ $field | pluralFieldName }} loads the {{ $field | pluralFieldName }} relation.
-func (t *{{ storageName | lowerCamelCase }}) LoadBatch{{ $field | pluralFieldName }} (ctx context.Context, items []*{{structureName}}, builders ...*QueryBuilder) error {
-	requestItems := make([]interface{}, len(items))
-	for i, item := range items {
-		requestItems[i] = item.{{ $field | getFieldID }}
+func (t *{{ storageName | lowerCamelCase }}) LoadBatch{{ $field | pluralFieldName }}(ctx context.Context, items []*{{structureName}}, builders ...*QueryBuilder) error {
+	requestItems := make([]interface{}, 0, len(items))
+	for _, item := range items {
+		{{- if ($field | isOptional) }}
+			// Check if the field is nil for optional fields
+			if item.{{ $field | getFieldID }} == nil {
+				// Skip nil values for optional fields
+				continue
+			}
+			// Append dereferenced value for optional fields
+			requestItems = append(requestItems, *item.{{ $field | getFieldID }})
+		{{- else }}
+			// Append the value directly for non-optional fields
+			requestItems = append(requestItems, item.{{ $field | getFieldID }})
+		{{- end }}
 	}
 
 	// New{{ $field | relationStorageName }} creates a new {{ $field | relationStorageName }}.
 	s := New{{ $field | relationStorageName }}(t.db)
 
 	// Add the filter for the relation
-	builders = append(builders, FilterBuilder({{ $field | relationStructureName  }}{{ $field | getRefID }}In(requestItems...)))
+	{{- if ($field | isOptional) }}
+		// Ensure that requestItems are not empty before adding the builder
+		if len(requestItems) > 0 {
+			builders = append(builders, FilterBuilder({{ $field | relationStructureName }}{{ $field | getRefID }}In(requestItems...)))
+		}
+	{{- else }}
+		builders = append(builders, FilterBuilder({{ $field | relationStructureName }}{{ $field | getRefID }}In(requestItems...)))
+	{{- end }}
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
@@ -957,9 +975,21 @@ func (t *{{ storageName | lowerCamelCase }}) LoadBatch{{ $field | pluralFieldNam
 
 	// Assign {{ $field | relationStructureName }} to items
 	for _, item := range items {
-        if v, ok := resultMap[item.{{ $field | getFieldID }}]; ok {
-			item.{{ $field | fieldName }} = v
-		}
+		{{- if ($field | isOptional) }}
+			// Skip assignment if the field is nil
+			if item.{{ $field | getFieldID }} == nil {
+				continue
+			}
+			// Assign the relation if it exists in the resultMap
+			if v, ok := resultMap[*item.{{ $field | getFieldID }}]; ok {
+				item.{{ $field | fieldName }} = v
+			}
+		{{- else }}
+			// Assign the relation directly for non-optional fields
+			if v, ok := resultMap[item.{{ $field | getFieldID }}]; ok {
+				item.{{ $field | fieldName }} = v
+			}
+		{{- end }}
 	}
 
 	return nil
