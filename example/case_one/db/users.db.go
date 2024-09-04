@@ -856,7 +856,7 @@ func (t *userStorage) Update(ctx context.Context, id string, updateData *UserUpd
 		if updateData.NotificationSettings.Data == nil {
 			query = query.Set("notification_settings", nil) // Explicitly set NULL
 		} else {
-			query = query.Set("notification_settings", *updateData.NotificationSettings.Data)
+			query = query.Set("notification_settings", updateData.NotificationSettings.Data)
 		}
 	}
 	// Handle fields that are not optional using a nil check

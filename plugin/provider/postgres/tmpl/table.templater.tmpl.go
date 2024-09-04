@@ -589,7 +589,7 @@ func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{ID
 			if updateData.{{ $field | fieldName }}.Data == nil {
 				query = query.Set("{{ $field | sourceName }}", nil) // Explicitly set NULL
 			} else {
-				query = query.Set("{{ $field | sourceName }}", *updateData.{{ $field | fieldName }}.Data)
+				query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.Data)
 			}
 			{{- else }}
 			// Handle other null types
