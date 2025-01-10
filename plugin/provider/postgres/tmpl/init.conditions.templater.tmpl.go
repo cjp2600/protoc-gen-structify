@@ -256,6 +256,27 @@ func LessThanOrEq(field string, value interface{}) FilterApplier {
 	return LessThanOrEqualCondition{Field: field, Value: value}
 }
 
+// ILikeCondition ilike condition.
+type ILikeCondition struct {
+	Field string
+	Value interface{}
+}
+
+// Apply applies the condition to the query.
+func (c ILikeCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.ILike{c.Field: c.Value})
+}
+
+// ApplyDelete applies the condition to the query.
+func (c ILikeCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.ILike{c.Field: c.Value})
+}
+
+// ILike returns a condition that checks if the field equals the value.
+func ILike(field string, value interface{}) FilterApplier {
+	return ILikeCondition{Field: field, Value: value}
+}
+
 // LikeCondition like condition.
 type LikeCondition struct {
 	Field string

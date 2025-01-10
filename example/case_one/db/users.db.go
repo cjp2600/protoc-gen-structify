@@ -586,6 +586,21 @@ func UserEmailBetween(min, max string) FilterApplier {
 	return BetweenCondition{Field: "email", Min: min, Max: max}
 }
 
+// UserIdILike iLike condition %
+func UserIdILike(value string) FilterApplier {
+	return ILikeCondition{Field: "id", Value: value}
+}
+
+// UserNameILike iLike condition %
+func UserNameILike(value string) FilterApplier {
+	return ILikeCondition{Field: "name", Value: value}
+}
+
+// UserEmailILike iLike condition %
+func UserEmailILike(value string) FilterApplier {
+	return ILikeCondition{Field: "email", Value: value}
+}
+
 // UserIdLike like condition %
 func UserIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "id", Value: value}

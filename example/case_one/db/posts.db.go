@@ -310,6 +310,11 @@ func PostAuthorIdBetween(min, max string) FilterApplier {
 	return BetweenCondition{Field: "author_id", Min: min, Max: max}
 }
 
+// PostAuthorIdILike iLike condition %
+func PostAuthorIdILike(value string) FilterApplier {
+	return ILikeCondition{Field: "author_id", Value: value}
+}
+
 // PostAuthorIdLike like condition %
 func PostAuthorIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "author_id", Value: value}

@@ -209,6 +209,11 @@ func DeviceUserIdBetween(min, max string) FilterApplier {
 	return BetweenCondition{Field: "user_id", Min: min, Max: max}
 }
 
+// DeviceUserIdILike iLike condition %
+func DeviceUserIdILike(value string) FilterApplier {
+	return ILikeCondition{Field: "user_id", Value: value}
+}
+
 // DeviceUserIdLike like condition %
 func DeviceUserIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "user_id", Value: value}

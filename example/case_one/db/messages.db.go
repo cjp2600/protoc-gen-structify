@@ -491,6 +491,21 @@ func MessageBotIdIsNotNull() FilterApplier {
 	return IsNotNullCondition{Field: "bot_id"}
 }
 
+// MessageIdILike iLike condition %
+func MessageIdILike(value string) FilterApplier {
+	return ILikeCondition{Field: "id", Value: value}
+}
+
+// MessageToUserIdILike iLike condition %
+func MessageToUserIdILike(value string) FilterApplier {
+	return ILikeCondition{Field: "to_user_id", Value: value}
+}
+
+// MessageBotIdILike iLike condition %
+func MessageBotIdILike(value *string) FilterApplier {
+	return ILikeCondition{Field: "bot_id", Value: value}
+}
+
 // MessageIdLike like condition %
 func MessageIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "id", Value: value}

@@ -360,6 +360,16 @@ func BotCreatedAtBetween(min, max time.Time) FilterApplier {
 	return BetweenCondition{Field: "created_at", Min: min, Max: max}
 }
 
+// BotIdILike iLike condition %
+func BotIdILike(value string) FilterApplier {
+	return ILikeCondition{Field: "id", Value: value}
+}
+
+// BotUserIdILike iLike condition %
+func BotUserIdILike(value string) FilterApplier {
+	return ILikeCondition{Field: "user_id", Value: value}
+}
+
 // BotIdLike like condition %
 func BotIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "id", Value: value}

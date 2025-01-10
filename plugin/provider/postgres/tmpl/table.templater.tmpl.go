@@ -148,6 +148,21 @@ const TableConditionFilters = `
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
    {{- if ($field | isValidLike) }}
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}ILike iLike condition %
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}ILike(value {{ $field | fieldType }}) FilterApplier {
+      return ILikeCondition{Field: "{{ $field.GetName }}", Value: value}
+    }
+  {{ end }}
+  {{ end }}
+  {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ range $key, $fieldMess := messages_for_filter }}
+  {{ range $field := $fieldMess.GetField }}
+   {{- if not ($field | isRelation) }}
+   {{- if not ($field | isJSON) }}
+   {{- if ($field | isValidLike) }}
 	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Like like condition %
     func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Like(value {{ $field | fieldType }}) FilterApplier {
       return LikeCondition{Field: "{{ $field.GetName }}", Value: value}

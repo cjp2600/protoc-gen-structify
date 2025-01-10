@@ -325,6 +325,16 @@ func AddressUserIdBetween(min, max string) FilterApplier {
 	return BetweenCondition{Field: "user_id", Min: min, Max: max}
 }
 
+// AddressIdILike iLike condition %
+func AddressIdILike(value string) FilterApplier {
+	return ILikeCondition{Field: "id", Value: value}
+}
+
+// AddressUserIdILike iLike condition %
+func AddressUserIdILike(value string) FilterApplier {
+	return ILikeCondition{Field: "user_id", Value: value}
+}
+
 // AddressIdLike like condition %
 func AddressIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "id", Value: value}
