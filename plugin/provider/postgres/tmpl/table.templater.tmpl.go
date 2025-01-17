@@ -306,6 +306,9 @@ func (t *{{ storageName | lowerCamelCase }}) SelectForUpdate(ctx context.Context
 		for _, option := range builder.filterOptions {
 			query = option.Apply(query)
 		}
+
+		// apply custom filters
+		query = builder.ApplyCustomFilters(query)
 	}
 
 	// execute query
@@ -343,6 +346,9 @@ func (t *{{ storageName | lowerCamelCase }}) Count(ctx context.Context, builders
 		for _, option := range builder.filterOptions {
 			query = option.Apply(query)
 		}
+
+		// apply custom filters
+		query = builder.ApplyCustomFilters(query)
 	}
 
 	// execute query
@@ -398,6 +404,10 @@ func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, build
 		for _, option := range builder.filterOptions {
 			query = option.Apply(query)
 		}
+
+		// apply custom filters
+		query = builder.ApplyCustomFilters(query)
+
 		// apply pagination
 		if builder.pagination != nil {
 			if builder.pagination.limit != nil {

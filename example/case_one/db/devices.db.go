@@ -378,6 +378,10 @@ func (t *deviceStorage) FindMany(ctx context.Context, builders ...*QueryBuilder)
 		for _, option := range builder.filterOptions {
 			query = option.Apply(query)
 		}
+
+		// apply custom filters
+		query = builder.ApplyCustomFilters(query)
+
 		// apply pagination
 		if builder.pagination != nil {
 			if builder.pagination.limit != nil {
@@ -454,6 +458,9 @@ func (t *deviceStorage) Count(ctx context.Context, builders ...*QueryBuilder) (i
 		for _, option := range builder.filterOptions {
 			query = option.Apply(query)
 		}
+
+		// apply custom filters
+		query = builder.ApplyCustomFilters(query)
 	}
 
 	// execute query
@@ -516,6 +523,9 @@ func (t *deviceStorage) SelectForUpdate(ctx context.Context, builders ...*QueryB
 		for _, option := range builder.filterOptions {
 			query = option.Apply(query)
 		}
+
+		// apply custom filters
+		query = builder.ApplyCustomFilters(query)
 	}
 
 	// execute query

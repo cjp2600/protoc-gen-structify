@@ -655,6 +655,10 @@ func (t *botStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) ([
 		for _, option := range builder.filterOptions {
 			query = option.Apply(query)
 		}
+
+		// apply custom filters
+		query = builder.ApplyCustomFilters(query)
+
 		// apply pagination
 		if builder.pagination != nil {
 			if builder.pagination.limit != nil {
@@ -731,6 +735,9 @@ func (t *botStorage) Count(ctx context.Context, builders ...*QueryBuilder) (int6
 		for _, option := range builder.filterOptions {
 			query = option.Apply(query)
 		}
+
+		// apply custom filters
+		query = builder.ApplyCustomFilters(query)
 	}
 
 	// execute query
@@ -793,6 +800,9 @@ func (t *botStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBuil
 		for _, option := range builder.filterOptions {
 			query = option.Apply(query)
 		}
+
+		// apply custom filters
+		query = builder.ApplyCustomFilters(query)
 	}
 
 	// execute query

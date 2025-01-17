@@ -75,6 +75,11 @@ type FilterApplier interface {
 	ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder
 }
 
+// CustomFilter is a custom filter.
+type CustomFilter interface {
+	ApplyFilter(query sq.SelectBuilder, params any) sq.SelectBuilder
+}
+
 // QueryBuilder is a query builder.
 type QueryBuilder struct {
 	// additional options for the query.
@@ -85,6 +90,11 @@ type QueryBuilder struct {
 	sortOptions  []FilterApplier
 	// pagination is the pagination.
 	pagination    *Pagination
+	// customFilters are the custom filters.
+	customFilters []struct {
+		filter CustomFilter
+		params any
+	}
 }
 
 // NewQueryBuilder returns a new query builder.
@@ -96,6 +106,26 @@ func NewQueryBuilder() *QueryBuilder {
 func (b *QueryBuilder) WithOptions(options ...Option) *QueryBuilder {
 	b.options = options
 	return b
+}
+
+// WithCustomFilter sets a custom filter for the query.
+func (qb *QueryBuilder) WithCustomFilter(filter CustomFilter, params any) *QueryBuilder {
+	qb.customFilters = append(qb.customFilters, struct {
+		filter CustomFilter
+		params any
+	}{
+		filter: filter,
+		params: params,
+	})
+	return qb
+}
+
+// ApplyCustomFilters applies the custom filters to the query.
+func (qb *QueryBuilder) ApplyCustomFilters(query sq.SelectBuilder) sq.SelectBuilder {
+	for _, cf := range qb.customFilters {
+		query = cf.filter.ApplyFilter(query, cf.params)
+	}
+	return query
 }
 
 // WithFilterOptions sets the filter options for the query.
