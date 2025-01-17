@@ -18,14 +18,6 @@ type addressStorage struct {
 	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
 }
 
-// AddressTableManager is an interface for managing the addresses table.
-type AddressTableManager interface {
-	CreateTable(ctx context.Context) error
-	DropTable(ctx context.Context) error
-	TruncateTable(ctx context.Context) error
-	UpgradeTable(ctx context.Context) error
-}
-
 // AddressCRUDOperations is an interface for managing the addresses table.
 type AddressCRUDOperations interface {
 	Create(ctx context.Context, model *Address, opts ...Option) (*string, error)
@@ -67,7 +59,6 @@ type AddressRawQueryOperations interface {
 
 // AddressStorage is a struct for the "addresses" table.
 type AddressStorage interface {
-	AddressTableManager
 	AddressCRUDOperations
 	AddressSearchOperations
 	AddressPaginationOperations
@@ -104,59 +95,6 @@ func (t *addressStorage) DB(ctx context.Context) QueryExecer {
 	}
 
 	return db
-}
-
-// createTable creates the table.
-func (t *addressStorage) CreateTable(ctx context.Context) error {
-	sqlQuery := `
-		CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-		-- Table: addresses
-		CREATE TABLE IF NOT EXISTS addresses (
-		id UUID PRIMARY KEY NOT NULL DEFAULT uuid_generate_v4(),
-		street TEXT,
-		city TEXT NOT NULL,
-		state INTEGER,
-		zip BIGINT,
-		user_id UUID NOT NULL,
-		created_at TIMESTAMP NOT NULL DEFAULT now(),
-		updated_at TIMESTAMP);
-		-- Other entities
-		CREATE UNIQUE INDEX IF NOT EXISTS addresses_user_id_unique_idx ON addresses USING btree (user_id);
-		CREATE INDEX IF NOT EXISTS addresses_city_idx ON addresses USING btree (city);
-		CREATE INDEX IF NOT EXISTS addresses_user_id_idx ON addresses USING btree (user_id);
-		-- Foreign keys for users
-		ALTER TABLE addresses
-		ADD FOREIGN KEY (user_id) REFERENCES users(id);
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// DropTable drops the table.
-func (t *addressStorage) DropTable(ctx context.Context) error {
-	sqlQuery := `
-		DROP TABLE IF EXISTS addresses;
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// TruncateTable truncates the table.
-func (t *addressStorage) TruncateTable(ctx context.Context) error {
-	sqlQuery := `
-		TRUNCATE TABLE addresses;
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// UpgradeTable upgrades the table.
-// todo: delete this method
-func (t *addressStorage) UpgradeTable(ctx context.Context) error {
-	return nil
 }
 
 // LoadUser loads the User relation.

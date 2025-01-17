@@ -16,14 +16,6 @@ type postStorage struct {
 	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
 }
 
-// PostTableManager is an interface for managing the posts table.
-type PostTableManager interface {
-	CreateTable(ctx context.Context) error
-	DropTable(ctx context.Context) error
-	TruncateTable(ctx context.Context) error
-	UpgradeTable(ctx context.Context) error
-}
-
 // PostCRUDOperations is an interface for managing the posts table.
 type PostCRUDOperations interface {
 	Create(ctx context.Context, model *Post, opts ...Option) (*int32, error)
@@ -65,7 +57,6 @@ type PostRawQueryOperations interface {
 
 // PostStorage is a struct for the "posts" table.
 type PostStorage interface {
-	PostTableManager
 	PostCRUDOperations
 	PostSearchOperations
 	PostPaginationOperations
@@ -102,54 +93,6 @@ func (t *postStorage) DB(ctx context.Context) QueryExecer {
 	}
 
 	return db
-}
-
-// createTable creates the table.
-func (t *postStorage) CreateTable(ctx context.Context) error {
-	sqlQuery := `
-		-- Table: posts
-		CREATE TABLE IF NOT EXISTS posts (
-		id  SERIAL PRIMARY KEY,
-		title TEXT NOT NULL,
-		body TEXT,
-		author_id UUID NOT NULL);
-		-- Other entities
-		CREATE UNIQUE INDEX IF NOT EXISTS posts_author_id_unique_idx ON posts USING btree (author_id);
-		CREATE INDEX IF NOT EXISTS posts_title_idx ON posts USING btree (title);
-		CREATE INDEX IF NOT EXISTS posts_author_id_idx ON posts USING btree (author_id);
-		-- Foreign keys for users
-		ALTER TABLE posts
-		ADD FOREIGN KEY (author_id) REFERENCES users(id);
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// DropTable drops the table.
-func (t *postStorage) DropTable(ctx context.Context) error {
-	sqlQuery := `
-		DROP TABLE IF EXISTS posts;
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// TruncateTable truncates the table.
-func (t *postStorage) TruncateTable(ctx context.Context) error {
-	sqlQuery := `
-		TRUNCATE TABLE posts;
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// UpgradeTable upgrades the table.
-// todo: delete this method
-func (t *postStorage) UpgradeTable(ctx context.Context) error {
-	return nil
 }
 
 // LoadAuthor loads the Author relation.

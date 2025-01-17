@@ -18,14 +18,6 @@ type userStorage struct {
 	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
 }
 
-// UserTableManager is an interface for managing the users table.
-type UserTableManager interface {
-	CreateTable(ctx context.Context) error
-	DropTable(ctx context.Context) error
-	TruncateTable(ctx context.Context) error
-	UpgradeTable(ctx context.Context) error
-}
-
 // UserCRUDOperations is an interface for managing the users table.
 type UserCRUDOperations interface {
 	Create(ctx context.Context, model *User, opts ...Option) (*string, error)
@@ -73,7 +65,6 @@ type UserRawQueryOperations interface {
 
 // UserStorage is a struct for the "users" table.
 type UserStorage interface {
-	UserTableManager
 	UserCRUDOperations
 	UserSearchOperations
 	UserPaginationOperations
@@ -110,72 +101,6 @@ func (t *userStorage) DB(ctx context.Context) QueryExecer {
 	}
 
 	return db
-}
-
-// createTable creates the table.
-func (t *userStorage) CreateTable(ctx context.Context) error {
-	sqlQuery := `
-		CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-		-- Table: users
-		CREATE TABLE IF NOT EXISTS users (
-		id UUID PRIMARY KEY NOT NULL DEFAULT uuid_generate_v4(),
-		name TEXT NOT NULL,
-		age INTEGER NOT NULL,
-		email TEXT NOT NULL,
-		last_name TEXT,
-		created_at TIMESTAMP NOT NULL DEFAULT now(),
-		updated_at TIMESTAMP,
-		notification_settings JSONB,
-		phones JSONB,
-		balls JSONB,
-		numrs JSONB,
-		comments JSONB);
-		-- Other entities
-		COMMENT ON TABLE users IS 'This is a comment of User';
-		CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx ON users USING btree (email);
-		CREATE UNIQUE INDEX IF NOT EXISTS users_unique_idx_name_email ON users USING btree (
-            name, 
-            email
-    	);
-		CREATE INDEX IF NOT EXISTS users_name_idx ON users USING btree (name);
-		-- Foreign keys for devices
-		ALTER TABLE users
-		ADD FOREIGN KEY (id) REFERENCES devices(user_id)
-		ON DELETE CASCADE;
-		-- Foreign keys for settings
-		ALTER TABLE users
-		ADD FOREIGN KEY (id) REFERENCES settings(user_id)
-		ON DELETE CASCADE;
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// DropTable drops the table.
-func (t *userStorage) DropTable(ctx context.Context) error {
-	sqlQuery := `
-		DROP TABLE IF EXISTS users;
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// TruncateTable truncates the table.
-func (t *userStorage) TruncateTable(ctx context.Context) error {
-	sqlQuery := `
-		TRUNCATE TABLE users;
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// UpgradeTable upgrades the table.
-// todo: delete this method
-func (t *userStorage) UpgradeTable(ctx context.Context) error {
-	return nil
 }
 
 // LoadDevice loads the Device relation.

@@ -16,14 +16,6 @@ type settingStorage struct {
 	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
 }
 
-// SettingTableManager is an interface for managing the settings table.
-type SettingTableManager interface {
-	CreateTable(ctx context.Context) error
-	DropTable(ctx context.Context) error
-	TruncateTable(ctx context.Context) error
-	UpgradeTable(ctx context.Context) error
-}
-
 // SettingCRUDOperations is an interface for managing the settings table.
 type SettingCRUDOperations interface {
 	Create(ctx context.Context, model *Setting, opts ...Option) (*int32, error)
@@ -65,7 +57,6 @@ type SettingRawQueryOperations interface {
 
 // SettingStorage is a struct for the "settings" table.
 type SettingStorage interface {
-	SettingTableManager
 	SettingCRUDOperations
 	SettingSearchOperations
 	SettingPaginationOperations
@@ -102,51 +93,6 @@ func (t *settingStorage) DB(ctx context.Context) QueryExecer {
 	}
 
 	return db
-}
-
-// createTable creates the table.
-func (t *settingStorage) CreateTable(ctx context.Context) error {
-	sqlQuery := `
-		-- Table: settings
-		CREATE TABLE IF NOT EXISTS settings (
-		id  SERIAL PRIMARY KEY,
-		name TEXT NOT NULL,
-		value TEXT,
-		user_id UUID NOT NULL);
-		-- Other entities
-		CREATE UNIQUE INDEX IF NOT EXISTS settings_user_id_unique_idx ON settings USING btree (user_id);
-		CREATE INDEX IF NOT EXISTS settings_name_idx ON settings USING btree (name);
-		CREATE INDEX IF NOT EXISTS settings_user_id_idx ON settings USING btree (user_id);
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// DropTable drops the table.
-func (t *settingStorage) DropTable(ctx context.Context) error {
-	sqlQuery := `
-		DROP TABLE IF EXISTS settings;
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// TruncateTable truncates the table.
-func (t *settingStorage) TruncateTable(ctx context.Context) error {
-	sqlQuery := `
-		TRUNCATE TABLE settings;
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// UpgradeTable upgrades the table.
-// todo: delete this method
-func (t *settingStorage) UpgradeTable(ctx context.Context) error {
-	return nil
 }
 
 // LoadUser loads the User relation.

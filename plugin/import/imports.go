@@ -33,7 +33,7 @@ func (i ImportSet) String() string {
 // Add adds imports to the ImportSet.
 func (i ImportSet) Add(imports ...Import) {
 	for _, v := range imports {
-		i[v] = false
+		i[v] = true
 	}
 }
 

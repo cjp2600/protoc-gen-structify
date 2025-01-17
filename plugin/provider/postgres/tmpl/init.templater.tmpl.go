@@ -334,6 +334,8 @@ type {{ storageName }} interface {
 	{{- end }}
 	// TxManager returns the transaction manager.
 	TxManager() *TxManager
+
+{{ if .CRUDSchemas }}
 	// CreateTables creates the tables for all the stores.
 	CreateTables(ctx context.Context) error
 	// DropTables drops the tables for all the stores.
@@ -342,6 +344,7 @@ type {{ storageName }} interface {
 	TruncateTables(ctx context.Context) error
 	// UpgradeTables upgrades the tables for all the stores.
 	UpgradeTables(ctx context.Context) error
+{{ end }}
 }
 
 // New{{ storageName }} returns a new {{ storageName }}.
@@ -366,6 +369,7 @@ func (c *{{ storageName | lowerCamelCase }}) Get{{ $value.Value }}() {{ $value.V
 }
 {{ end }}
 
+{{ if .CRUDSchemas }}
 // CreateTables creates the tables for all the stores.
 // This is idempotent and safe to run multiple times.
 func (c *{{ storageName | lowerCamelCase }}) CreateTables(ctx context.Context) error {
@@ -421,6 +425,7 @@ func (c *{{ storageName | lowerCamelCase }}) UpgradeTables(ctx context.Context) 
 {{ end }}
 	return nil
 }
+{{ end }}
 `
 
 const TypesTemplate = `

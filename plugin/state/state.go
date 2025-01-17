@@ -24,6 +24,7 @@ type State struct {
 	ProtocVersion     string // ProtocVersion is the Version of protoc.
 	FileToGenerate    string // FileToGenerate is the file to generate.
 	IncludeConnection bool   // IncludeConnection is the flag to include connection in the generated code.
+	CRUDSchemas       bool
 
 	Imports        importpkg.ImportSet // Imports is the set of Imports.
 	Relations      Relations           // Relations is the set of Relations Messages.
@@ -76,23 +77,23 @@ func getProvider(request *plugingo.CodeGeneratorRequest) string {
 
 // defaultImports returns the default Imports.
 func defaultImports(request *plugingo.CodeGeneratorRequest) importpkg.ImportSet {
-	protoFile := helperpkg.GetUserProtoFile(request)
 	var imports = make(importpkg.ImportSet)
 
-	for _, m := range protoFile.GetMessageType() {
-		for _, field := range m.GetField() {
-			var typ = field.GetTypeName()
-			switch *field.Type {
-			case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
-				parts := strings.Split(typ, ".")
-				typName := parts[len(parts)-1]
-				if typName == "Timestamp" && parts[len(parts)-2] == "protobuf" && parts[len(parts)-3] == "google" {
-					imports.Enable(importpkg.ImportTime)
+	/*	protoFile := helperpkg.GetUserProtoFile(request)
+		for _, m := range protoFile.GetMessageType() {
+			for _, field := range m.GetField() {
+				var typ = field.GetTypeName()
+				switch *field.Type {
+				case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
+					parts := strings.Split(typ, ".")
+					typName := parts[len(parts)-1]
+					if typName == "Timestamp" && parts[len(parts)-2] == "protobuf" && parts[len(parts)-3] == "google" {
+						imports.Enable(importpkg.ImportTime)
+					}
 				}
 			}
 		}
-	}
-
+	*/
 	return imports
 }
 

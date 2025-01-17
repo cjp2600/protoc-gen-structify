@@ -20,6 +20,9 @@ type initTemplater struct {
 
 	// is include connection
 	IncludeConnection bool
+
+	// initMethods bool
+	CRUDSchemas bool
 }
 
 // NewInitTemplater returns a new initTemplater.
@@ -28,6 +31,7 @@ func NewInitTemplater(state *statepkg.State) statepkg.Templater {
 		state: state,
 
 		IncludeConnection: state.IncludeConnection,
+		CRUDSchemas:       state.CRUDSchemas,
 	}
 }
 
@@ -88,7 +92,6 @@ func (i *initTemplater) Imports() importpkg.ImportSet {
 	is.Enable(
 		importpkg.ImportDb,
 		importpkg.ImportLibPQ,
-		importpkg.ImportStrconv,
 		importpkg.ImportFMT,
 		importpkg.ImportErrors,
 		importpkg.ImportJson,
@@ -98,6 +101,19 @@ func (i *initTemplater) Imports() importpkg.ImportSet {
 		importpkg.ImportContext,
 		importpkg.ImportSquirrel,
 	)
+
+	if i.IncludeConnection {
+		is.Add(importpkg.ImportTime)
+		is.Add(importpkg.ImportStrconv)
+	}
+
+	/*	tmp := i.BuildTemplate()
+		if strings.Contains(tmp, "time.Time") {
+			is.Add(importpkg.ImportTime)
+		}
+		if strings.Contains(tmp, "strconv.") {
+			is.Add(importpkg.ImportStrconv)
+		}*/
 
 	return is
 }

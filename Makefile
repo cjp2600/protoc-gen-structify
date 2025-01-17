@@ -24,7 +24,7 @@ endif
 	@$(PROTOC) -I/usr/local/include -I.  \
 	-I$(GOPATH)/src   \
 	--plugin=protoc-gen-structify=$(GOBIN)/structify \
-	--structify_out=. --structify_opt=paths=source_relative,include_connection=true \
+	--structify_out=. --structify_opt=paths=source_relative,include_connection=false \
 	$(f)
 
 .PHONY: build-example-sqlite

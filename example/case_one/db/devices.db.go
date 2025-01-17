@@ -16,14 +16,6 @@ type deviceStorage struct {
 	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
 }
 
-// DeviceTableManager is an interface for managing the devices table.
-type DeviceTableManager interface {
-	CreateTable(ctx context.Context) error
-	DropTable(ctx context.Context) error
-	TruncateTable(ctx context.Context) error
-	UpgradeTable(ctx context.Context) error
-}
-
 // DeviceCRUDOperations is an interface for managing the devices table.
 type DeviceCRUDOperations interface {
 	Create(ctx context.Context, model *Device, opts ...Option) error
@@ -61,7 +53,6 @@ type DeviceRawQueryOperations interface {
 
 // DeviceStorage is a struct for the "devices" table.
 type DeviceStorage interface {
-	DeviceTableManager
 	DeviceCRUDOperations
 	DeviceSearchOperations
 	DevicePaginationOperations
@@ -98,49 +89,6 @@ func (t *deviceStorage) DB(ctx context.Context) QueryExecer {
 	}
 
 	return db
-}
-
-// createTable creates the table.
-func (t *deviceStorage) CreateTable(ctx context.Context) error {
-	sqlQuery := `
-		-- Table: devices
-		CREATE TABLE IF NOT EXISTS devices (
-		name TEXT,
-		value TEXT,
-		user_id UUID NOT NULL);
-		-- Other entities
-		CREATE UNIQUE INDEX IF NOT EXISTS devices_user_id_unique_idx ON devices USING btree (user_id);
-		CREATE INDEX IF NOT EXISTS devices_user_id_idx ON devices USING btree (user_id);
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// DropTable drops the table.
-func (t *deviceStorage) DropTable(ctx context.Context) error {
-	sqlQuery := `
-		DROP TABLE IF EXISTS devices;
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// TruncateTable truncates the table.
-func (t *deviceStorage) TruncateTable(ctx context.Context) error {
-	sqlQuery := `
-		TRUNCATE TABLE devices;
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// UpgradeTable upgrades the table.
-// todo: delete this method
-func (t *deviceStorage) UpgradeTable(ctx context.Context) error {
-	return nil
 }
 
 // Device is a struct for the "devices" table.

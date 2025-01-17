@@ -17,14 +17,6 @@ type messageStorage struct {
 	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
 }
 
-// MessageTableManager is an interface for managing the messages table.
-type MessageTableManager interface {
-	CreateTable(ctx context.Context) error
-	DropTable(ctx context.Context) error
-	TruncateTable(ctx context.Context) error
-	UpgradeTable(ctx context.Context) error
-}
-
 // MessageCRUDOperations is an interface for managing the messages table.
 type MessageCRUDOperations interface {
 	Create(ctx context.Context, model *Message, opts ...Option) (*string, error)
@@ -70,7 +62,6 @@ type MessageRawQueryOperations interface {
 
 // MessageStorage is a struct for the "messages" table.
 type MessageStorage interface {
-	MessageTableManager
 	MessageCRUDOperations
 	MessageSearchOperations
 	MessagePaginationOperations
@@ -107,59 +98,6 @@ func (t *messageStorage) DB(ctx context.Context) QueryExecer {
 	}
 
 	return db
-}
-
-// createTable creates the table.
-func (t *messageStorage) CreateTable(ctx context.Context) error {
-	sqlQuery := `
-		CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-		-- Table: messages
-		CREATE TABLE IF NOT EXISTS messages (
-		id UUID PRIMARY KEY NOT NULL DEFAULT uuid_generate_v4(),
-		from_user_id UUID NOT NULL,
-		to_user_id UUID NOT NULL,
-		bot_id UUID NOT NULL);
-		-- Other entities
-		CREATE UNIQUE INDEX IF NOT EXISTS messages_from_user_id_unique_idx ON messages USING btree (from_user_id);
-		CREATE UNIQUE INDEX IF NOT EXISTS messages_to_user_id_unique_idx ON messages USING btree (to_user_id);
-		CREATE INDEX IF NOT EXISTS messages_from_user_id_idx ON messages USING btree (from_user_id);
-		CREATE INDEX IF NOT EXISTS messages_to_user_id_idx ON messages USING btree (to_user_id);
-		-- Foreign keys for users
-		ALTER TABLE messages
-		ADD FOREIGN KEY (to_user_id) REFERENCES users(id);
-		-- Foreign keys for users
-		ALTER TABLE messages
-		ADD FOREIGN KEY (to_user_id) REFERENCES users(id);
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// DropTable drops the table.
-func (t *messageStorage) DropTable(ctx context.Context) error {
-	sqlQuery := `
-		DROP TABLE IF EXISTS messages;
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// TruncateTable truncates the table.
-func (t *messageStorage) TruncateTable(ctx context.Context) error {
-	sqlQuery := `
-		TRUNCATE TABLE messages;
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// UpgradeTable upgrades the table.
-// todo: delete this method
-func (t *messageStorage) UpgradeTable(ctx context.Context) error {
-	return nil
 }
 
 // LoadBot loads the Bot relation.

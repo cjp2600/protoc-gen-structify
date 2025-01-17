@@ -18,6 +18,9 @@ import (
 type tableTemplater struct {
 	state   *statepkg.State
 	message *descriptorpb.DescriptorProto
+
+	// initMethods bool
+	CRUDSchemas bool
 }
 
 // NewTableTemplater returns a new initTemplater.
@@ -25,6 +28,8 @@ func NewTableTemplater(message *descriptorpb.DescriptorProto, state *statepkg.St
 	return &tableTemplater{
 		state:   state,
 		message: message,
+
+		CRUDSchemas: state.CRUDSchemas,
 	}
 }
 

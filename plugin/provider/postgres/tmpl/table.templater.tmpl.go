@@ -782,6 +782,7 @@ type {{ storageName | lowerCamelCase }} struct {
 	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
 }
 
+{{ if .CRUDSchemas }}
 // {{structureName}}TableManager is an interface for managing the {{ tableName }} table.
 type {{structureName}}TableManager interface {
 	CreateTable(ctx context.Context) error
@@ -789,6 +790,7 @@ type {{structureName}}TableManager interface {
 	TruncateTable(ctx context.Context) error
 	UpgradeTable(ctx context.Context) error
 }
+{{ end }}
 
 // {{structureName}}CRUDOperations is an interface for managing the {{ tableName }} table.
 type {{structureName}}CRUDOperations interface {
@@ -847,7 +849,9 @@ type {{structureName}}RawQueryOperations interface {
 
 // {{ storageName }} is a struct for the "{{ tableName }}" table.
 type {{ storageName }} interface {
+{{ if .CRUDSchemas }}
     {{structureName}}TableManager
+{{ end }}
 	{{structureName}}CRUDOperations
 	{{structureName}}SearchOperations
 	{{structureName}}PaginationOperations
@@ -886,6 +890,7 @@ func (t *{{ storageName | lowerCamelCase }}) DB(ctx context.Context) QueryExecer
 	return db
 }
 
+{{ if .CRUDSchemas }}
 // createTable creates the table.
 func (t *{{ storageName | lowerCamelCase }}) CreateTable(ctx context.Context) error {
 	sqlQuery := ` + "`" + `
@@ -970,6 +975,7 @@ func (t *{{ storageName | lowerCamelCase }}) TruncateTable(ctx context.Context) 
 func (t *{{ storageName | lowerCamelCase }}) UpgradeTable(ctx context.Context) error {
 	return nil
 }
+{{ end }}
 
 {{- range $index, $field := fields }}
 {{- if and ($field | isRelation) }}

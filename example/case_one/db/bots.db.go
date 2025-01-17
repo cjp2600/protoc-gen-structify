@@ -18,14 +18,6 @@ type botStorage struct {
 	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
 }
 
-// BotTableManager is an interface for managing the bots table.
-type BotTableManager interface {
-	CreateTable(ctx context.Context) error
-	DropTable(ctx context.Context) error
-	TruncateTable(ctx context.Context) error
-	UpgradeTable(ctx context.Context) error
-}
-
 // BotCRUDOperations is an interface for managing the bots table.
 type BotCRUDOperations interface {
 	Create(ctx context.Context, model *Bot, opts ...Option) (*string, error)
@@ -67,7 +59,6 @@ type BotRawQueryOperations interface {
 
 // BotStorage is a struct for the "bots" table.
 type BotStorage interface {
-	BotTableManager
 	BotCRUDOperations
 	BotSearchOperations
 	BotPaginationOperations
@@ -104,58 +95,6 @@ func (t *botStorage) DB(ctx context.Context) QueryExecer {
 	}
 
 	return db
-}
-
-// createTable creates the table.
-func (t *botStorage) CreateTable(ctx context.Context) error {
-	sqlQuery := `
-		CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-		-- Table: bots
-		CREATE TABLE IF NOT EXISTS bots (
-		id UUID PRIMARY KEY NOT NULL DEFAULT uuid_generate_v4(),
-		user_id UUID NOT NULL,
-		name TEXT,
-		token TEXT NOT NULL,
-		is_publish BOOLEAN,
-		created_at TIMESTAMP NOT NULL,
-		updated_at TIMESTAMP,
-		deleted_at TIMESTAMP);
-		-- Other entities
-		CREATE UNIQUE INDEX IF NOT EXISTS bots_token_unique_idx ON bots USING btree (token);
-		-- Foreign keys for users
-		ALTER TABLE bots
-		ADD FOREIGN KEY (user_id) REFERENCES users(id)
-		ON DELETE CASCADE;
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// DropTable drops the table.
-func (t *botStorage) DropTable(ctx context.Context) error {
-	sqlQuery := `
-		DROP TABLE IF EXISTS bots;
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// TruncateTable truncates the table.
-func (t *botStorage) TruncateTable(ctx context.Context) error {
-	sqlQuery := `
-		TRUNCATE TABLE bots;
-	`
-
-	_, err := t.db.ExecContext(ctx, sqlQuery)
-	return err
-}
-
-// UpgradeTable upgrades the table.
-// todo: delete this method
-func (t *botStorage) UpgradeTable(ctx context.Context) error {
-	return nil
 }
 
 // LoadUser loads the User relation.

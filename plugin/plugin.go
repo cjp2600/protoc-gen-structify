@@ -73,6 +73,7 @@ func (p *Plugin) Run() {
 	{
 		// set additional state parameters
 		p.state.IncludeConnection = p.parseIncludeConnectionParam()
+		p.state.CRUDSchemas = p.parseCRUDSchemasParam()
 	}
 
 	// get provider template builder based on command line parameter
@@ -136,6 +137,10 @@ func (p *Plugin) parseCommandLineParameters(parameter string) {
 
 func (p *Plugin) parseIncludeConnectionParam() bool {
 	return p.param["include_connection"] == "true"
+}
+
+func (p *Plugin) parseCRUDSchemasParam() bool {
+	return p.param["create_crud_table_schemas"] == "true"
 }
 
 // parsePathType parses the path type from the parameters.
