@@ -317,7 +317,7 @@ func (t *{{ storageName | lowerCamelCase }}) SelectForUpdate(ctx context.Context
 		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 
-	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
+	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
 	var model {{ structureName }}
     if err := model.ScanRow(row); err != nil {
         if errors.Is(err, sql.ErrNoRows){
@@ -357,7 +357,7 @@ func (t *{{ storageName | lowerCamelCase }}) Count(ctx context.Context, builders
 		return 0, fmt.Errorf("failed to build query: %w", err)
 	}
 
-	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
+	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
 	if err := row.Scan(&count); err != nil {
 		return 0, fmt.Errorf("failed to count {{ structureName }}: %w", err)
@@ -435,7 +435,7 @@ func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, build
 		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 
-	rows, err := t.DB(ctx).QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find {{ structureName }}: %w", err)
 	}
@@ -475,18 +475,21 @@ func (t *{{ storageName | lowerCamelCase }}) FindBy{{ getPrimaryKey.GetName | ca
 
 const TableRawQueryMethodTemplate = `
 // Query executes a raw query and returns the result.
-func (t *{{ storageName | lowerCamelCase }}) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return t.DB(ctx).ExecContext(ctx, query, args...)
+// isWrite is used to determine if the query is a write operation.
+func (t *{{ storageName | lowerCamelCase }}) Query(ctx context.Context, isWrite bool, query string, args ...interface{}) (sql.Result, error) {
+	return t.DB(ctx, isWrite).ExecContext(ctx, query, args...)
 }
 
 // QueryRow executes a raw query and returns the result.
-func (t *{{ storageName | lowerCamelCase }}) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return t.DB(ctx).QueryRowContext(ctx, query, args...)
+// isWrite is used to determine if the query is a write operation.
+func (t *{{ storageName | lowerCamelCase }}) QueryRow(ctx context.Context, isWrite bool, query string, args ...interface{}) *sql.Row {
+	return t.DB(ctx, isWrite).QueryRowContext(ctx, query, args...)
 }
 
 // QueryRows executes a raw query and returns the result.
-func (t *{{ storageName | lowerCamelCase }}) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return t.DB(ctx).QueryContext(ctx, query, args...)
+// isWrite is used to determine if the query is a write operation.
+func (t *{{ storageName | lowerCamelCase }}) QueryRows(ctx context.Context, isWrite bool, query string, args ...interface{}) (*sql.Rows, error) {
+	return t.DB(ctx, isWrite).QueryContext(ctx, query, args...)
 }
 `
 
@@ -507,7 +510,7 @@ func (t *{{ storageName | lowerCamelCase }}) DeleteBy{{ getPrimaryKey.GetName | 
 		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	_, err = t.DB(ctx).ExecContext(ctx,sqlQuery, args...)
+	_, err = t.DB(ctx, true).ExecContext(ctx,sqlQuery, args...)
 	if err != nil {
 		return fmt.Errorf("failed to delete {{ structureName }}: %w", err)
 	}
@@ -543,7 +546,7 @@ func (t *{{ storageName | lowerCamelCase }}) DeleteMany(ctx context.Context, bui
 		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
+	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return fmt.Errorf("failed to delete Address: %w", err)
 	}
@@ -639,7 +642,7 @@ func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{ID
 		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
+	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update {{ structureName }}: %w", err)
 	}
@@ -740,7 +743,7 @@ const TableCreateMethodTemplate = `
 	}
 
 	{{ if (hasID) }}var id {{IDType}}
-	err = t.DB(ctx).QueryRowContext(ctx,sqlQuery, args...).Scan(&id) {{ else }} _, err = t.DB(ctx).ExecContext(ctx,sqlQuery, args...) {{ end }}
+	err = t.DB(ctx, true).QueryRowContext(ctx,sqlQuery, args...).Scan(&id) {{ else }} _, err = t.DB(ctx, true).ExecContext(ctx,sqlQuery, args...) {{ end }}
 	if err != nil {
 		if IsPgUniqueViolation(err) {
 			{{ if (hasID) }}return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error()) {{ else }}return errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error()) {{ end }}
@@ -778,7 +781,7 @@ const TableCreateMethodTemplate = `
 const TableStorageTemplate = `
 // {{ storageName | lowerCamelCase }} is a struct for the "{{ tableName }}" table.
 type {{ storageName | lowerCamelCase }} struct {
-	db *sql.DB // The database connection.
+	db *DB // The database connection.
 	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
 }
 
@@ -842,9 +845,9 @@ type {{structureName}}AdvancedDeletion interface {
 
 // {{structureName}}RawQueryOperations is an interface for executing raw queries.
 type {{structureName}}RawQueryOperations interface {
-	Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
-	QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	Query(ctx context.Context, isWrite bool, query string, args ...interface{}) (sql.Result, error)
+	QueryRow(ctx context.Context, isWrite bool, query string, args ...interface{}) *sql.Row
+	QueryRows(ctx context.Context, isWrite bool, query string, args ...interface{}) (*sql.Rows, error)
 }
 
 // {{ storageName }} is a struct for the "{{ tableName }}" table.
@@ -861,7 +864,7 @@ type {{ storageName }} interface {
 }
 
 // New{{ storageName }} returns a new {{ storageName | lowerCamelCase }}.
-func New{{ storageName }}(db *sql.DB) {{ storageName }} {
+func New{{ storageName }}(db *DB) {{ storageName }} {
 	return &{{ storageName | lowerCamelCase }}{
 		db: db,
 		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
@@ -880,11 +883,20 @@ func (t *{{ storageName | lowerCamelCase }}) Columns() []string {
 	}
 }
 
-// DB returns the underlying sql.DB. This is useful for doing transactions.
-func (t *{{ storageName | lowerCamelCase }}) DB(ctx context.Context) QueryExecer {
-	var db QueryExecer = t.db
+// DB returns the underlying DB. This is useful for doing transactions.
+func (t *{{ storageName | lowerCamelCase }}) DB(ctx context.Context, isWrite bool) QueryExecer {
+	var db QueryExecer
+
+	// Check if there is an active transaction in the context.
 	if tx, ok := TxFromContext(ctx); ok {
-		db = tx
+		return tx
+	}
+
+	// Use the appropriate connection based on the operation type.
+	if isWrite {
+		db = t.db.DBWrite
+	} else {
+		db = t.db.DBRead
 	}
 
 	return db

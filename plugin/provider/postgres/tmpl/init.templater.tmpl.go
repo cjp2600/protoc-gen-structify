@@ -320,10 +320,15 @@ func WithMaxLifetime(maxLifetime time.Duration) {{ clientName }}Option {
 const StorageTemplate = `
 // {{ storageName | lowerCamelCase }} is a map of provider to init function.
 type {{ storageName | lowerCamelCase }} struct {
-	db *sql.DB // The database connection.
+	db *DB // The database connection.
 	tx *TxManager // The transaction manager.
 {{ range $value := storages }}
 {{ $value.Key }} {{ $value.Value }}{{ end }}
+}
+
+type DB struct {
+	DBRead *sql.DB
+	DBWrite *sql.DB
 }
 
 // {{ storageName }} is the interface for the {{ storageName }}.
@@ -348,10 +353,22 @@ type {{ storageName }} interface {
 }
 
 // New{{ storageName }} returns a new {{ storageName }}.
-func New{{ storageName }}(db *sql.DB) {{ storageName }} {
+func New{{ storageName }}(db *DB) {{ storageName }} {
+	if db == nil {
+		panic("structify: db is required")
+	}
+
+	if db.DBRead == nil {
+		panic("structify: dbRead is required")
+	}
+
+	if db.DBWrite == nil {
+		db.DBWrite = db.DBRead
+	}
+
 	return &{{ storageName | lowerCamelCase }}{
 		db: db,
-		tx: NewTxManager(db),
+		tx: NewTxManager(db.DBWrite),
 {{ range $value := storages }}
 {{ $value.Key }}: New{{ $value.Value }}(db),{{ end }}
 	}

@@ -14,7 +14,7 @@ import (
 
 // addressStorage is a struct for the "addresses" table.
 type addressStorage struct {
-	db           *sql.DB                 // The database connection.
+	db           *DB                     // The database connection.
 	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
 }
 
@@ -52,9 +52,9 @@ type AddressAdvancedDeletion interface {
 
 // AddressRawQueryOperations is an interface for executing raw queries.
 type AddressRawQueryOperations interface {
-	Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
-	QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	Query(ctx context.Context, isWrite bool, query string, args ...interface{}) (sql.Result, error)
+	QueryRow(ctx context.Context, isWrite bool, query string, args ...interface{}) *sql.Row
+	QueryRows(ctx context.Context, isWrite bool, query string, args ...interface{}) (*sql.Rows, error)
 }
 
 // AddressStorage is a struct for the "addresses" table.
@@ -68,7 +68,7 @@ type AddressStorage interface {
 }
 
 // NewAddressStorage returns a new addressStorage.
-func NewAddressStorage(db *sql.DB) AddressStorage {
+func NewAddressStorage(db *DB) AddressStorage {
 	return &addressStorage{
 		db:           db,
 		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
@@ -87,11 +87,20 @@ func (t *addressStorage) Columns() []string {
 	}
 }
 
-// DB returns the underlying sql.DB. This is useful for doing transactions.
-func (t *addressStorage) DB(ctx context.Context) QueryExecer {
-	var db QueryExecer = t.db
+// DB returns the underlying DB. This is useful for doing transactions.
+func (t *addressStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
+	var db QueryExecer
+
+	// Check if there is an active transaction in the context.
 	if tx, ok := TxFromContext(ctx); ok {
-		db = tx
+		return tx
+	}
+
+	// Use the appropriate connection based on the operation type.
+	if isWrite {
+		db = t.db.DBWrite
+	} else {
+		db = t.db.DBRead
 	}
 
 	return db
@@ -364,7 +373,7 @@ func (t *addressStorage) Create(ctx context.Context, model *Address, opts ...Opt
 	}
 
 	var id string
-	err = t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
+	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
 	if err != nil {
 		if IsPgUniqueViolation(err) {
 			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
@@ -442,7 +451,7 @@ func (t *addressStorage) Update(ctx context.Context, id string, updateData *Addr
 		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
+	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update Address: %w", err)
 	}
@@ -465,7 +474,7 @@ func (t *addressStorage) DeleteById(ctx context.Context, id string, opts ...Opti
 		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
+	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return fmt.Errorf("failed to delete Address: %w", err)
 	}
@@ -500,7 +509,7 @@ func (t *addressStorage) DeleteMany(ctx context.Context, builders ...*QueryBuild
 		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
+	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return fmt.Errorf("failed to delete Address: %w", err)
 	}
@@ -574,7 +583,7 @@ func (t *addressStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 
-	rows, err := t.DB(ctx).QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find Address: %w", err)
 	}
@@ -634,7 +643,7 @@ func (t *addressStorage) Count(ctx context.Context, builders ...*QueryBuilder) (
 		return 0, fmt.Errorf("failed to build query: %w", err)
 	}
 
-	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
+	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
 	if err := row.Scan(&count); err != nil {
 		return 0, fmt.Errorf("failed to count Address: %w", err)
@@ -699,7 +708,7 @@ func (t *addressStorage) SelectForUpdate(ctx context.Context, builders ...*Query
 		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 
-	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
+	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
 	var model Address
 	if err := model.ScanRow(row); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -712,16 +721,19 @@ func (t *addressStorage) SelectForUpdate(ctx context.Context, builders ...*Query
 }
 
 // Query executes a raw query and returns the result.
-func (t *addressStorage) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return t.DB(ctx).ExecContext(ctx, query, args...)
+// isWrite is used to determine if the query is a write operation.
+func (t *addressStorage) Query(ctx context.Context, isWrite bool, query string, args ...interface{}) (sql.Result, error) {
+	return t.DB(ctx, isWrite).ExecContext(ctx, query, args...)
 }
 
 // QueryRow executes a raw query and returns the result.
-func (t *addressStorage) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return t.DB(ctx).QueryRowContext(ctx, query, args...)
+// isWrite is used to determine if the query is a write operation.
+func (t *addressStorage) QueryRow(ctx context.Context, isWrite bool, query string, args ...interface{}) *sql.Row {
+	return t.DB(ctx, isWrite).QueryRowContext(ctx, query, args...)
 }
 
 // QueryRows executes a raw query and returns the result.
-func (t *addressStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return t.DB(ctx).QueryContext(ctx, query, args...)
+// isWrite is used to determine if the query is a write operation.
+func (t *addressStorage) QueryRows(ctx context.Context, isWrite bool, query string, args ...interface{}) (*sql.Rows, error) {
+	return t.DB(ctx, isWrite).QueryContext(ctx, query, args...)
 }

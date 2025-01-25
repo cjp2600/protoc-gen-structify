@@ -14,7 +14,7 @@ import (
 
 // botStorage is a struct for the "bots" table.
 type botStorage struct {
-	db           *sql.DB                 // The database connection.
+	db           *DB                     // The database connection.
 	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
 }
 
@@ -52,9 +52,9 @@ type BotAdvancedDeletion interface {
 
 // BotRawQueryOperations is an interface for executing raw queries.
 type BotRawQueryOperations interface {
-	Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
-	QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	Query(ctx context.Context, isWrite bool, query string, args ...interface{}) (sql.Result, error)
+	QueryRow(ctx context.Context, isWrite bool, query string, args ...interface{}) *sql.Row
+	QueryRows(ctx context.Context, isWrite bool, query string, args ...interface{}) (*sql.Rows, error)
 }
 
 // BotStorage is a struct for the "bots" table.
@@ -68,7 +68,7 @@ type BotStorage interface {
 }
 
 // NewBotStorage returns a new botStorage.
-func NewBotStorage(db *sql.DB) BotStorage {
+func NewBotStorage(db *DB) BotStorage {
 	return &botStorage{
 		db:           db,
 		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
@@ -87,11 +87,20 @@ func (t *botStorage) Columns() []string {
 	}
 }
 
-// DB returns the underlying sql.DB. This is useful for doing transactions.
-func (t *botStorage) DB(ctx context.Context) QueryExecer {
-	var db QueryExecer = t.db
+// DB returns the underlying DB. This is useful for doing transactions.
+func (t *botStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
+	var db QueryExecer
+
+	// Check if there is an active transaction in the context.
 	if tx, ok := TxFromContext(ctx); ok {
-		db = tx
+		return tx
+	}
+
+	// Use the appropriate connection based on the operation type.
+	if isWrite {
+		db = t.db.DBWrite
+	} else {
+		db = t.db.DBRead
 	}
 
 	return db
@@ -415,7 +424,7 @@ func (t *botStorage) Create(ctx context.Context, model *Bot, opts ...Option) (*s
 	}
 
 	var id string
-	err = t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
+	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
 	if err != nil {
 		if IsPgUniqueViolation(err) {
 			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
@@ -493,7 +502,7 @@ func (t *botStorage) Update(ctx context.Context, id string, updateData *BotUpdat
 		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
+	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update Bot: %w", err)
 	}
@@ -516,7 +525,7 @@ func (t *botStorage) DeleteById(ctx context.Context, id string, opts ...Option) 
 		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
+	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return fmt.Errorf("failed to delete Bot: %w", err)
 	}
@@ -551,7 +560,7 @@ func (t *botStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilder) 
 		return fmt.Errorf("failed to build query: %w", err)
 	}
 
-	_, err = t.DB(ctx).ExecContext(ctx, sqlQuery, args...)
+	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return fmt.Errorf("failed to delete Address: %w", err)
 	}
@@ -625,7 +634,7 @@ func (t *botStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) ([
 		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 
-	rows, err := t.DB(ctx).QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find Bot: %w", err)
 	}
@@ -685,7 +694,7 @@ func (t *botStorage) Count(ctx context.Context, builders ...*QueryBuilder) (int6
 		return 0, fmt.Errorf("failed to build query: %w", err)
 	}
 
-	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
+	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
 	if err := row.Scan(&count); err != nil {
 		return 0, fmt.Errorf("failed to count Bot: %w", err)
@@ -750,7 +759,7 @@ func (t *botStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBuil
 		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 
-	row := t.DB(ctx).QueryRowContext(ctx, sqlQuery, args...)
+	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
 	var model Bot
 	if err := model.ScanRow(row); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -763,16 +772,19 @@ func (t *botStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBuil
 }
 
 // Query executes a raw query and returns the result.
-func (t *botStorage) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return t.DB(ctx).ExecContext(ctx, query, args...)
+// isWrite is used to determine if the query is a write operation.
+func (t *botStorage) Query(ctx context.Context, isWrite bool, query string, args ...interface{}) (sql.Result, error) {
+	return t.DB(ctx, isWrite).ExecContext(ctx, query, args...)
 }
 
 // QueryRow executes a raw query and returns the result.
-func (t *botStorage) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return t.DB(ctx).QueryRowContext(ctx, query, args...)
+// isWrite is used to determine if the query is a write operation.
+func (t *botStorage) QueryRow(ctx context.Context, isWrite bool, query string, args ...interface{}) *sql.Row {
+	return t.DB(ctx, isWrite).QueryRowContext(ctx, query, args...)
 }
 
 // QueryRows executes a raw query and returns the result.
-func (t *botStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return t.DB(ctx).QueryContext(ctx, query, args...)
+// isWrite is used to determine if the query is a write operation.
+func (t *botStorage) QueryRows(ctx context.Context, isWrite bool, query string, args ...interface{}) (*sql.Rows, error) {
+	return t.DB(ctx, isWrite).QueryContext(ctx, query, args...)
 }
