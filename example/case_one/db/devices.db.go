@@ -18,6 +18,8 @@ type deviceStorage struct {
 // DeviceCRUDOperations is an interface for managing the devices table.
 type DeviceCRUDOperations interface {
 	Create(ctx context.Context, model *Device, opts ...Option) error
+
+	BatchCreate(ctx context.Context, models []*Device, opts ...Option) error
 	Update(ctx context.Context, id int64, updateData *DeviceUpdate) error
 }
 
@@ -236,6 +238,64 @@ func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Optio
 	return nil
 }
 
+// BatchCreate creates multiple Device records in a single batch.
+func (t *deviceStorage) BatchCreate(ctx context.Context, models []*Device, opts ...Option) error {
+	if len(models) == 0 {
+		return errors.New("no models to insert")
+	}
+
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	if options.relations {
+		return errors.New("relations are not supported in batch create")
+	}
+
+	query := t.queryBuilder.Insert(t.TableName()).
+		Columns(
+			"name",
+			"value",
+			"user_id",
+		)
+
+	for _, model := range models {
+		if model == nil {
+			return errors.New("one of the models is nil")
+		}
+		query = query.Values(
+			model.Name,
+			model.Value,
+			model.UserId,
+		)
+	}
+
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO NOTHING")
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return errors.Wrap(err, "failed to build query")
+	}
+
+	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
+	if err != nil {
+		if IsPgUniqueViolation(err) {
+			return errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
+		}
+		return errors.Wrap(err, "failed to execute bulk insert")
+	}
+	defer rows.Close()
+
+	if err := rows.Err(); err != nil {
+		return errors.Wrap(err, "rows iteration error")
+	}
+
+	return nil
+}
+
 // DeviceUpdate is used to update an existing Device.
 type DeviceUpdate struct {
 	// Use regular pointer types for non-optional fields
@@ -393,7 +453,7 @@ func (t *deviceStorage) FindOne(ctx context.Context, builders ...*QueryBuilder) 
 	builders = append(builders, LimitBuilder(1))
 	results, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to findOne Device")
 	}
 
 	if len(results) == 0 {

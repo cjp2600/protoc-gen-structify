@@ -5,6 +5,7 @@ const TableTemplate = `
 {{ template "structure" . }}
 {{ template "table_conditions" . }}
 {{ template "create_method" . }}
+{{ template "batch_create_method" . }}
 {{ template "update_method" . }}
 {{ template "delete_method" . }}
 {{- if (hasPrimaryKey) }}
@@ -374,7 +375,7 @@ func (t *{{ storageName | lowerCamelCase }}) FindOne(ctx context.Context, builde
 	builders = append(builders, LimitBuilder(1))
 	results, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to findOne {{ structureName }}")
 	}
 
 	if len(results) == 0 {
@@ -684,6 +685,96 @@ func (t *{{ structureName }}) ScanRows(r *sql.Rows) error {
 }
 `
 
+const TableBatchCreateMethodTemplate = `
+// BatchCreate creates multiple {{ structureName }} records in a single batch.
+func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, models []*{{structureName}}, opts ...Option) ({{ if (hasID) }}[]string, {{ end }}error) {
+	if len(models) == 0 {
+		{{ if (hasID) }} return nil, errors.New("no models to insert") {{ else }} return errors.New("no models to insert") {{ end }}
+	}
+
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	if options.relations {
+		{{ if (hasID) }} return nil, errors.New("relations are not supported in batch create") {{ else }} return errors.New("relations are not supported in batch create") {{ end }}
+	}
+
+	query := t.queryBuilder.Insert(t.TableName()).
+		Columns(
+			{{- range $index, $field := fields }}
+			{{- if not ($field | isRelation) }}
+			{{- if not ($field | isAutoIncrement ) }}
+			{{- if not ($field | isDefaultUUID ) }}
+			"{{ $field | sourceName }}",
+			{{- end}}
+			{{- end}}
+			{{- end}}
+			{{- end}}
+		)
+
+	for _, model := range models {
+		if model == nil {
+			{{ if (hasID) }} return nil, errors.New("one of the models is nil") {{ else }} return errors.New("one of the models is nil") {{ end }}
+		}
+		query = query.Values(
+			{{- range $index, $field := fields }}
+			{{- if not ($field | isRelation) }}
+			{{- if not ($field | isAutoIncrement ) }}
+			{{- if not ($field | isDefaultUUID ) }}
+			model.{{ $field | fieldName }},
+			{{- end}}
+			{{- end}}
+			{{- end}}
+			{{- end}}
+		)
+	}
+
+	{{ if (hasID) }}
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT ("+options.ignoreConflictField+") DO NOTHING RETURNING \"id\"")
+	} else {
+		query = query.Suffix("RETURNING \"id\"")
+	}
+	{{ else }}
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT ("+options.ignoreConflictField+") DO NOTHING")
+	}
+	{{ end }}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		{{ if (hasID) }} return nil, errors.Wrap(err, "failed to build query") {{ else }} return errors.Wrap(err, "failed to build query") {{ end }}
+	}
+
+	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
+	if err != nil {
+		if IsPgUniqueViolation(err) {
+			{{ if (hasID) }} return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error()) {{ else }} return errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error()) {{ end }}
+		}
+		{{ if (hasID) }} return nil, errors.Wrap(err, "failed to execute bulk insert") {{ else }} return errors.Wrap(err, "failed to execute bulk insert") {{ end }}
+	}
+	defer rows.Close()
+
+	{{ if (hasID) }} var returnIDs []string {{ end }} {{ if (hasID) }}
+	for rows.Next() {
+		var {{ getPrimaryKey.GetName }} string
+		if err := rows.Scan(&{{ getPrimaryKey.GetName }}); err != nil {
+			{{ if (hasID) }} return nil, errors.Wrap(err, "failed to scan {{ getPrimaryKey.GetName }}") {{ else }} return errors.Wrap(err, "failed to scan {{ getPrimaryKey.GetName }}") {{ end }}
+		}
+		returnIDs = append(returnIDs, {{ getPrimaryKey.GetName }})
+	}
+	{{ end }}
+
+	if err := rows.Err(); err != nil {
+		{{ if (hasID) }} return nil, errors.Wrap(err, "rows iteration error") {{ else }} return errors.Wrap(err, "rows iteration error") {{ end }}
+	}
+
+	return {{ if (hasID) }} returnIDs, nil {{ else }} nil {{ end }}
+}
+`
+
 const TableCreateMethodTemplate = `
 // Create creates a new {{ structureName }}.
 {{ if (hasID) }} func (t *{{ storageName | lowerCamelCase }}) Create(ctx context.Context, model *{{structureName}}, opts ...Option) (*{{IDType}}, error) { {{ else }} func (t *{{ storageName | lowerCamelCase }}) Create(ctx context.Context, model *{{structureName}}, opts ...Option) error { {{ end }}
@@ -805,6 +896,10 @@ type {{structureName}}CRUDOperations interface {
 	Create(ctx context.Context, model *{{structureName}}, opts ...Option) (*{{IDType}}, error)
 	{{- else }} 
 	Create(ctx context.Context, model *{{structureName}}, opts ...Option) error
+	{{- end }}
+	{{ if (hasID) }}BatchCreate(ctx context.Context, models []*{{structureName}}, opts ...Option) ([]string, error)
+	{{- else }}
+	BatchCreate(ctx context.Context, models []*{{structureName}}, opts ...Option) error
 	{{- end }}
 	Update(ctx context.Context, id {{IDType}}, updateData *{{structureName}}Update) error
 	{{- if (hasPrimaryKey) }}

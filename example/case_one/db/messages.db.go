@@ -19,6 +19,7 @@ type messageStorage struct {
 // MessageCRUDOperations is an interface for managing the messages table.
 type MessageCRUDOperations interface {
 	Create(ctx context.Context, model *Message, opts ...Option) (*string, error)
+	BatchCreate(ctx context.Context, models []*Message, opts ...Option) ([]string, error)
 	Update(ctx context.Context, id string, updateData *MessageUpdate) error
 	DeleteById(ctx context.Context, id string, opts ...Option) error
 	FindById(ctx context.Context, id string, opts ...Option) (*Message, error)
@@ -572,6 +573,75 @@ func (t *messageStorage) Create(ctx context.Context, model *Message, opts ...Opt
 	return &id, nil
 }
 
+// BatchCreate creates multiple Message records in a single batch.
+func (t *messageStorage) BatchCreate(ctx context.Context, models []*Message, opts ...Option) ([]string, error) {
+	if len(models) == 0 {
+		return nil, errors.New("no models to insert")
+	}
+
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	if options.relations {
+		return nil, errors.New("relations are not supported in batch create")
+	}
+
+	query := t.queryBuilder.Insert(t.TableName()).
+		Columns(
+			"from_user_id",
+			"to_user_id",
+			"bot_id",
+		)
+
+	for _, model := range models {
+		if model == nil {
+			return nil, errors.New("one of the models is nil")
+		}
+		query = query.Values(
+			model.FromUserId,
+			model.ToUserId,
+			model.BotId,
+		)
+	}
+
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO NOTHING RETURNING \"id\"")
+	} else {
+		query = query.Suffix("RETURNING \"id\"")
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to build query")
+	}
+
+	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
+	if err != nil {
+		if IsPgUniqueViolation(err) {
+			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
+		}
+		return nil, errors.Wrap(err, "failed to execute bulk insert")
+	}
+	defer rows.Close()
+
+	var returnIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, errors.Wrap(err, "failed to scan id")
+		}
+		returnIDs = append(returnIDs, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "rows iteration error")
+	}
+
+	return returnIDs, nil
+}
+
 // MessageUpdate is used to update an existing Message.
 type MessageUpdate struct {
 	// Use regular pointer types for non-optional fields
@@ -774,7 +844,7 @@ func (t *messageStorage) FindOne(ctx context.Context, builders ...*QueryBuilder)
 	builders = append(builders, LimitBuilder(1))
 	results, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to findOne Message")
 	}
 
 	if len(results) == 0 {

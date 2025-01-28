@@ -20,6 +20,7 @@ type botStorage struct {
 // BotCRUDOperations is an interface for managing the bots table.
 type BotCRUDOperations interface {
 	Create(ctx context.Context, model *Bot, opts ...Option) (*string, error)
+	BatchCreate(ctx context.Context, models []*Bot, opts ...Option) ([]string, error)
 	Update(ctx context.Context, id string, updateData *BotUpdate) error
 	DeleteById(ctx context.Context, id string, opts ...Option) error
 	FindById(ctx context.Context, id string, opts ...Option) (*Bot, error)
@@ -435,6 +436,83 @@ func (t *botStorage) Create(ctx context.Context, model *Bot, opts ...Option) (*s
 	return &id, nil
 }
 
+// BatchCreate creates multiple Bot records in a single batch.
+func (t *botStorage) BatchCreate(ctx context.Context, models []*Bot, opts ...Option) ([]string, error) {
+	if len(models) == 0 {
+		return nil, errors.New("no models to insert")
+	}
+
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	if options.relations {
+		return nil, errors.New("relations are not supported in batch create")
+	}
+
+	query := t.queryBuilder.Insert(t.TableName()).
+		Columns(
+			"user_id",
+			"name",
+			"token",
+			"is_publish",
+			"created_at",
+			"updated_at",
+			"deleted_at",
+		)
+
+	for _, model := range models {
+		if model == nil {
+			return nil, errors.New("one of the models is nil")
+		}
+		query = query.Values(
+			model.UserId,
+			model.Name,
+			model.Token,
+			model.IsPublish,
+			model.CreatedAt,
+			model.UpdatedAt,
+			model.DeletedAt,
+		)
+	}
+
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO NOTHING RETURNING \"id\"")
+	} else {
+		query = query.Suffix("RETURNING \"id\"")
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to build query")
+	}
+
+	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
+	if err != nil {
+		if IsPgUniqueViolation(err) {
+			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
+		}
+		return nil, errors.Wrap(err, "failed to execute bulk insert")
+	}
+	defer rows.Close()
+
+	var returnIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, errors.Wrap(err, "failed to scan id")
+		}
+		returnIDs = append(returnIDs, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "rows iteration error")
+	}
+
+	return returnIDs, nil
+}
+
 // BotUpdate is used to update an existing Bot.
 type BotUpdate struct {
 	// Use regular pointer types for non-optional fields
@@ -661,7 +739,7 @@ func (t *botStorage) FindOne(ctx context.Context, builders ...*QueryBuilder) (*B
 	builders = append(builders, LimitBuilder(1))
 	results, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to findOne Bot")
 	}
 
 	if len(results) == 0 {

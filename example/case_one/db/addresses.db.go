@@ -20,6 +20,7 @@ type addressStorage struct {
 // AddressCRUDOperations is an interface for managing the addresses table.
 type AddressCRUDOperations interface {
 	Create(ctx context.Context, model *Address, opts ...Option) (*string, error)
+	BatchCreate(ctx context.Context, models []*Address, opts ...Option) ([]string, error)
 	Update(ctx context.Context, id string, updateData *AddressUpdate) error
 	DeleteById(ctx context.Context, id string, opts ...Option) error
 	FindById(ctx context.Context, id string, opts ...Option) (*Address, error)
@@ -384,6 +385,83 @@ func (t *addressStorage) Create(ctx context.Context, model *Address, opts ...Opt
 	return &id, nil
 }
 
+// BatchCreate creates multiple Address records in a single batch.
+func (t *addressStorage) BatchCreate(ctx context.Context, models []*Address, opts ...Option) ([]string, error) {
+	if len(models) == 0 {
+		return nil, errors.New("no models to insert")
+	}
+
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	if options.relations {
+		return nil, errors.New("relations are not supported in batch create")
+	}
+
+	query := t.queryBuilder.Insert(t.TableName()).
+		Columns(
+			"street",
+			"city",
+			"state",
+			"zip",
+			"user_id",
+			"created_at",
+			"updated_at",
+		)
+
+	for _, model := range models {
+		if model == nil {
+			return nil, errors.New("one of the models is nil")
+		}
+		query = query.Values(
+			model.Street,
+			model.City,
+			model.State,
+			model.Zip,
+			model.UserId,
+			model.CreatedAt,
+			model.UpdatedAt,
+		)
+	}
+
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO NOTHING RETURNING \"id\"")
+	} else {
+		query = query.Suffix("RETURNING \"id\"")
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to build query")
+	}
+
+	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
+	if err != nil {
+		if IsPgUniqueViolation(err) {
+			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
+		}
+		return nil, errors.Wrap(err, "failed to execute bulk insert")
+	}
+	defer rows.Close()
+
+	var returnIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, errors.Wrap(err, "failed to scan id")
+		}
+		returnIDs = append(returnIDs, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "rows iteration error")
+	}
+
+	return returnIDs, nil
+}
+
 // AddressUpdate is used to update an existing Address.
 type AddressUpdate struct {
 	// Use regular pointer types for non-optional fields
@@ -610,7 +688,7 @@ func (t *addressStorage) FindOne(ctx context.Context, builders ...*QueryBuilder)
 	builders = append(builders, LimitBuilder(1))
 	results, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to findOne Address")
 	}
 
 	if len(results) == 0 {

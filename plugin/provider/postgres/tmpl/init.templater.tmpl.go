@@ -59,6 +59,10 @@ type Option func(*Options)
 type Options struct {
 	// if true, then method was create/update relations
 	relations bool
+	// ignoreConflictField is the field to ignore conflict.
+	ignoreConflictField string
+	// uniqField is the unique field.
+	uniqField string
 }
 
 // WithRelations sets the relations flag.
@@ -66,6 +70,20 @@ type Options struct {
 func WithRelations() Option {
 	return func(o *Options) {
 		o.relations = true
+	}
+}
+
+// WithUniqField sets the unique field.
+func WithUniqField(field string) Option {
+	return func(o *Options) {
+		o.uniqField = field
+	}
+}
+
+// WithIgnoreConflictField sets the ignore conflict field.
+func WithIgnoreConflictField(field string) Option {
+	return func(o *Options) {
+		o.ignoreConflictField = field
 	}
 }
 
