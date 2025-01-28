@@ -264,7 +264,7 @@ func (t *{{ storageName | lowerCamelCase }}) FindManyWithPagination(ctx context.
 	// Count the total number of records
 	totalCount, err := t.Count(ctx, builders...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to count {{ structureName }}: %w", err)
+		return nil, nil, errors.Wrap(err, "failed to count {{ structureName }}")
 	}
 
 	// Calculate offset
@@ -284,7 +284,7 @@ func (t *{{ storageName | lowerCamelCase }}) FindManyWithPagination(ctx context.
 	// Find records using FindMany
 	records, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to find {{ structureName }}: %w", err)
+		return nil, nil, errors.Wrap(err, "failed to find {{ structureName }}")
 	}
 
 	return records, paginator, nil
@@ -314,7 +314,7 @@ func (t *{{ storageName | lowerCamelCase }}) SelectForUpdate(ctx context.Context
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return nil, errors.Wrap(err, "failed to build query")
 	}
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
@@ -323,7 +323,7 @@ func (t *{{ storageName | lowerCamelCase }}) SelectForUpdate(ctx context.Context
         if errors.Is(err, sql.ErrNoRows){
             return nil, ErrRowNotFound
         }
-        return nil, fmt.Errorf("failed to scan {{ structureName }}: %w", err)
+        return nil, errors.Wrap(err, "failed to scan {{ structureName }}")
     }
 
 	return &model, nil
@@ -354,13 +354,13 @@ func (t *{{ storageName | lowerCamelCase }}) Count(ctx context.Context, builders
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return 0, fmt.Errorf("failed to build query: %w", err)
+		return 0, errors.Wrap(err, "failed to build query")
 	}
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
 	if err := row.Scan(&count); err != nil {
-		return 0, fmt.Errorf("failed to count {{ structureName }}: %w", err)
+		return 0, errors.Wrap(err, "failed to scan count")
 	}
 
 	return count, nil
@@ -432,12 +432,12 @@ func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, build
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return nil, errors.Wrap(err, "failed to build query")
 	}
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find {{ structureName }}: %w", err)
+		return nil, errors.Wrap(err, "failed to execute query")
 	}
 	defer rows.Close()
 	
@@ -445,9 +445,13 @@ func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, build
 	for rows.Next() {
 		model := &{{structureName}}{}
 		if err := model.ScanRows(rows); err != nil {
-			return nil, fmt.Errorf("failed to scan {{ structureName }}: %w", err)
+			return nil, errors.Wrap(err, "failed to scan {{ structureName }}")
 		}
 		results = append(results, model)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "failed to iterate over rows")
 	}
 	
 	return results, nil
@@ -507,12 +511,12 @@ func (t *{{ storageName | lowerCamelCase }}) DeleteBy{{ getPrimaryKey.GetName | 
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return errors.Wrap(err, "failed to build query")
 	}
 
 	_, err = t.DB(ctx, true).ExecContext(ctx,sqlQuery, args...)
 	if err != nil {
-		return fmt.Errorf("failed to delete {{ structureName }}: %w", err)
+		return errors.Wrap(err, "failed to delete {{ structureName }}")
 	}
 
 	return nil
@@ -543,12 +547,12 @@ func (t *{{ storageName | lowerCamelCase }}) DeleteMany(ctx context.Context, bui
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return errors.Wrap(err, "failed to build query")
 	}
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return fmt.Errorf("failed to delete Address: %w", err)
+		return errors.Wrap(err, "failed to delete {{ tableName }}")
 	}
 	
 	return nil
@@ -639,12 +643,12 @@ func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{ID
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return errors.Wrap(err, "failed to build query")
 	}
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return fmt.Errorf("failed to update {{ structureName }}: %w", err)
+		return errors.Wrap(err, "failed to update {{ structureName }}")
 	}
 
 	return nil
@@ -699,7 +703,7 @@ const TableCreateMethodTemplate = `
 	// get value of {{ $field | fieldName | lowerCamelCase }}
 	{{ $field | fieldName | lowerCamelCase }}, err := model.{{ $field | fieldName }}.Value()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get {{ $field | fieldName | lowerCamelCase }} value: %w", err)
+		return nil, errors.Wrap(err, "failed to get value of {{ $field | fieldName }}")
 	}
 	{{- end}}
 	{{- end}}
@@ -739,7 +743,7 @@ const TableCreateMethodTemplate = `
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		{{ if (hasID) }} return nil, fmt.Errorf("failed to build query: %w", err) {{ else }} return fmt.Errorf("failed to build query: %w", err) {{ end }}
+		{{ if (hasID) }} return nil, errors.Wrap(err, "failed to build query") {{ else }} return errors.Wrap(err, "failed to build query") {{ end }}
 	}
 
 	{{ if (hasID) }}var id {{IDType}}
@@ -749,7 +753,7 @@ const TableCreateMethodTemplate = `
 			{{ if (hasID) }}return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error()) {{ else }}return errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error()) {{ end }}
 		}
 
-		{{ if (hasID) }} return nil, fmt.Errorf("failed to create {{ structureName }}: %w", err) {{ else }} return fmt.Errorf("failed to create {{ structureName }}: %w", err) {{ end }}
+		{{ if (hasID) }} return nil, errors.Wrap(err, "failed to create {{ structureName }}") {{ else }} return errors.Wrap(err, "failed to create {{ structureName }}") {{ end }}
 	}
 
 	{{ if (hasID) }}
@@ -761,14 +765,14 @@ const TableCreateMethodTemplate = `
 				s := New{{ $field | relationStorageName }}(t.db)
                 {{ if ($field | hasIDFromRelation) }} _, err := s.Create(ctx, item) {{ else }} err := s.Create(ctx, item) {{ end }}
 				if err != nil {
-				{{ if (hasID) }} return nil, fmt.Errorf("failed to create {{ $field | fieldName }}: %w", err) {{ else }} return fmt.Errorf("failed to create {{ structureName }}: %w", err) {{ end }}
+				{{ if (hasID) }} return nil, errors.Wrap(err, "failed to create {{ $field | fieldName }}") {{ else }} return errors.Wrap(err, "failed to create {{ $field | fieldName }}") {{ end }}
 				}
 			} {{ else }}
 			s := New{{ $field | relationStorageName }}(t.db)
 			model.{{ $field | fieldName }}.{{ $field | getRefID }} = id
 			{{ if ($field | hasIDFromRelation) }} _, err := s.Create(ctx, model.{{ $field | fieldName }}) {{ else }} err := s.Create(ctx, model.{{ $field | fieldName }}) {{ end }}
 			if err != nil {
-				{{ if (hasID) }} return nil, fmt.Errorf("failed to create {{ $field | fieldName }}: %w", err) {{ else }} return fmt.Errorf("failed to create {{ structureName }}: %w", err) {{ end }}
+				{{ if (hasID) }} return nil, errors.Wrap(err, "failed to create {{ $field | fieldName }}") {{ else }} return errors.Wrap(err, "failed to create {{ $field | fieldName }}") {{ end }}
 			} {{- end}}
 	    } {{- end}}
 	{{- end}}
@@ -1016,14 +1020,14 @@ func (t *{{ storageName | lowerCamelCase }}) Load{{ $field | pluralFieldName }}(
 	{{- if ($field | isRepeated) }}
 		relationModels, err := s.FindMany(ctx, builders...)
 		if err != nil {
-			return fmt.Errorf("failed to find many {{ $field | relationStorageName }}: %w", err)
+			return errors.Wrap(err, "failed to find many {{ $field | relationStorageName }}")
 		}
 
 		model.{{ $field | fieldName }} = relationModels
 	{{- else }}
 		relationModel, err := s.FindOne(ctx, builders...)
 		if err != nil {
-			return fmt.Errorf("failed to find {{ $field | relationStorageName }}: %w", err)
+			return errors.Wrap(err, "failed to find one {{ $field | relationStorageName }}")
 		}
 
 		model.{{ $field | fieldName }} = relationModel
@@ -1068,7 +1072,7 @@ func (t *{{ storageName | lowerCamelCase }}) LoadBatch{{ $field | pluralFieldNam
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return fmt.Errorf("failed to find many {{ $field | relationStorageName }}: %w", err)
+		return errors.Wrap(err, "failed to find many {{ $field | relationStorageName }}")
 	}
 
 	{{- if ($field | isRepeated) }}

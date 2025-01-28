@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	sq "github.com/Masterminds/squirrel"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -118,7 +117,7 @@ func (t *botStorage) LoadUser(ctx context.Context, model *Bot, builders ...*Quer
 	builders = append(builders, FilterBuilder(UserIdEq(model.UserId)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
-		return fmt.Errorf("failed to find UserStorage: %w", err)
+		return errors.Wrap(err, "failed to find one UserStorage")
 	}
 
 	model.User = relationModel
@@ -141,7 +140,7 @@ func (t *botStorage) LoadBatchUser(ctx context.Context, items []*Bot, builders .
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return fmt.Errorf("failed to find many UserStorage: %w", err)
+		return errors.Wrap(err, "failed to find many UserStorage")
 	}
 	resultMap := make(map[interface{}]*User)
 	for _, result := range results {
@@ -420,7 +419,7 @@ func (t *botStorage) Create(ctx context.Context, model *Bot, opts ...Option) (*s
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return nil, errors.Wrap(err, "failed to build query")
 	}
 
 	var id string
@@ -430,7 +429,7 @@ func (t *botStorage) Create(ctx context.Context, model *Bot, opts ...Option) (*s
 			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
 		}
 
-		return nil, fmt.Errorf("failed to create Bot: %w", err)
+		return nil, errors.Wrap(err, "failed to create Bot")
 	}
 
 	return &id, nil
@@ -499,12 +498,12 @@ func (t *botStorage) Update(ctx context.Context, id string, updateData *BotUpdat
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return errors.Wrap(err, "failed to build query")
 	}
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return fmt.Errorf("failed to update Bot: %w", err)
+		return errors.Wrap(err, "failed to update Bot")
 	}
 
 	return nil
@@ -522,12 +521,12 @@ func (t *botStorage) DeleteById(ctx context.Context, id string, opts ...Option) 
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return errors.Wrap(err, "failed to build query")
 	}
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return fmt.Errorf("failed to delete Bot: %w", err)
+		return errors.Wrap(err, "failed to delete Bot")
 	}
 
 	return nil
@@ -557,12 +556,12 @@ func (t *botStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilder) 
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return errors.Wrap(err, "failed to build query")
 	}
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return fmt.Errorf("failed to delete Address: %w", err)
+		return errors.Wrap(err, "failed to delete bots")
 	}
 
 	return nil
@@ -631,12 +630,12 @@ func (t *botStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) ([
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return nil, errors.Wrap(err, "failed to build query")
 	}
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find Bot: %w", err)
+		return nil, errors.Wrap(err, "failed to execute query")
 	}
 	defer rows.Close()
 
@@ -644,9 +643,13 @@ func (t *botStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) ([
 	for rows.Next() {
 		model := &Bot{}
 		if err := model.ScanRows(rows); err != nil {
-			return nil, fmt.Errorf("failed to scan Bot: %w", err)
+			return nil, errors.Wrap(err, "failed to scan Bot")
 		}
 		results = append(results, model)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "failed to iterate over rows")
 	}
 
 	return results, nil
@@ -691,13 +694,13 @@ func (t *botStorage) Count(ctx context.Context, builders ...*QueryBuilder) (int6
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return 0, fmt.Errorf("failed to build query: %w", err)
+		return 0, errors.Wrap(err, "failed to build query")
 	}
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
 	if err := row.Scan(&count); err != nil {
-		return 0, fmt.Errorf("failed to count Bot: %w", err)
+		return 0, errors.Wrap(err, "failed to scan count")
 	}
 
 	return count, nil
@@ -708,7 +711,7 @@ func (t *botStorage) FindManyWithPagination(ctx context.Context, limit int, page
 	// Count the total number of records
 	totalCount, err := t.Count(ctx, builders...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to count Bot: %w", err)
+		return nil, nil, errors.Wrap(err, "failed to count Bot")
 	}
 
 	// Calculate offset
@@ -728,7 +731,7 @@ func (t *botStorage) FindManyWithPagination(ctx context.Context, limit int, page
 	// Find records using FindMany
 	records, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to find Bot: %w", err)
+		return nil, nil, errors.Wrap(err, "failed to find Bot")
 	}
 
 	return records, paginator, nil
@@ -756,7 +759,7 @@ func (t *botStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBuil
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return nil, errors.Wrap(err, "failed to build query")
 	}
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
@@ -765,7 +768,7 @@ func (t *botStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBuil
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrRowNotFound
 		}
-		return nil, fmt.Errorf("failed to scan Bot: %w", err)
+		return nil, errors.Wrap(err, "failed to scan Bot")
 	}
 
 	return &model, nil

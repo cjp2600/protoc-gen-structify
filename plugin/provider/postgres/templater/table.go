@@ -116,7 +116,6 @@ func (t *tableTemplater) Imports() importpkg.ImportSet {
 		importpkg.ImportContext,
 		importpkg.ImportDb,
 		importpkg.ImportLibPQ,
-		importpkg.ImportFMT,
 		importpkg.ImportErrors,
 		importpkg.ImportSquirrel,
 		importpkg.ImportMath,

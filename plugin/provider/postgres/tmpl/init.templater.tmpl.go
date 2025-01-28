@@ -253,14 +253,14 @@ func Open(dsn string, opts ...{{ clientName }}Option) (*sql.DB, error) {
 
     db, err := sql.Open("postgres", dsn)
     if err != nil {
-        return nil, fmt.Errorf("failed to open database: %w", err)
+        return nil, errors.Wrap(err, "failed to open database")
     }
 
 	// Ping verifies a connection to the database is still alive, establishing a connection if necessary.
 	if err = db.Ping(); err != nil {
 		// If Ping fails, close the DB and return an error.
 		db.Close() // Ignoring error from Close, as we already have a more significant error.
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+		return nil, errors.Wrap(err, "failed to ping database")
 	}
 
 	// Set the connection pool options.
@@ -395,7 +395,7 @@ func (c *{{ storageName | lowerCamelCase }}) CreateTables(ctx context.Context) e
 	// create the {{ $value.Value }} table.
 	err = c.{{ $value.Key }}.CreateTable(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to create table: %w", err)
+		return errors.Wrap(err, "failed to create table")
 	}
 {{ end }}
 	return nil
@@ -409,7 +409,7 @@ func (c *{{ storageName | lowerCamelCase }}) DropTables(ctx context.Context) err
 	// drop the {{ $value.Value }} table.
 	err = c.{{ $value.Key }}.DropTable(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to drop table: %w", err)
+		return errors.Wrap(err, "failed to drop table")
 	}
 {{ end }}
 	return nil
@@ -423,7 +423,7 @@ func (c *{{ storageName | lowerCamelCase }}) TruncateTables(ctx context.Context)
 	// truncate the {{ $value.Value }} table.
 	err = c.{{ $value.Key }}.TruncateTable(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to truncate table: %w", err)
+		return errors.Wrap(err, "failed to truncate table")
 	}
 {{ end }}
 	return nil
@@ -437,7 +437,7 @@ func (c *{{ storageName | lowerCamelCase }}) UpgradeTables(ctx context.Context) 
 	// run the {{ $value.Value }} upgrade.
 	err = c.{{ $value.Key }}.UpgradeTable(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to upgrade: %w", err)
+		return errors.Wrap(err, "failed to upgrade table")
 	}
 {{ end }}
 	return nil
@@ -466,12 +466,12 @@ func (n *NullableJSON[T]) Scan(value interface{}) error {
 
 	bytes, ok := value.([]byte)
 	if !ok {
-		return fmt.Errorf("cannot scan type %T into NullableJSON", value)
+		return errors.New("failed to convert value to []byte")
 	}
 
 	if err := json.Unmarshal(bytes, &n.Data); err != nil {
 		n.Valid = false
-		return fmt.Errorf("failed to unmarshal JSON: %w", err)
+		return errors.Wrap(err, "failed to unmarshal json")
 	}
 
 	n.Valid = true
@@ -509,7 +509,7 @@ func (m *{{ $field.StructureName }}) Scan(src interface{}) error  {
 		return json.Unmarshal(bytes, m)
 	}
 
-	return fmt.Errorf("can't convert %T", src)
+	return errors.New(fmt.Sprintf("can't convert %T", src))
 }
 
 // Value implements the driver.Valuer interface for JSON.
@@ -538,7 +538,7 @@ func (m *{{ $field.FieldType }}) Scan(src interface{}) error  {
 		return json.Unmarshal(bytes, m)
 	}
 
-	return fmt.Errorf("can't convert %T", src)
+	return errors.New(fmt.Sprintf("can't convert %T", src))
 }
 
 // Value implements the driver.Valuer interface for JSON.
@@ -595,7 +595,7 @@ func (m *TxManager) Begin(ctx context.Context) (context.Context, error) {
 
 	tx, err := m.db.Begin()
 	if err != nil {
-		return ctx, fmt.Errorf("could not begin transaction: %w", err)
+		return ctx, errors.Wrap(err, "could not begin transaction")
 	}
 
 	// store the transaction in the context.
@@ -610,7 +610,7 @@ func (m *TxManager) Commit(ctx context.Context) error {
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("could not commit transaction: %w", err)
+		return errors.Wrap(err, "could not commit transaction")
 	}
 
 	return nil

@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	sq "github.com/Masterminds/squirrel"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -118,7 +117,7 @@ func (t *addressStorage) LoadUser(ctx context.Context, model *Address, builders 
 	builders = append(builders, FilterBuilder(UserIdEq(model.UserId)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
-		return fmt.Errorf("failed to find UserStorage: %w", err)
+		return errors.Wrap(err, "failed to find one UserStorage")
 	}
 
 	model.User = relationModel
@@ -141,7 +140,7 @@ func (t *addressStorage) LoadBatchUser(ctx context.Context, items []*Address, bu
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return fmt.Errorf("failed to find many UserStorage: %w", err)
+		return errors.Wrap(err, "failed to find many UserStorage")
 	}
 	resultMap := make(map[interface{}]*User)
 	for _, result := range results {
@@ -369,7 +368,7 @@ func (t *addressStorage) Create(ctx context.Context, model *Address, opts ...Opt
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return nil, errors.Wrap(err, "failed to build query")
 	}
 
 	var id string
@@ -379,7 +378,7 @@ func (t *addressStorage) Create(ctx context.Context, model *Address, opts ...Opt
 			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
 		}
 
-		return nil, fmt.Errorf("failed to create Address: %w", err)
+		return nil, errors.Wrap(err, "failed to create Address")
 	}
 
 	return &id, nil
@@ -448,12 +447,12 @@ func (t *addressStorage) Update(ctx context.Context, id string, updateData *Addr
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return errors.Wrap(err, "failed to build query")
 	}
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return fmt.Errorf("failed to update Address: %w", err)
+		return errors.Wrap(err, "failed to update Address")
 	}
 
 	return nil
@@ -471,12 +470,12 @@ func (t *addressStorage) DeleteById(ctx context.Context, id string, opts ...Opti
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return errors.Wrap(err, "failed to build query")
 	}
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return fmt.Errorf("failed to delete Address: %w", err)
+		return errors.Wrap(err, "failed to delete Address")
 	}
 
 	return nil
@@ -506,12 +505,12 @@ func (t *addressStorage) DeleteMany(ctx context.Context, builders ...*QueryBuild
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return errors.Wrap(err, "failed to build query")
 	}
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return fmt.Errorf("failed to delete Address: %w", err)
+		return errors.Wrap(err, "failed to delete addresses")
 	}
 
 	return nil
@@ -580,12 +579,12 @@ func (t *addressStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return nil, errors.Wrap(err, "failed to build query")
 	}
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find Address: %w", err)
+		return nil, errors.Wrap(err, "failed to execute query")
 	}
 	defer rows.Close()
 
@@ -593,9 +592,13 @@ func (t *addressStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	for rows.Next() {
 		model := &Address{}
 		if err := model.ScanRows(rows); err != nil {
-			return nil, fmt.Errorf("failed to scan Address: %w", err)
+			return nil, errors.Wrap(err, "failed to scan Address")
 		}
 		results = append(results, model)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "failed to iterate over rows")
 	}
 
 	return results, nil
@@ -640,13 +643,13 @@ func (t *addressStorage) Count(ctx context.Context, builders ...*QueryBuilder) (
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return 0, fmt.Errorf("failed to build query: %w", err)
+		return 0, errors.Wrap(err, "failed to build query")
 	}
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
 	if err := row.Scan(&count); err != nil {
-		return 0, fmt.Errorf("failed to count Address: %w", err)
+		return 0, errors.Wrap(err, "failed to scan count")
 	}
 
 	return count, nil
@@ -657,7 +660,7 @@ func (t *addressStorage) FindManyWithPagination(ctx context.Context, limit int, 
 	// Count the total number of records
 	totalCount, err := t.Count(ctx, builders...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to count Address: %w", err)
+		return nil, nil, errors.Wrap(err, "failed to count Address")
 	}
 
 	// Calculate offset
@@ -677,7 +680,7 @@ func (t *addressStorage) FindManyWithPagination(ctx context.Context, limit int, 
 	// Find records using FindMany
 	records, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to find Address: %w", err)
+		return nil, nil, errors.Wrap(err, "failed to find Address")
 	}
 
 	return records, paginator, nil
@@ -705,7 +708,7 @@ func (t *addressStorage) SelectForUpdate(ctx context.Context, builders ...*Query
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return nil, errors.Wrap(err, "failed to build query")
 	}
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
@@ -714,7 +717,7 @@ func (t *addressStorage) SelectForUpdate(ctx context.Context, builders ...*Query
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrRowNotFound
 		}
-		return nil, fmt.Errorf("failed to scan Address: %w", err)
+		return nil, errors.Wrap(err, "failed to scan Address")
 	}
 
 	return &model, nil

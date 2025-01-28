@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	sq "github.com/Masterminds/squirrel"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -222,7 +221,7 @@ func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Optio
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return errors.Wrap(err, "failed to build query")
 	}
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
@@ -231,7 +230,7 @@ func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Optio
 			return errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
 		}
 
-		return fmt.Errorf("failed to create Device: %w", err)
+		return errors.Wrap(err, "failed to create Device")
 	}
 
 	return nil
@@ -271,12 +270,12 @@ func (t *deviceStorage) Update(ctx context.Context, id int64, updateData *Device
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return errors.Wrap(err, "failed to build query")
 	}
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return fmt.Errorf("failed to update Device: %w", err)
+		return errors.Wrap(err, "failed to update Device")
 	}
 
 	return nil
@@ -306,12 +305,12 @@ func (t *deviceStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilde
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return errors.Wrap(err, "failed to build query")
 	}
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return fmt.Errorf("failed to delete Address: %w", err)
+		return errors.Wrap(err, "failed to delete devices")
 	}
 
 	return nil
@@ -363,12 +362,12 @@ func (t *deviceStorage) FindMany(ctx context.Context, builders ...*QueryBuilder)
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return nil, errors.Wrap(err, "failed to build query")
 	}
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find Device: %w", err)
+		return nil, errors.Wrap(err, "failed to execute query")
 	}
 	defer rows.Close()
 
@@ -376,9 +375,13 @@ func (t *deviceStorage) FindMany(ctx context.Context, builders ...*QueryBuilder)
 	for rows.Next() {
 		model := &Device{}
 		if err := model.ScanRows(rows); err != nil {
-			return nil, fmt.Errorf("failed to scan Device: %w", err)
+			return nil, errors.Wrap(err, "failed to scan Device")
 		}
 		results = append(results, model)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "failed to iterate over rows")
 	}
 
 	return results, nil
@@ -423,13 +426,13 @@ func (t *deviceStorage) Count(ctx context.Context, builders ...*QueryBuilder) (i
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return 0, fmt.Errorf("failed to build query: %w", err)
+		return 0, errors.Wrap(err, "failed to build query")
 	}
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
 	if err := row.Scan(&count); err != nil {
-		return 0, fmt.Errorf("failed to count Device: %w", err)
+		return 0, errors.Wrap(err, "failed to scan count")
 	}
 
 	return count, nil
@@ -440,7 +443,7 @@ func (t *deviceStorage) FindManyWithPagination(ctx context.Context, limit int, p
 	// Count the total number of records
 	totalCount, err := t.Count(ctx, builders...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to count Device: %w", err)
+		return nil, nil, errors.Wrap(err, "failed to count Device")
 	}
 
 	// Calculate offset
@@ -460,7 +463,7 @@ func (t *deviceStorage) FindManyWithPagination(ctx context.Context, limit int, p
 	// Find records using FindMany
 	records, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to find Device: %w", err)
+		return nil, nil, errors.Wrap(err, "failed to find Device")
 	}
 
 	return records, paginator, nil
@@ -488,7 +491,7 @@ func (t *deviceStorage) SelectForUpdate(ctx context.Context, builders ...*QueryB
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return nil, errors.Wrap(err, "failed to build query")
 	}
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
@@ -497,7 +500,7 @@ func (t *deviceStorage) SelectForUpdate(ctx context.Context, builders ...*QueryB
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrRowNotFound
 		}
-		return nil, fmt.Errorf("failed to scan Device: %w", err)
+		return nil, errors.Wrap(err, "failed to scan Device")
 	}
 
 	return &model, nil

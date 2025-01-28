@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	sq "github.com/Masterminds/squirrel"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -126,7 +125,7 @@ func (t *messageStorage) LoadBot(ctx context.Context, model *Message, builders .
 	builders = append(builders, FilterBuilder(BotIdEq(*model.BotId)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
-		return fmt.Errorf("failed to find BotStorage: %w", err)
+		return errors.Wrap(err, "failed to find one BotStorage")
 	}
 
 	model.Bot = relationModel
@@ -145,7 +144,7 @@ func (t *messageStorage) LoadFromUser(ctx context.Context, model *Message, build
 	builders = append(builders, FilterBuilder(UserIdEq(model.FromUserId)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
-		return fmt.Errorf("failed to find UserStorage: %w", err)
+		return errors.Wrap(err, "failed to find one UserStorage")
 	}
 
 	model.FromUser = relationModel
@@ -164,7 +163,7 @@ func (t *messageStorage) LoadToUser(ctx context.Context, model *Message, builder
 	builders = append(builders, FilterBuilder(UserIdEq(model.ToUserId)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
-		return fmt.Errorf("failed to find UserStorage: %w", err)
+		return errors.Wrap(err, "failed to find one UserStorage")
 	}
 
 	model.ToUser = relationModel
@@ -195,7 +194,7 @@ func (t *messageStorage) LoadBatchBot(ctx context.Context, items []*Message, bui
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return fmt.Errorf("failed to find many BotStorage: %w", err)
+		return errors.Wrap(err, "failed to find many BotStorage")
 	}
 	resultMap := make(map[interface{}]*Bot)
 	for _, result := range results {
@@ -233,7 +232,7 @@ func (t *messageStorage) LoadBatchFromUser(ctx context.Context, items []*Message
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return fmt.Errorf("failed to find many UserStorage: %w", err)
+		return errors.Wrap(err, "failed to find many UserStorage")
 	}
 	resultMap := make(map[interface{}]*User)
 	for _, result := range results {
@@ -267,7 +266,7 @@ func (t *messageStorage) LoadBatchToUser(ctx context.Context, items []*Message, 
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return fmt.Errorf("failed to find many UserStorage: %w", err)
+		return errors.Wrap(err, "failed to find many UserStorage")
 	}
 	resultMap := make(map[interface{}]*User)
 	for _, result := range results {
@@ -557,7 +556,7 @@ func (t *messageStorage) Create(ctx context.Context, model *Message, opts ...Opt
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return nil, errors.Wrap(err, "failed to build query")
 	}
 
 	var id string
@@ -567,7 +566,7 @@ func (t *messageStorage) Create(ctx context.Context, model *Message, opts ...Opt
 			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
 		}
 
-		return nil, fmt.Errorf("failed to create Message: %w", err)
+		return nil, errors.Wrap(err, "failed to create Message")
 	}
 
 	return &id, nil
@@ -612,12 +611,12 @@ func (t *messageStorage) Update(ctx context.Context, id string, updateData *Mess
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return errors.Wrap(err, "failed to build query")
 	}
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return fmt.Errorf("failed to update Message: %w", err)
+		return errors.Wrap(err, "failed to update Message")
 	}
 
 	return nil
@@ -635,12 +634,12 @@ func (t *messageStorage) DeleteById(ctx context.Context, id string, opts ...Opti
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return errors.Wrap(err, "failed to build query")
 	}
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return fmt.Errorf("failed to delete Message: %w", err)
+		return errors.Wrap(err, "failed to delete Message")
 	}
 
 	return nil
@@ -670,12 +669,12 @@ func (t *messageStorage) DeleteMany(ctx context.Context, builders ...*QueryBuild
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build query: %w", err)
+		return errors.Wrap(err, "failed to build query")
 	}
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return fmt.Errorf("failed to delete Address: %w", err)
+		return errors.Wrap(err, "failed to delete messages")
 	}
 
 	return nil
@@ -744,12 +743,12 @@ func (t *messageStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return nil, errors.Wrap(err, "failed to build query")
 	}
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find Message: %w", err)
+		return nil, errors.Wrap(err, "failed to execute query")
 	}
 	defer rows.Close()
 
@@ -757,9 +756,13 @@ func (t *messageStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	for rows.Next() {
 		model := &Message{}
 		if err := model.ScanRows(rows); err != nil {
-			return nil, fmt.Errorf("failed to scan Message: %w", err)
+			return nil, errors.Wrap(err, "failed to scan Message")
 		}
 		results = append(results, model)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "failed to iterate over rows")
 	}
 
 	return results, nil
@@ -804,13 +807,13 @@ func (t *messageStorage) Count(ctx context.Context, builders ...*QueryBuilder) (
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return 0, fmt.Errorf("failed to build query: %w", err)
+		return 0, errors.Wrap(err, "failed to build query")
 	}
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
 	if err := row.Scan(&count); err != nil {
-		return 0, fmt.Errorf("failed to count Message: %w", err)
+		return 0, errors.Wrap(err, "failed to scan count")
 	}
 
 	return count, nil
@@ -821,7 +824,7 @@ func (t *messageStorage) FindManyWithPagination(ctx context.Context, limit int, 
 	// Count the total number of records
 	totalCount, err := t.Count(ctx, builders...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to count Message: %w", err)
+		return nil, nil, errors.Wrap(err, "failed to count Message")
 	}
 
 	// Calculate offset
@@ -841,7 +844,7 @@ func (t *messageStorage) FindManyWithPagination(ctx context.Context, limit int, 
 	// Find records using FindMany
 	records, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to find Message: %w", err)
+		return nil, nil, errors.Wrap(err, "failed to find Message")
 	}
 
 	return records, paginator, nil
@@ -869,7 +872,7 @@ func (t *messageStorage) SelectForUpdate(ctx context.Context, builders ...*Query
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build query: %w", err)
+		return nil, errors.Wrap(err, "failed to build query")
 	}
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
@@ -878,7 +881,7 @@ func (t *messageStorage) SelectForUpdate(ctx context.Context, builders ...*Query
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrRowNotFound
 		}
-		return nil, fmt.Errorf("failed to scan Message: %w", err)
+		return nil, errors.Wrap(err, "failed to scan Message")
 	}
 
 	return &model, nil
