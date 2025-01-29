@@ -11,8 +11,8 @@ import (
 
 // postStorage is a struct for the "posts" table.
 type postStorage struct {
-	db           *DB                     // The database connection.
-	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
+	config       *Config
+	queryBuilder sq.StatementBuilderType
 }
 
 // PostCRUDOperations is an interface for managing the posts table.
@@ -66,10 +66,37 @@ type PostStorage interface {
 }
 
 // NewPostStorage returns a new postStorage.
-func NewPostStorage(db *DB) PostStorage {
+func NewPostStorage(config *Config) (PostStorage, error) {
+	if config == nil {
+		return nil, errors.New("config is nil")
+	}
+	if config.DB == nil {
+		return nil, errors.New("config.DB is nil")
+	}
+	if config.DB.DBRead == nil {
+		return nil, errors.New("config.DB.DBRead is nil")
+	}
+	if config.DB.DBWrite == nil {
+		config.DB.DBWrite = config.DB.DBRead
+	}
+
 	return &postStorage{
-		db:           db,
+		config:       config,
 		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
+	}, nil
+}
+
+// logQuery logs the query if query logging is enabled.
+func (t *postStorage) logQuery(ctx context.Context, query string, args ...interface{}) {
+	if t.config.queryLogMethod != nil {
+		t.config.queryLogMethod(ctx, t.TableName(), query, args...)
+	}
+}
+
+// logError logs the error if error logging is enabled.
+func (t *postStorage) logError(ctx context.Context, err error, message string) {
+	if t.config.errorLogMethod != nil {
+		t.config.errorLogMethod(ctx, err, message)
 	}
 }
 
@@ -91,14 +118,20 @@ func (t *postStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
 
 	// Check if there is an active transaction in the context.
 	if tx, ok := TxFromContext(ctx); ok {
+		if tx == nil {
+			t.logError(ctx, errors.New("transaction is nil"), "failed to get transaction from context")
+			// set default connection
+			return t.config.DB.DBWrite
+		}
+
 		return tx
 	}
 
 	// Use the appropriate connection based on the operation type.
 	if isWrite {
-		db = t.db.DBWrite
+		db = t.config.DB.DBWrite
 	} else {
-		db = t.db.DBRead
+		db = t.config.DB.DBRead
 	}
 
 	return db
@@ -111,7 +144,10 @@ func (t *postStorage) LoadAuthor(ctx context.Context, model *Post, builders ...*
 	}
 
 	// NewUserStorage creates a new UserStorage.
-	s := NewUserStorage(t.db)
+	s, err := NewUserStorage(t.config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create UserStorage")
+	}
 	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(UserIdEq(model.AuthorId)))
 	relationModel, err := s.FindOne(ctx, builders...)
@@ -132,7 +168,10 @@ func (t *postStorage) LoadBatchAuthor(ctx context.Context, items []*Post, builde
 	}
 
 	// NewUserStorage creates a new UserStorage.
-	s := NewUserStorage(t.db)
+	s, err := NewUserStorage(t.config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create UserStorage")
+	}
 
 	// Add the filter for the relation
 	builders = append(builders, FilterBuilder(UserIdIn(requestItems...)))
@@ -338,6 +377,7 @@ func (t *postStorage) Create(ctx context.Context, model *Post, opts ...Option) (
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	var id int32
 	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
@@ -395,6 +435,7 @@ func (t *postStorage) BatchCreate(ctx context.Context, models []*Post, opts ...O
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -403,7 +444,11 @@ func (t *postStorage) BatchCreate(ctx context.Context, models []*Post, opts ...O
 		}
 		return nil, errors.Wrap(err, "failed to execute bulk insert")
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.logError(ctx, err, "failed to close rows")
+		}
+	}()
 
 	var returnIDs []string
 	for rows.Next() {
@@ -457,6 +502,7 @@ func (t *postStorage) Update(ctx context.Context, id int32, updateData *PostUpda
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -480,6 +526,7 @@ func (t *postStorage) DeleteById(ctx context.Context, id int32, opts ...Option) 
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -515,6 +562,7 @@ func (t *postStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilder)
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -589,12 +637,17 @@ func (t *postStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.logError(ctx, err, "failed to close rows")
+		}
+	}()
 
 	var results []*Post
 	for rows.Next() {
@@ -653,6 +706,7 @@ func (t *postStorage) Count(ctx context.Context, builders ...*QueryBuilder) (int
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
@@ -718,6 +772,7 @@ func (t *postStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBui
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
 	var model Post

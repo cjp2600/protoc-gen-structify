@@ -13,8 +13,8 @@ import (
 
 // userStorage is a struct for the "users" table.
 type userStorage struct {
-	db           *DB                     // The database connection.
-	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
+	config       *Config
+	queryBuilder sq.StatementBuilderType
 }
 
 // UserCRUDOperations is an interface for managing the users table.
@@ -74,10 +74,37 @@ type UserStorage interface {
 }
 
 // NewUserStorage returns a new userStorage.
-func NewUserStorage(db *DB) UserStorage {
+func NewUserStorage(config *Config) (UserStorage, error) {
+	if config == nil {
+		return nil, errors.New("config is nil")
+	}
+	if config.DB == nil {
+		return nil, errors.New("config.DB is nil")
+	}
+	if config.DB.DBRead == nil {
+		return nil, errors.New("config.DB.DBRead is nil")
+	}
+	if config.DB.DBWrite == nil {
+		config.DB.DBWrite = config.DB.DBRead
+	}
+
 	return &userStorage{
-		db:           db,
+		config:       config,
 		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
+	}, nil
+}
+
+// logQuery logs the query if query logging is enabled.
+func (t *userStorage) logQuery(ctx context.Context, query string, args ...interface{}) {
+	if t.config.queryLogMethod != nil {
+		t.config.queryLogMethod(ctx, t.TableName(), query, args...)
+	}
+}
+
+// logError logs the error if error logging is enabled.
+func (t *userStorage) logError(ctx context.Context, err error, message string) {
+	if t.config.errorLogMethod != nil {
+		t.config.errorLogMethod(ctx, err, message)
 	}
 }
 
@@ -99,14 +126,20 @@ func (t *userStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
 
 	// Check if there is an active transaction in the context.
 	if tx, ok := TxFromContext(ctx); ok {
+		if tx == nil {
+			t.logError(ctx, errors.New("transaction is nil"), "failed to get transaction from context")
+			// set default connection
+			return t.config.DB.DBWrite
+		}
+
 		return tx
 	}
 
 	// Use the appropriate connection based on the operation type.
 	if isWrite {
-		db = t.db.DBWrite
+		db = t.config.DB.DBWrite
 	} else {
-		db = t.db.DBRead
+		db = t.config.DB.DBRead
 	}
 
 	return db
@@ -119,7 +152,10 @@ func (t *userStorage) LoadDevice(ctx context.Context, model *User, builders ...*
 	}
 
 	// NewDeviceStorage creates a new DeviceStorage.
-	s := NewDeviceStorage(t.db)
+	s, err := NewDeviceStorage(t.config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create DeviceStorage")
+	}
 	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(DeviceUserIdEq(model.Id)))
 	relationModel, err := s.FindOne(ctx, builders...)
@@ -138,7 +174,10 @@ func (t *userStorage) LoadSettings(ctx context.Context, model *User, builders ..
 	}
 
 	// NewSettingStorage creates a new SettingStorage.
-	s := NewSettingStorage(t.db)
+	s, err := NewSettingStorage(t.config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create SettingStorage")
+	}
 	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(SettingUserIdEq(model.Id)))
 	relationModel, err := s.FindOne(ctx, builders...)
@@ -157,7 +196,10 @@ func (t *userStorage) LoadAddresses(ctx context.Context, model *User, builders .
 	}
 
 	// NewAddressStorage creates a new AddressStorage.
-	s := NewAddressStorage(t.db)
+	s, err := NewAddressStorage(t.config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create AddressStorage")
+	}
 	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(AddressUserIdEq(model.Id)))
 	relationModels, err := s.FindMany(ctx, builders...)
@@ -176,7 +218,10 @@ func (t *userStorage) LoadPosts(ctx context.Context, model *User, builders ...*Q
 	}
 
 	// NewPostStorage creates a new PostStorage.
-	s := NewPostStorage(t.db)
+	s, err := NewPostStorage(t.config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create PostStorage")
+	}
 	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(PostAuthorIdEq(model.Id)))
 	relationModels, err := s.FindMany(ctx, builders...)
@@ -197,7 +242,10 @@ func (t *userStorage) LoadBatchDevice(ctx context.Context, items []*User, builde
 	}
 
 	// NewDeviceStorage creates a new DeviceStorage.
-	s := NewDeviceStorage(t.db)
+	s, err := NewDeviceStorage(t.config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create DeviceStorage")
+	}
 
 	// Add the filter for the relation
 	builders = append(builders, FilterBuilder(DeviceUserIdIn(requestItems...)))
@@ -231,7 +279,10 @@ func (t *userStorage) LoadBatchSettings(ctx context.Context, items []*User, buil
 	}
 
 	// NewSettingStorage creates a new SettingStorage.
-	s := NewSettingStorage(t.db)
+	s, err := NewSettingStorage(t.config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create SettingStorage")
+	}
 
 	// Add the filter for the relation
 	builders = append(builders, FilterBuilder(SettingUserIdIn(requestItems...)))
@@ -265,7 +316,10 @@ func (t *userStorage) LoadBatchAddresses(ctx context.Context, items []*User, bui
 	}
 
 	// NewAddressStorage creates a new AddressStorage.
-	s := NewAddressStorage(t.db)
+	s, err := NewAddressStorage(t.config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create AddressStorage")
+	}
 
 	// Add the filter for the relation
 	builders = append(builders, FilterBuilder(AddressUserIdIn(requestItems...)))
@@ -299,7 +353,10 @@ func (t *userStorage) LoadBatchPosts(ctx context.Context, items []*User, builder
 	}
 
 	// NewPostStorage creates a new PostStorage.
-	s := NewPostStorage(t.db)
+	s, err := NewPostStorage(t.config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create PostStorage")
+	}
 
 	// Add the filter for the relation
 	builders = append(builders, FilterBuilder(PostAuthorIdIn(requestItems...)))
@@ -692,6 +749,7 @@ func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) (
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	var id string
 	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
@@ -704,17 +762,25 @@ func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) (
 	}
 
 	if options.relations && model.Device != nil {
-		s := NewDeviceStorage(t.db)
+		s, err := NewDeviceStorage(t.config)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create Device")
+		}
+
 		model.Device.UserId = id
-		err := s.Create(ctx, model.Device)
+		err = s.Create(ctx, model.Device)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create Device")
 		}
 	}
 	if options.relations && model.Settings != nil {
-		s := NewSettingStorage(t.db)
+		s, err := NewSettingStorage(t.config)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create Settings")
+		}
+
 		model.Settings.UserId = id
-		_, err := s.Create(ctx, model.Settings)
+		_, err = s.Create(ctx, model.Settings)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create Settings")
 		}
@@ -722,8 +788,12 @@ func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) (
 	if options.relations && model.Addresses != nil {
 		for _, item := range model.Addresses {
 			item.UserId = id
-			s := NewAddressStorage(t.db)
-			_, err := s.Create(ctx, item)
+			s, err := NewAddressStorage(t.config)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to create Addresses")
+			}
+
+			_, err = s.Create(ctx, item)
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to create Addresses")
 			}
@@ -792,6 +862,7 @@ func (t *userStorage) BatchCreate(ctx context.Context, models []*User, opts ...O
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -800,7 +871,11 @@ func (t *userStorage) BatchCreate(ctx context.Context, models []*User, opts ...O
 		}
 		return nil, errors.Wrap(err, "failed to execute bulk insert")
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.logError(ctx, err, "failed to close rows")
+		}
+	}()
 
 	var returnIDs []string
 	for rows.Next() {
@@ -916,6 +991,7 @@ func (t *userStorage) Update(ctx context.Context, id string, updateData *UserUpd
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -939,6 +1015,7 @@ func (t *userStorage) DeleteById(ctx context.Context, id string, opts ...Option)
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -974,6 +1051,7 @@ func (t *userStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilder)
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -1048,12 +1126,17 @@ func (t *userStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.logError(ctx, err, "failed to close rows")
+		}
+	}()
 
 	var results []*User
 	for rows.Next() {
@@ -1112,6 +1195,7 @@ func (t *userStorage) Count(ctx context.Context, builders ...*QueryBuilder) (int
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
@@ -1177,6 +1261,7 @@ func (t *userStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBui
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
 	var model User

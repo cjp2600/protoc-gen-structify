@@ -317,6 +317,7 @@ func (t *{{ storageName | lowerCamelCase }}) SelectForUpdate(ctx context.Context
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
 	var model {{ structureName }}
@@ -357,6 +358,7 @@ func (t *{{ storageName | lowerCamelCase }}) Count(ctx context.Context, builders
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
@@ -435,12 +437,17 @@ func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, build
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.logError(ctx, err, "failed to close rows")
+		}
+	}()
 	
 	var results []*{{structureName}}
 	for rows.Next() {
@@ -514,6 +521,7 @@ func (t *{{ storageName | lowerCamelCase }}) DeleteBy{{ getPrimaryKey.GetName | 
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx,sqlQuery, args...)
 	if err != nil {
@@ -550,6 +558,7 @@ func (t *{{ storageName | lowerCamelCase }}) DeleteMany(ctx context.Context, bui
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -646,6 +655,7 @@ func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{ID
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -747,6 +757,7 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 	if err != nil {
 		{{ if (hasID) }} return nil, errors.Wrap(err, "failed to build query") {{ else }} return errors.Wrap(err, "failed to build query") {{ end }}
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -755,7 +766,11 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 		}
 		{{ if (hasID) }} return nil, errors.Wrap(err, "failed to execute bulk insert") {{ else }} return errors.Wrap(err, "failed to execute bulk insert") {{ end }}
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.logError(ctx, err, "failed to close rows")
+		}
+	}()
 
 	{{ if (hasID) }} var returnIDs []string {{ end }} {{ if (hasID) }}
 	for rows.Next() {
@@ -836,6 +851,7 @@ const TableCreateMethodTemplate = `
 	if err != nil {
 		{{ if (hasID) }} return nil, errors.Wrap(err, "failed to build query") {{ else }} return errors.Wrap(err, "failed to build query") {{ end }}
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	{{ if (hasID) }}var id {{IDType}}
 	err = t.DB(ctx, true).QueryRowContext(ctx,sqlQuery, args...).Scan(&id) {{ else }} _, err = t.DB(ctx, true).ExecContext(ctx,sqlQuery, args...) {{ end }}
@@ -853,15 +869,23 @@ const TableCreateMethodTemplate = `
 	    if options.relations && model.{{ $field | fieldName }} != nil { {{ if ($field | isRepeated) }}
 			for _, item := range model.{{ $field | fieldName }} {
 				item.{{ $field | getRefID }} = id
-				s := New{{ $field | relationStorageName }}(t.db)
-                {{ if ($field | hasIDFromRelation) }} _, err := s.Create(ctx, item) {{ else }} err := s.Create(ctx, item) {{ end }}
+				s, err := New{{ $field | relationStorageName }}(t.config)
+				if err != nil {
+					return nil, errors.Wrap(err, "failed to create {{ $field | fieldName }}")
+				}
+
+                {{ if ($field | hasIDFromRelation) }} _, err = s.Create(ctx, item) {{ else }} err = s.Create(ctx, item) {{ end }}
 				if err != nil {
 				{{ if (hasID) }} return nil, errors.Wrap(err, "failed to create {{ $field | fieldName }}") {{ else }} return errors.Wrap(err, "failed to create {{ $field | fieldName }}") {{ end }}
 				}
 			} {{ else }}
-			s := New{{ $field | relationStorageName }}(t.db)
+			s, err := New{{ $field | relationStorageName }}(t.config)
+			if err != nil {
+				{{ if (hasID) }} return nil, errors.Wrap(err, "failed to create {{ $field | fieldName }}") {{ else }} return errors.Wrap(err, "failed to create {{ $field | fieldName }}") {{ end }}
+			}
+
 			model.{{ $field | fieldName }}.{{ $field | getRefID }} = id
-			{{ if ($field | hasIDFromRelation) }} _, err := s.Create(ctx, model.{{ $field | fieldName }}) {{ else }} err := s.Create(ctx, model.{{ $field | fieldName }}) {{ end }}
+			{{ if ($field | hasIDFromRelation) }} _, err = s.Create(ctx, model.{{ $field | fieldName }}) {{ else }} err = s.Create(ctx, model.{{ $field | fieldName }}) {{ end }}
 			if err != nil {
 				{{ if (hasID) }} return nil, errors.Wrap(err, "failed to create {{ $field | fieldName }}") {{ else }} return errors.Wrap(err, "failed to create {{ $field | fieldName }}") {{ end }}
 			} {{- end}}
@@ -876,8 +900,8 @@ const TableCreateMethodTemplate = `
 const TableStorageTemplate = `
 // {{ storageName | lowerCamelCase }} is a struct for the "{{ tableName }}" table.
 type {{ storageName | lowerCamelCase }} struct {
-	db *DB // The database connection.
-	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
+	config *Config
+	queryBuilder sq.StatementBuilderType
 }
 
 {{ if .CRUDSchemas }}
@@ -963,10 +987,37 @@ type {{ storageName }} interface {
 }
 
 // New{{ storageName }} returns a new {{ storageName | lowerCamelCase }}.
-func New{{ storageName }}(db *DB) {{ storageName }} {
+func New{{ storageName }}(config *Config) ({{ storageName }}, error) {
+	if config == nil {
+		return nil, errors.New("config is nil")
+	}
+	if config.DB == nil {
+		return nil, errors.New("config.DB is nil")
+	}
+	if config.DB.DBRead == nil {
+		return nil, errors.New("config.DB.DBRead is nil")
+	}
+	if config.DB.DBWrite == nil {
+		config.DB.DBWrite = config.DB.DBRead
+	}
+
 	return &{{ storageName | lowerCamelCase }}{
-		db: db,
+		config: config,
 		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
+	}, nil
+}
+
+// logQuery logs the query if query logging is enabled.
+func (t *{{ storageName | lowerCamelCase }}) logQuery(ctx context.Context, query string, args ...interface{}) {
+	if t.config.queryLogMethod != nil {
+		t.config.queryLogMethod(ctx, t.TableName(), query, args...)
+	}
+}
+
+// logError logs the error if error logging is enabled.
+func (t *{{ storageName | lowerCamelCase }}) logError(ctx context.Context, err error, message string) {
+	if t.config.errorLogMethod != nil {
+		t.config.errorLogMethod(ctx, err, message)
 	}
 }
 
@@ -988,14 +1039,20 @@ func (t *{{ storageName | lowerCamelCase }}) DB(ctx context.Context, isWrite boo
 
 	// Check if there is an active transaction in the context.
 	if tx, ok := TxFromContext(ctx); ok {
+		if tx == nil {
+			t.logError(ctx, errors.New("transaction is nil"), "failed to get transaction from context")
+			// set default connection
+			return t.config.DB.DBWrite
+		}
+
 		return tx
 	}
 
 	// Use the appropriate connection based on the operation type.
 	if isWrite {
-		db = t.db.DBWrite
+		db = t.config.DB.DBWrite
 	} else {
-		db = t.db.DBRead
+		db = t.config.DB.DBRead
 	}
 
 	return db
@@ -1057,7 +1114,7 @@ func (t *{{ storageName | lowerCamelCase }}) CreateTable(ctx context.Context) er
 		{{- end }}
 	` + "`" + `
 
-	_, err := t.db.ExecContext(ctx,sqlQuery)
+	_, err := t.DB(ctx, true).ExecContext(ctx,sqlQuery)
 	return err
 }
 
@@ -1067,7 +1124,7 @@ func (t *{{ storageName | lowerCamelCase }}) DropTable(ctx context.Context) erro
 		DROP TABLE IF EXISTS {{ tableName }};
 	` + "`" + `
 
-	_, err := t.db.ExecContext(ctx,sqlQuery)
+	_, err := t.DB(ctx, true).ExecContext(ctx,sqlQuery)
 	return err
 }
 
@@ -1077,7 +1134,7 @@ func (t *{{ storageName | lowerCamelCase }}) TruncateTable(ctx context.Context) 
 		TRUNCATE TABLE {{ tableName }};
 	` + "`" + `
 
-	_, err := t.db.ExecContext(ctx,sqlQuery)
+	_, err := t.DB(ctx, true).ExecContext(ctx,sqlQuery)
 	return err
 }
 
@@ -1097,7 +1154,10 @@ func (t *{{ storageName | lowerCamelCase }}) Load{{ $field | pluralFieldName }}(
 	}
 
 	// New{{ $field | relationStorageName }} creates a new {{ $field | relationStorageName }}.
-	s := New{{ $field | relationStorageName }}(t.db)
+	s, err := New{{ $field | relationStorageName }}(t.config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create {{ $field | relationStorageName }}")
+	}
 
 	{{- if ($field | isOptional) }}
 		// Check if the optional field is nil
@@ -1153,7 +1213,10 @@ func (t *{{ storageName | lowerCamelCase }}) LoadBatch{{ $field | pluralFieldNam
 	}
 
 	// New{{ $field | relationStorageName }} creates a new {{ $field | relationStorageName }}.
-	s := New{{ $field | relationStorageName }}(t.db)
+	s, err := New{{ $field | relationStorageName }}(t.config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create {{ $field | relationStorageName }}")
+	}
 
 	// Add the filter for the relation
 	{{- if ($field | isOptional) }}

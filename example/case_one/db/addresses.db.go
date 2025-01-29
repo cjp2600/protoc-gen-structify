@@ -13,8 +13,8 @@ import (
 
 // addressStorage is a struct for the "addresses" table.
 type addressStorage struct {
-	db           *DB                     // The database connection.
-	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
+	config       *Config
+	queryBuilder sq.StatementBuilderType
 }
 
 // AddressCRUDOperations is an interface for managing the addresses table.
@@ -68,10 +68,37 @@ type AddressStorage interface {
 }
 
 // NewAddressStorage returns a new addressStorage.
-func NewAddressStorage(db *DB) AddressStorage {
+func NewAddressStorage(config *Config) (AddressStorage, error) {
+	if config == nil {
+		return nil, errors.New("config is nil")
+	}
+	if config.DB == nil {
+		return nil, errors.New("config.DB is nil")
+	}
+	if config.DB.DBRead == nil {
+		return nil, errors.New("config.DB.DBRead is nil")
+	}
+	if config.DB.DBWrite == nil {
+		config.DB.DBWrite = config.DB.DBRead
+	}
+
 	return &addressStorage{
-		db:           db,
+		config:       config,
 		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
+	}, nil
+}
+
+// logQuery logs the query if query logging is enabled.
+func (t *addressStorage) logQuery(ctx context.Context, query string, args ...interface{}) {
+	if t.config.queryLogMethod != nil {
+		t.config.queryLogMethod(ctx, t.TableName(), query, args...)
+	}
+}
+
+// logError logs the error if error logging is enabled.
+func (t *addressStorage) logError(ctx context.Context, err error, message string) {
+	if t.config.errorLogMethod != nil {
+		t.config.errorLogMethod(ctx, err, message)
 	}
 }
 
@@ -93,14 +120,20 @@ func (t *addressStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
 
 	// Check if there is an active transaction in the context.
 	if tx, ok := TxFromContext(ctx); ok {
+		if tx == nil {
+			t.logError(ctx, errors.New("transaction is nil"), "failed to get transaction from context")
+			// set default connection
+			return t.config.DB.DBWrite
+		}
+
 		return tx
 	}
 
 	// Use the appropriate connection based on the operation type.
 	if isWrite {
-		db = t.db.DBWrite
+		db = t.config.DB.DBWrite
 	} else {
-		db = t.db.DBRead
+		db = t.config.DB.DBRead
 	}
 
 	return db
@@ -113,7 +146,10 @@ func (t *addressStorage) LoadUser(ctx context.Context, model *Address, builders 
 	}
 
 	// NewUserStorage creates a new UserStorage.
-	s := NewUserStorage(t.db)
+	s, err := NewUserStorage(t.config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create UserStorage")
+	}
 	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(UserIdEq(model.UserId)))
 	relationModel, err := s.FindOne(ctx, builders...)
@@ -134,7 +170,10 @@ func (t *addressStorage) LoadBatchUser(ctx context.Context, items []*Address, bu
 	}
 
 	// NewUserStorage creates a new UserStorage.
-	s := NewUserStorage(t.db)
+	s, err := NewUserStorage(t.config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create UserStorage")
+	}
 
 	// Add the filter for the relation
 	builders = append(builders, FilterBuilder(UserIdIn(requestItems...)))
@@ -371,6 +410,7 @@ func (t *addressStorage) Create(ctx context.Context, model *Address, opts ...Opt
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	var id string
 	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
@@ -436,6 +476,7 @@ func (t *addressStorage) BatchCreate(ctx context.Context, models []*Address, opt
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -444,7 +485,11 @@ func (t *addressStorage) BatchCreate(ctx context.Context, models []*Address, opt
 		}
 		return nil, errors.Wrap(err, "failed to execute bulk insert")
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.logError(ctx, err, "failed to close rows")
+		}
+	}()
 
 	var returnIDs []string
 	for rows.Next() {
@@ -527,6 +572,7 @@ func (t *addressStorage) Update(ctx context.Context, id string, updateData *Addr
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -550,6 +596,7 @@ func (t *addressStorage) DeleteById(ctx context.Context, id string, opts ...Opti
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -585,6 +632,7 @@ func (t *addressStorage) DeleteMany(ctx context.Context, builders ...*QueryBuild
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -659,12 +707,17 @@ func (t *addressStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.logError(ctx, err, "failed to close rows")
+		}
+	}()
 
 	var results []*Address
 	for rows.Next() {
@@ -723,6 +776,7 @@ func (t *addressStorage) Count(ctx context.Context, builders ...*QueryBuilder) (
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
@@ -788,6 +842,7 @@ func (t *addressStorage) SelectForUpdate(ctx context.Context, builders ...*Query
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
 	var model Address

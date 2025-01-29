@@ -338,10 +338,18 @@ func WithMaxLifetime(maxLifetime time.Duration) {{ clientName }}Option {
 const StorageTemplate = `
 // {{ storageName | lowerCamelCase }} is a map of provider to init function.
 type {{ storageName | lowerCamelCase }} struct {
-	db *DB // The database connection.
-	tx *TxManager // The transaction manager.
+	config *Config // configuration for the {{ storageName }}.
+	tx *TxManager  // The transaction manager.
 {{ range $value := storages }}
 {{ $value.Key }} {{ $value.Value }}{{ end }}
+}
+
+// configuration for the {{ storageName }}.
+type Config struct {
+	DB *DB
+
+	queryLogMethod    func(ctx context.Context, table string, query string, args ...interface{})
+	errorLogMethod    func(ctx context.Context, err error, message string)
 }
 
 type DB struct {
@@ -371,25 +379,36 @@ type {{ storageName }} interface {
 }
 
 // New{{ storageName }} returns a new {{ storageName }}.
-func New{{ storageName }}(db *DB) {{ storageName }} {
-	if db == nil {
-		panic("structify: db is required")
+func New{{ storageName }}(config *Config) ({{ storageName }}, error) {
+	if config == nil {
+		return nil, errors.New("config is required")
 	}
 
-	if db.DBRead == nil {
-		panic("structify: dbRead is required")
+	if config.DB == nil {
+		return nil, errors.New("db is required")
 	}
 
-	if db.DBWrite == nil {
-		db.DBWrite = db.DBRead
+	if config.DB.DBRead == nil {
+		return nil, errors.New("db read is required")
 	}
 
-	return &{{ storageName | lowerCamelCase }}{
-		db: db,
-		tx: NewTxManager(db.DBWrite),
+	if config.DB.DBWrite == nil {
+		config.DB.DBWrite = config.DB.DBRead
+	}
+	
+	var storages = {{ storageName | lowerCamelCase }}{
+		config: config,
+		tx: NewTxManager(config.DB.DBWrite),
+	}
 {{ range $value := storages }}
-{{ $value.Key }}: New{{ $value.Value }}(db),{{ end }}
+	{{ $value.Key }}Impl, err := New{{ $value.Value }}(config)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create {{ $value.Value }}")
 	}
+	storages.{{ $value.Key }} = {{ $value.Key }}Impl
+{{ end }}
+
+	return &storages, nil
 }
 
 // TxManager returns the transaction manager.

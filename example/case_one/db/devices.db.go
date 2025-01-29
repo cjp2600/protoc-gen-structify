@@ -11,8 +11,8 @@ import (
 
 // deviceStorage is a struct for the "devices" table.
 type deviceStorage struct {
-	db           *DB                     // The database connection.
-	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
+	config       *Config
+	queryBuilder sq.StatementBuilderType
 }
 
 // DeviceCRUDOperations is an interface for managing the devices table.
@@ -63,10 +63,37 @@ type DeviceStorage interface {
 }
 
 // NewDeviceStorage returns a new deviceStorage.
-func NewDeviceStorage(db *DB) DeviceStorage {
+func NewDeviceStorage(config *Config) (DeviceStorage, error) {
+	if config == nil {
+		return nil, errors.New("config is nil")
+	}
+	if config.DB == nil {
+		return nil, errors.New("config.DB is nil")
+	}
+	if config.DB.DBRead == nil {
+		return nil, errors.New("config.DB.DBRead is nil")
+	}
+	if config.DB.DBWrite == nil {
+		config.DB.DBWrite = config.DB.DBRead
+	}
+
 	return &deviceStorage{
-		db:           db,
+		config:       config,
 		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
+	}, nil
+}
+
+// logQuery logs the query if query logging is enabled.
+func (t *deviceStorage) logQuery(ctx context.Context, query string, args ...interface{}) {
+	if t.config.queryLogMethod != nil {
+		t.config.queryLogMethod(ctx, t.TableName(), query, args...)
+	}
+}
+
+// logError logs the error if error logging is enabled.
+func (t *deviceStorage) logError(ctx context.Context, err error, message string) {
+	if t.config.errorLogMethod != nil {
+		t.config.errorLogMethod(ctx, err, message)
 	}
 }
 
@@ -88,14 +115,20 @@ func (t *deviceStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
 
 	// Check if there is an active transaction in the context.
 	if tx, ok := TxFromContext(ctx); ok {
+		if tx == nil {
+			t.logError(ctx, errors.New("transaction is nil"), "failed to get transaction from context")
+			// set default connection
+			return t.config.DB.DBWrite
+		}
+
 		return tx
 	}
 
 	// Use the appropriate connection based on the operation type.
 	if isWrite {
-		db = t.db.DBWrite
+		db = t.config.DB.DBWrite
 	} else {
-		db = t.db.DBRead
+		db = t.config.DB.DBRead
 	}
 
 	return db
@@ -225,6 +258,7 @@ func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Optio
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -279,6 +313,7 @@ func (t *deviceStorage) BatchCreate(ctx context.Context, models []*Device, opts 
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -287,7 +322,11 @@ func (t *deviceStorage) BatchCreate(ctx context.Context, models []*Device, opts 
 		}
 		return errors.Wrap(err, "failed to execute bulk insert")
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.logError(ctx, err, "failed to close rows")
+		}
+	}()
 
 	if err := rows.Err(); err != nil {
 		return errors.Wrap(err, "rows iteration error")
@@ -332,6 +371,7 @@ func (t *deviceStorage) Update(ctx context.Context, id int64, updateData *Device
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -367,6 +407,7 @@ func (t *deviceStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilde
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -424,12 +465,17 @@ func (t *deviceStorage) FindMany(ctx context.Context, builders ...*QueryBuilder)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.logError(ctx, err, "failed to close rows")
+		}
+	}()
 
 	var results []*Device
 	for rows.Next() {
@@ -488,6 +534,7 @@ func (t *deviceStorage) Count(ctx context.Context, builders ...*QueryBuilder) (i
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
@@ -553,6 +600,7 @@ func (t *deviceStorage) SelectForUpdate(ctx context.Context, builders ...*QueryB
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
 	var model Device

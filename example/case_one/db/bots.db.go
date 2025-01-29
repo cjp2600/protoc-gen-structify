@@ -13,8 +13,8 @@ import (
 
 // botStorage is a struct for the "bots" table.
 type botStorage struct {
-	db           *DB                     // The database connection.
-	queryBuilder sq.StatementBuilderType // queryBuilder is used to build queries.
+	config       *Config
+	queryBuilder sq.StatementBuilderType
 }
 
 // BotCRUDOperations is an interface for managing the bots table.
@@ -68,10 +68,37 @@ type BotStorage interface {
 }
 
 // NewBotStorage returns a new botStorage.
-func NewBotStorage(db *DB) BotStorage {
+func NewBotStorage(config *Config) (BotStorage, error) {
+	if config == nil {
+		return nil, errors.New("config is nil")
+	}
+	if config.DB == nil {
+		return nil, errors.New("config.DB is nil")
+	}
+	if config.DB.DBRead == nil {
+		return nil, errors.New("config.DB.DBRead is nil")
+	}
+	if config.DB.DBWrite == nil {
+		config.DB.DBWrite = config.DB.DBRead
+	}
+
 	return &botStorage{
-		db:           db,
+		config:       config,
 		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
+	}, nil
+}
+
+// logQuery logs the query if query logging is enabled.
+func (t *botStorage) logQuery(ctx context.Context, query string, args ...interface{}) {
+	if t.config.queryLogMethod != nil {
+		t.config.queryLogMethod(ctx, t.TableName(), query, args...)
+	}
+}
+
+// logError logs the error if error logging is enabled.
+func (t *botStorage) logError(ctx context.Context, err error, message string) {
+	if t.config.errorLogMethod != nil {
+		t.config.errorLogMethod(ctx, err, message)
 	}
 }
 
@@ -93,14 +120,20 @@ func (t *botStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
 
 	// Check if there is an active transaction in the context.
 	if tx, ok := TxFromContext(ctx); ok {
+		if tx == nil {
+			t.logError(ctx, errors.New("transaction is nil"), "failed to get transaction from context")
+			// set default connection
+			return t.config.DB.DBWrite
+		}
+
 		return tx
 	}
 
 	// Use the appropriate connection based on the operation type.
 	if isWrite {
-		db = t.db.DBWrite
+		db = t.config.DB.DBWrite
 	} else {
-		db = t.db.DBRead
+		db = t.config.DB.DBRead
 	}
 
 	return db
@@ -113,7 +146,10 @@ func (t *botStorage) LoadUser(ctx context.Context, model *Bot, builders ...*Quer
 	}
 
 	// NewUserStorage creates a new UserStorage.
-	s := NewUserStorage(t.db)
+	s, err := NewUserStorage(t.config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create UserStorage")
+	}
 	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(UserIdEq(model.UserId)))
 	relationModel, err := s.FindOne(ctx, builders...)
@@ -134,7 +170,10 @@ func (t *botStorage) LoadBatchUser(ctx context.Context, items []*Bot, builders .
 	}
 
 	// NewUserStorage creates a new UserStorage.
-	s := NewUserStorage(t.db)
+	s, err := NewUserStorage(t.config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create UserStorage")
+	}
 
 	// Add the filter for the relation
 	builders = append(builders, FilterBuilder(UserIdIn(requestItems...)))
@@ -422,6 +461,7 @@ func (t *botStorage) Create(ctx context.Context, model *Bot, opts ...Option) (*s
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	var id string
 	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
@@ -487,6 +527,7 @@ func (t *botStorage) BatchCreate(ctx context.Context, models []*Bot, opts ...Opt
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -495,7 +536,11 @@ func (t *botStorage) BatchCreate(ctx context.Context, models []*Bot, opts ...Opt
 		}
 		return nil, errors.Wrap(err, "failed to execute bulk insert")
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.logError(ctx, err, "failed to close rows")
+		}
+	}()
 
 	var returnIDs []string
 	for rows.Next() {
@@ -578,6 +623,7 @@ func (t *botStorage) Update(ctx context.Context, id string, updateData *BotUpdat
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -601,6 +647,7 @@ func (t *botStorage) DeleteById(ctx context.Context, id string, opts ...Option) 
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -636,6 +683,7 @@ func (t *botStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilder) 
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -710,12 +758,17 @@ func (t *botStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) ([
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.logError(ctx, err, "failed to close rows")
+		}
+	}()
 
 	var results []*Bot
 	for rows.Next() {
@@ -774,6 +827,7 @@ func (t *botStorage) Count(ctx context.Context, builders ...*QueryBuilder) (int6
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
@@ -839,6 +893,7 @@ func (t *botStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBuil
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
+	t.logQuery(ctx, sqlQuery, args)
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
 	var model Bot
