@@ -317,7 +317,7 @@ func (t *{{ storageName | lowerCamelCase }}) SelectForUpdate(ctx context.Context
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
 	var model {{ structureName }}
@@ -358,7 +358,7 @@ func (t *{{ storageName | lowerCamelCase }}) Count(ctx context.Context, builders
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
@@ -437,7 +437,7 @@ func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, build
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -521,7 +521,7 @@ func (t *{{ storageName | lowerCamelCase }}) DeleteBy{{ getPrimaryKey.GetName | 
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx,sqlQuery, args...)
 	if err != nil {
@@ -558,7 +558,7 @@ func (t *{{ storageName | lowerCamelCase }}) DeleteMany(ctx context.Context, bui
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -655,7 +655,7 @@ func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{ID
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -757,7 +757,7 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 	if err != nil {
 		{{ if (hasID) }} return nil, errors.Wrap(err, "failed to build query") {{ else }} return errors.Wrap(err, "failed to build query") {{ end }}
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -851,7 +851,7 @@ const TableCreateMethodTemplate = `
 	if err != nil {
 		{{ if (hasID) }} return nil, errors.Wrap(err, "failed to build query") {{ else }} return errors.Wrap(err, "failed to build query") {{ end }}
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	{{ if (hasID) }}var id {{IDType}}
 	err = t.DB(ctx, true).QueryRowContext(ctx,sqlQuery, args...).Scan(&id) {{ else }} _, err = t.DB(ctx, true).ExecContext(ctx,sqlQuery, args...) {{ end }}

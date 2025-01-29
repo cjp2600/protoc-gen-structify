@@ -410,7 +410,7 @@ func (t *addressStorage) Create(ctx context.Context, model *Address, opts ...Opt
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	var id string
 	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
@@ -476,7 +476,7 @@ func (t *addressStorage) BatchCreate(ctx context.Context, models []*Address, opt
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -572,7 +572,7 @@ func (t *addressStorage) Update(ctx context.Context, id string, updateData *Addr
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -596,7 +596,7 @@ func (t *addressStorage) DeleteById(ctx context.Context, id string, opts ...Opti
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -632,7 +632,7 @@ func (t *addressStorage) DeleteMany(ctx context.Context, builders ...*QueryBuild
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -707,7 +707,7 @@ func (t *addressStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -776,7 +776,7 @@ func (t *addressStorage) Count(ctx context.Context, builders ...*QueryBuilder) (
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
@@ -842,7 +842,7 @@ func (t *addressStorage) SelectForUpdate(ctx context.Context, builders ...*Query
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
 	var model Address

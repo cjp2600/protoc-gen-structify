@@ -258,7 +258,7 @@ func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Optio
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -313,7 +313,7 @@ func (t *deviceStorage) BatchCreate(ctx context.Context, models []*Device, opts 
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -371,7 +371,7 @@ func (t *deviceStorage) Update(ctx context.Context, id int64, updateData *Device
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -407,7 +407,7 @@ func (t *deviceStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilde
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -465,7 +465,7 @@ func (t *deviceStorage) FindMany(ctx context.Context, builders ...*QueryBuilder)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
@@ -534,7 +534,7 @@ func (t *deviceStorage) Count(ctx context.Context, builders ...*QueryBuilder) (i
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
@@ -600,7 +600,7 @@ func (t *deviceStorage) SelectForUpdate(ctx context.Context, builders ...*QueryB
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query")
 	}
-	t.logQuery(ctx, sqlQuery, args)
+	t.logQuery(ctx, sqlQuery, args...)
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
 	var model Device
