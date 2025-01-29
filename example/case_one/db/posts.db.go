@@ -88,15 +88,15 @@ func NewPostStorage(config *Config) (PostStorage, error) {
 
 // logQuery logs the query if query logging is enabled.
 func (t *postStorage) logQuery(ctx context.Context, query string, args ...interface{}) {
-	if t.config.queryLogMethod != nil {
-		t.config.queryLogMethod(ctx, t.TableName(), query, args...)
+	if t.config.QueryLogMethod != nil {
+		t.config.QueryLogMethod(ctx, t.TableName(), query, args...)
 	}
 }
 
 // logError logs the error if error logging is enabled.
 func (t *postStorage) logError(ctx context.Context, err error, message string) {
-	if t.config.errorLogMethod != nil {
-		t.config.errorLogMethod(ctx, err, message)
+	if t.config.ErrorLogMethod != nil {
+		t.config.ErrorLogMethod(ctx, err, message)
 	}
 }
 

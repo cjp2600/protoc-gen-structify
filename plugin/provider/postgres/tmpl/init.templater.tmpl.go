@@ -348,8 +348,8 @@ type {{ storageName | lowerCamelCase }} struct {
 type Config struct {
 	DB *DB
 
-	queryLogMethod    func(ctx context.Context, table string, query string, args ...interface{})
-	errorLogMethod    func(ctx context.Context, err error, message string)
+	QueryLogMethod    func(ctx context.Context, table string, query string, args ...interface{})
+	ErrorLogMethod    func(ctx context.Context, err error, message string)
 }
 
 type DB struct {
