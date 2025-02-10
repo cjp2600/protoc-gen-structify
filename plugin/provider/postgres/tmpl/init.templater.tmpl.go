@@ -138,6 +138,14 @@ func (qb *QueryBuilder) WithCustomFilter(filter CustomFilter, params any) *Query
 	return qb
 }
 
+// nullValue returns the null value.
+func nullValue[T any](v *T) interface{} {
+	if v == nil {
+		return nil
+	}
+	return *v
+}
+
 // ApplyCustomFilters applies the custom filters to the query.
 func (qb *QueryBuilder) ApplyCustomFilters(query sq.SelectBuilder) sq.SelectBuilder {
 	for _, cf := range qb.customFilters {

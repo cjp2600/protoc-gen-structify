@@ -600,7 +600,7 @@ func (t *messageStorage) Create(ctx context.Context, model *Message, opts ...Opt
 		Values(
 			model.FromUserId,
 			model.ToUserId,
-			model.BotId,
+			nullValue(model.BotId),
 		)
 
 	// add RETURNING "id" to query
@@ -654,7 +654,7 @@ func (t *messageStorage) BatchCreate(ctx context.Context, models []*Message, opt
 		query = query.Values(
 			model.FromUserId,
 			model.ToUserId,
-			model.BotId,
+			nullValue(model.BotId),
 		)
 	}
 

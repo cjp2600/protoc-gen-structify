@@ -400,7 +400,7 @@ func (t *addressStorage) Create(ctx context.Context, model *Address, opts ...Opt
 			model.Zip,
 			model.UserId,
 			model.CreatedAt,
-			model.UpdatedAt,
+			nullValue(model.UpdatedAt),
 		)
 
 	// add RETURNING "id" to query
@@ -462,7 +462,7 @@ func (t *addressStorage) BatchCreate(ctx context.Context, models []*Address, opt
 			model.Zip,
 			model.UserId,
 			model.CreatedAt,
-			model.UpdatedAt,
+			nullValue(model.UpdatedAt),
 		)
 	}
 

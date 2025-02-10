@@ -12,6 +12,7 @@ LDFLAGS          = -ldflags "-X 'github.com/cjp2600/protoc-gen-structify/plugin/
 PROTOC_VER := 3.15.8
 PROTOC_ZIP := protoc-$(PROTOC_VER)-osx-x86_64.zip
 PROTOC := $(GOBIN)/bin/protoc
+DB_DIR := ./example/case_one/db
 
 $(GOBIN):
 	mkdir -p $@
@@ -22,7 +23,7 @@ ifndef f
 f = example/case_one/db/blog.proto
 endif
 	@$(PROTOC) -I/usr/local/include -I.  \
-	-I$(GOPATH)/src   \
+	-I$(DB_DIR)/proto \
 	--plugin=protoc-gen-structify=$(GOBIN)/structify \
 	--structify_out=. --structify_opt=paths=source_relative,include_connection=false \
 	$(f)
@@ -33,7 +34,7 @@ ifndef f
 f = example/case_two/db/blog.proto
 endif
 	@$(PROTOC) -I/usr/local/include -I.  \
-	-I$(GOPATH)/src   \
+	-I$(DB_DIR)/proto \
 	--plugin=protoc-gen-structify=$(GOBIN)/structify \
 	--structify_out=. --structify_opt=paths=source_relative,include_connection=true \
 	$(f)
@@ -55,7 +56,7 @@ install-protoc-gen-go: $(GOBIN) ## Install protoc-gen-go plugin
 .PHONY: build-options
 build-options: install-tools ## Build options plugin
 	@$(PROTOC) -I/usr/local/include -I. \
-	-I$(GOPATH)/src \
+	-I$(DB_DIR)/proto \
 	--plugin=protoc-gen-go=$(GOBIN)/protoc-gen-go \
 	--go_out=. --go_opt=paths=source_relative \
 	plugin/options/structify.proto

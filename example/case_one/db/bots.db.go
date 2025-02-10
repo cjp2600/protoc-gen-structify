@@ -451,7 +451,7 @@ func (t *botStorage) Create(ctx context.Context, model *Bot, opts ...Option) (*s
 			model.IsPublish,
 			model.CreatedAt,
 			model.UpdatedAt,
-			model.DeletedAt,
+			nullValue(model.DeletedAt),
 		)
 
 	// add RETURNING "id" to query
@@ -513,7 +513,7 @@ func (t *botStorage) BatchCreate(ctx context.Context, models []*Bot, opts ...Opt
 			model.IsPublish,
 			model.CreatedAt,
 			model.UpdatedAt,
-			model.DeletedAt,
+			nullValue(model.DeletedAt),
 		)
 	}
 

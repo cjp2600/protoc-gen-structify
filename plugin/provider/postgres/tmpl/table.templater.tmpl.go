@@ -733,7 +733,19 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 			{{- if not ($field | isRelation) }}
 			{{- if not ($field | isAutoIncrement ) }}
 			{{- if not ($field | isDefaultUUID ) }}
-			model.{{ $field | fieldName }},
+
+			{{- if ($field | isRepeated) }}
+				{{ $field | fieldName | lowerCamelCase }},
+			{{- else }}
+			
+				{{- if (findPointer $field) }}
+				nullValue(model.{{ $field | fieldName }}),
+				{{- else }}
+				model.{{ $field | fieldName }},
+				{{- end }}
+
+			{{- end}}
+
 			{{- end}}
 			{{- end}}
 			{{- end}}
@@ -832,16 +844,24 @@ const TableCreateMethodTemplate = `
 			{{- if not ($field | isRelation) }}
 			{{- if not ($field | isAutoIncrement ) }}
 			{{- if not ($field | isDefaultUUID ) }}
+			
 			{{- if ($field | isRepeated) }}
-			{{ $field | fieldName | lowerCamelCase }},
+				{{ $field | fieldName | lowerCamelCase }},
 			{{- else }}
-			model.{{ $field | fieldName }},
+			
+				{{- if (findPointer $field) }}
+				nullValue(model.{{ $field | fieldName }}),
+				{{- else }}
+				model.{{ $field | fieldName }},
+				{{- end }}
+
+			{{- end}}
+
 			{{- end}}
 			{{- end}}
 			{{- end}}
 			{{- end}}
-			{{- end}}
-		)
+	)
 	{{ if (hasID) }}
 		// add RETURNING "id" to query
 		query = query.Suffix("RETURNING \"id\"")
