@@ -371,7 +371,7 @@ func (t *Message) ScanRows(r *sql.Rows) error {
 type MessageFilters struct {
 	Id       *string
 	ToUserId *string
-	BotId    **string
+	BotId    *string
 }
 
 // MessageIdEq returns a condition that checks if the field equals the value.
@@ -385,7 +385,7 @@ func MessageToUserIdEq(value string) FilterApplier {
 }
 
 // MessageBotIdEq returns a condition that checks if the field equals the value.
-func MessageBotIdEq(value *string) FilterApplier {
+func MessageBotIdEq(value string) FilterApplier {
 	return EqualsCondition{Field: "bot_id", Value: value}
 }
 
@@ -400,7 +400,7 @@ func MessageToUserIdNotEq(value string) FilterApplier {
 }
 
 // MessageBotIdNotEq returns a condition that checks if the field equals the value.
-func MessageBotIdNotEq(value *string) FilterApplier {
+func MessageBotIdNotEq(value string) FilterApplier {
 	return NotEqualsCondition{Field: "bot_id", Value: value}
 }
 
@@ -415,7 +415,7 @@ func MessageToUserIdGT(value string) FilterApplier {
 }
 
 // MessageBotIdGT greaterThanCondition than condition.
-func MessageBotIdGT(value *string) FilterApplier {
+func MessageBotIdGT(value string) FilterApplier {
 	return GreaterThanCondition{Field: "bot_id", Value: value}
 }
 
@@ -430,7 +430,7 @@ func MessageToUserIdLT(value string) FilterApplier {
 }
 
 // MessageBotIdLT less than condition.
-func MessageBotIdLT(value *string) FilterApplier {
+func MessageBotIdLT(value string) FilterApplier {
 	return LessThanCondition{Field: "bot_id", Value: value}
 }
 
@@ -445,7 +445,7 @@ func MessageToUserIdGTE(value string) FilterApplier {
 }
 
 // MessageBotIdGTE greater than or equal condition.
-func MessageBotIdGTE(value *string) FilterApplier {
+func MessageBotIdGTE(value string) FilterApplier {
 	return GreaterThanOrEqualCondition{Field: "bot_id", Value: value}
 }
 
@@ -460,7 +460,7 @@ func MessageToUserIdLTE(value string) FilterApplier {
 }
 
 // MessageBotIdLTE less than or equal condition.
-func MessageBotIdLTE(value *string) FilterApplier {
+func MessageBotIdLTE(value string) FilterApplier {
 	return LessThanOrEqualCondition{Field: "bot_id", Value: value}
 }
 
@@ -475,7 +475,7 @@ func MessageToUserIdBetween(min, max string) FilterApplier {
 }
 
 // MessageBotIdBetween between condition.
-func MessageBotIdBetween(min, max *string) FilterApplier {
+func MessageBotIdBetween(min, max string) FilterApplier {
 	return BetweenCondition{Field: "bot_id", Min: min, Max: max}
 }
 
@@ -500,7 +500,7 @@ func MessageToUserIdILike(value string) FilterApplier {
 }
 
 // MessageBotIdILike iLike condition %
-func MessageBotIdILike(value *string) FilterApplier {
+func MessageBotIdILike(value string) FilterApplier {
 	return ILikeCondition{Field: "bot_id", Value: value}
 }
 
@@ -515,7 +515,7 @@ func MessageToUserIdLike(value string) FilterApplier {
 }
 
 // MessageBotIdLike like condition %
-func MessageBotIdLike(value *string) FilterApplier {
+func MessageBotIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "bot_id", Value: value}
 }
 
@@ -530,7 +530,7 @@ func MessageToUserIdNotLike(value string) FilterApplier {
 }
 
 // MessageBotIdNotLike not like condition
-func MessageBotIdNotLike(value *string) FilterApplier {
+func MessageBotIdNotLike(value string) FilterApplier {
 	return NotLikeCondition{Field: "bot_id", Value: value}
 }
 

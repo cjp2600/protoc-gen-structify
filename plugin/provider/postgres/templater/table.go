@@ -172,6 +172,38 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			return helperpkg.ConvertType(f)
 		},
 
+		"fieldTypeWP": func(f *descriptorpb.FieldDescriptorProto) string {
+			// if the field is a single type, return the single type.
+			if t.state.SingleTypes.ExistByName(f.GetName()) {
+				mds := t.state.SingleTypes.GetByName(f.GetName())
+				if mds != nil {
+					fieldType := mds.FieldType
+					if helperpkg.IsOptional(f) {
+						if strings.Contains(mds.FieldType, "*") {
+							fieldType = strings.Replace(mds.FieldType, "*", "", 1)
+						}
+					}
+					return fieldType
+				}
+			}
+
+			// if the field is a nested message, return the structure name.
+			if t.state.NestedMessages.IsJSON(f) {
+				md := t.state.NestedMessages.GetByFieldDescriptor(f)
+				if md != nil {
+					return helperpkg.TypePrefix(f, md.StructureName)
+				}
+			}
+
+			ct := helperpkg.ConvertType(f)
+
+			if helperpkg.IsOptional(f) {
+				return strings.Replace(ct, "*", "", 1)
+			}
+
+			return ct
+		},
+
 		"fieldTypeToNullType": func(f *descriptorpb.FieldDescriptorProto) string {
 			// Check if the field is a single type and convert to null types if applicable.
 			if t.state.SingleTypes.ExistByName(f.GetName()) {

@@ -26,19 +26,24 @@ const TableConditionFilters = `
 		type {{structureName}}Filters struct {
 			{{ range $field := $fieldMess.GetField }}
 			{{- if not ($field | isRelation) }}
-			{{ $field | fieldName }} *{{ $field | fieldType }}
+				{{- if (findPointer $field) }}
+					{{ $field | fieldName }} {{ $field | fieldType }}
+				{{- else }}
+					{{ $field | fieldName }} *{{ $field | fieldType }}
+				{{- end }}
 			{{- end }}
 			{{- end }}
 		}
 	{{- end }}
 {{ end }}
 
+
 {{ range $key, $fieldMess := messages_for_filter }}
   {{ range $field := $fieldMess.GetField }}
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
 	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Eq returns a condition that checks if the field equals the value.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Eq(value {{ $field | fieldType }}) FilterApplier {
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Eq(value {{- if (findPointer $field) }} {{ $field | fieldTypeWP }} {{- else }} {{ $field | fieldType }} {{- end }}) FilterApplier {
       return EqualsCondition{Field: "{{ $field.GetName }}", Value: value}
     }
   {{ end }}
@@ -51,7 +56,7 @@ const TableConditionFilters = `
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
 	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotEq returns a condition that checks if the field equals the value.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotEq(value {{ $field | fieldType }}) FilterApplier {
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotEq(value {{- if (findPointer $field) }} {{ $field | fieldTypeWP }} {{- else }} {{ $field | fieldType }} {{- end }}) FilterApplier {
       return NotEqualsCondition{Field: "{{ $field.GetName }}", Value: value}
     }
   {{ end }}
@@ -64,7 +69,7 @@ const TableConditionFilters = `
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
 	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}GT greaterThanCondition than condition.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}GT(value {{ $field | fieldType }}) FilterApplier {
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}GT(value {{- if (findPointer $field) }} {{ $field | fieldTypeWP }} {{- else }} {{ $field | fieldType }} {{- end }}) FilterApplier {
       return GreaterThanCondition{Field: "{{ $field.GetName }}", Value: value}
     }
   {{ end }}
@@ -77,7 +82,7 @@ const TableConditionFilters = `
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
 	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}LT less than condition.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}LT(value {{ $field | fieldType }}) FilterApplier {
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}LT(value {{- if (findPointer $field) }} {{ $field | fieldTypeWP }} {{- else }} {{ $field | fieldType }} {{- end }}) FilterApplier {
       return LessThanCondition{Field: "{{ $field.GetName }}", Value: value}
     }
   {{ end }}
@@ -90,7 +95,7 @@ const TableConditionFilters = `
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
 	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}GTE greater than or equal condition.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}GTE(value {{ $field | fieldType }}) FilterApplier {
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}GTE(value {{- if (findPointer $field) }} {{ $field | fieldTypeWP }} {{- else }} {{ $field | fieldType }} {{- end }}) FilterApplier {
       return GreaterThanOrEqualCondition{Field: "{{ $field.GetName }}", Value: value}
     }
   {{ end }}
@@ -103,7 +108,7 @@ const TableConditionFilters = `
    {{- if not ($field | isRelation) }}
    {{- if not ($field | isJSON) }}
 	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}LTE less than or equal condition.
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}LTE(value {{ $field | fieldType }}) FilterApplier {
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}LTE(value {{- if (findPointer $field) }} {{ $field | fieldTypeWP }} {{- else }} {{ $field | fieldType }} {{- end }}) FilterApplier {
       return LessThanOrEqualCondition{Field: "{{ $field.GetName }}", Value: value}
     }
   {{ end }}
@@ -116,7 +121,7 @@ const TableConditionFilters = `
 	{{- if not ($field | isRelation) }}
 	{{- if not ($field | isJSON) }}
 	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Between between condition.
-	func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Between(min, max {{ $field | fieldType }}) FilterApplier {
+	func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Between(min, max {{- if (findPointer $field) }} {{ $field | fieldTypeWP }} {{- else }} {{ $field | fieldType }} {{- end }}) FilterApplier {
 		return BetweenCondition{Field: "{{ $field.GetName }}", Min: min, Max: max}
 	}
 	{{ end }}
@@ -150,7 +155,7 @@ const TableConditionFilters = `
    {{- if not ($field | isJSON) }}
    {{- if ($field | isValidLike) }}
 	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}ILike iLike condition %
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}ILike(value {{ $field | fieldType }}) FilterApplier {
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}ILike(value {{- if (findPointer $field) }} {{ $field | fieldTypeWP }} {{- else }} {{ $field | fieldType }} {{- end }}) FilterApplier {
       return ILikeCondition{Field: "{{ $field.GetName }}", Value: value}
     }
   {{ end }}
@@ -165,7 +170,7 @@ const TableConditionFilters = `
    {{- if not ($field | isJSON) }}
    {{- if ($field | isValidLike) }}
 	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Like like condition %
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Like(value {{ $field | fieldType }}) FilterApplier {
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Like(value {{- if (findPointer $field) }} {{ $field | fieldTypeWP }} {{- else }} {{ $field | fieldType }} {{- end }}) FilterApplier {
       return LikeCondition{Field: "{{ $field.GetName }}", Value: value}
     }
   {{ end }}
@@ -180,7 +185,7 @@ const TableConditionFilters = `
    {{- if not ($field | isJSON) }}
    {{- if ($field | isValidLike) }}
 	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotLike not like condition
-    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotLike(value {{ $field | fieldType }}) FilterApplier {
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}NotLike(value {{- if (findPointer $field) }} {{ $field | fieldTypeWP }} {{- else }} {{ $field | fieldType }} {{- end }}) FilterApplier {
       return NotLikeCondition{Field: "{{ $field.GetName }}", Value: value}
     }
   {{ end }}

@@ -30,7 +30,7 @@ message Message {
   string id = 1 [(structify.field) = {primary_key: true, uuid: true, default: "uuid_generate_v4()"}];
   string from_user_id = 2 [(structify.field) = {index: true, uuid: true, unique: true}];
   string to_user_id = 3 [(structify.field) = {index: true, uuid: true, unique: true}];
-  optional string bot_id = 12 [(structify.field) = { uuid: true}];
+  optional string bot_id = 12 [(structify.field) = { uuid: true, in_filter: true}];
 
   // relationship to the bot table
   Bot bot = 13 [(structify.field) = {relation: { field: "bot_id", reference: "id" } }];
