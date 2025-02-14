@@ -39,6 +39,17 @@ endif
 	--structify_out=. --structify_opt=paths=source_relative,include_connection=true \
 	$(f)
 
+.PHONY: build-example-clickhouse
+build-example-clickhouse: build ## Build example: make build-example f=example/blog.proto
+ifndef f
+f = example/case_click/db/blog.proto
+endif
+	@$(PROTOC) -I/usr/local/include -I.  \
+	-I$(DB_DIR)/proto \
+	--plugin=protoc-gen-structify=$(GOBIN)/structify \
+	--structify_out=. --structify_opt=paths=source_relative,include_connection=false \
+	$(f)
+
 .PHONY: install-protoc
 install-protoc: $(GOBIN) ## Install protocol buffer compiler
 	@if [ ! -f $(PROTOC) ]; then \

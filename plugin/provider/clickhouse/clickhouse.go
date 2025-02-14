@@ -1,16 +1,16 @@
-package postgres
+package clickhouse
 
 import (
 	importpkg "github.com/cjp2600/protoc-gen-structify/plugin/import"
-	templaterpkg "github.com/cjp2600/protoc-gen-structify/plugin/provider/clickhouse/templater"
+	templaterpkg "github.com/cjp2600/protoc-gen-structify/plugin/provider/postgres/templater"
 	statepkg "github.com/cjp2600/protoc-gen-structify/plugin/state"
 )
 
-// Postgres is a type for providing content.
-type Postgres struct{}
+// Clickhouse is a type for providing content.
+type Clickhouse struct{}
 
 // GetInitStatement returns the initialization statement.
-func (p *Postgres) GetInitStatement(s *statepkg.State) (statepkg.Templater, error) {
+func (p *Clickhouse) GetInitStatement(s *statepkg.State) (statepkg.Templater, error) {
 	templater := templaterpkg.NewInitTemplater(s)
 	s.ImportsFromTable([]statepkg.Templater{templater})
 
@@ -18,7 +18,7 @@ func (p *Postgres) GetInitStatement(s *statepkg.State) (statepkg.Templater, erro
 }
 
 // GetEntities returns the tables.
-func (p *Postgres) GetEntities(state *statepkg.State) ([]statepkg.Templater, error) {
+func (p *Clickhouse) GetEntities(state *statepkg.State) ([]statepkg.Templater, error) {
 	var models []statepkg.Templater
 
 	// set usage imports
@@ -36,7 +36,7 @@ func (p *Postgres) GetEntities(state *statepkg.State) ([]statepkg.Templater, err
 }
 
 // GetFinalizeStatement returns the finalization statement.
-func (p *Postgres) GetFinalizeStatement(s *statepkg.State) (statepkg.Templater, error) {
+func (p *Clickhouse) GetFinalizeStatement(s *statepkg.State) (statepkg.Templater, error) {
 	var table statepkg.Templater
 	//table = NewInitStatement(s)
 
