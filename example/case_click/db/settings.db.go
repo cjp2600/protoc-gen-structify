@@ -6,7 +6,6 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
-	"math"
 )
 
 // settingStorage is a struct for the "settings" table.
@@ -17,10 +16,8 @@ type settingStorage struct {
 
 // SettingCRUDOperations is an interface for managing the settings table.
 type SettingCRUDOperations interface {
-	Create(ctx context.Context, model *Setting, opts ...Option) (*int32, error)
-	BatchCreate(ctx context.Context, models []*Setting, opts ...Option) ([]string, error)
-	Update(ctx context.Context, id int32, updateData *SettingUpdate) error
-	DeleteById(ctx context.Context, id int32, opts ...Option) error
+	Create(ctx context.Context, model *Setting, opts ...Option) error
+	BatchCreate(ctx context.Context, models []*Setting, opts ...Option) error
 	FindById(ctx context.Context, id int32, opts ...Option) (*Setting, error)
 }
 
@@ -28,13 +25,11 @@ type SettingCRUDOperations interface {
 type SettingSearchOperations interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*Setting, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Setting, error)
-	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
-	SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Setting, error)
 }
 
 // SettingPaginationOperations is an interface for pagination operations.
 type SettingPaginationOperations interface {
-	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Setting, *Paginator, error)
+	FindManyWithCursorPagination(ctx context.Context, limit int, cursor *string, cursorProvider CursorProvider, builders ...*QueryBuilder) ([]*Setting, *CursorPaginator, error)
 }
 
 // SettingRelationLoading is an interface for loading relations.
@@ -43,16 +38,11 @@ type SettingRelationLoading interface {
 	LoadBatchUser(ctx context.Context, items []*Setting, builders ...*QueryBuilder) error
 }
 
-// SettingAdvancedDeletion is an interface for advanced deletion operations.
-type SettingAdvancedDeletion interface {
-	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
-}
-
 // SettingRawQueryOperations is an interface for executing raw queries.
 type SettingRawQueryOperations interface {
-	Query(ctx context.Context, isWrite bool, query string, args ...interface{}) (sql.Result, error)
-	QueryRow(ctx context.Context, isWrite bool, query string, args ...interface{}) *sql.Row
-	QueryRows(ctx context.Context, isWrite bool, query string, args ...interface{}) (*sql.Rows, error)
+	Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
+	QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 }
 
 // SettingStorage is a struct for the "settings" table.
@@ -61,7 +51,6 @@ type SettingStorage interface {
 	SettingSearchOperations
 	SettingPaginationOperations
 	SettingRelationLoading
-	SettingAdvancedDeletion
 	SettingRawQueryOperations
 }
 
@@ -71,18 +60,12 @@ func NewSettingStorage(config *Config) (SettingStorage, error) {
 		return nil, errors.New("config is nil")
 	}
 	if config.DB == nil {
-		return nil, errors.New("config.DB is nil")
-	}
-	if config.DB.DBRead == nil {
-		return nil, errors.New("config.DB.DBRead is nil")
-	}
-	if config.DB.DBWrite == nil {
-		config.DB.DBWrite = config.DB.DBRead
+		return nil, errors.New("config.DB connection is nil")
 	}
 
 	return &settingStorage{
 		config:       config,
-		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
+		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Question),
 	}, nil
 }
 
@@ -113,28 +96,8 @@ func (t *settingStorage) Columns() []string {
 }
 
 // DB returns the underlying DB. This is useful for doing transactions.
-func (t *settingStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
-	var db QueryExecer
-
-	// Check if there is an active transaction in the context.
-	if tx, ok := TxFromContext(ctx); ok {
-		if tx == nil {
-			t.logError(ctx, errors.New("transaction is nil"), "failed to get transaction from context")
-			// set default connection
-			return t.config.DB.DBWrite
-		}
-
-		return tx
-	}
-
-	// Use the appropriate connection based on the operation type.
-	if isWrite {
-		db = t.config.DB.DBWrite
-	} else {
-		db = t.config.DB.DBRead
-	}
-
-	return db
+func (t *settingStorage) DB() QueryExecer {
+	return t.config.DB
 }
 
 // LoadUser loads the User relation.
@@ -198,11 +161,11 @@ func (t *settingStorage) LoadBatchUser(ctx context.Context, items []*Setting, bu
 
 // Setting is a struct for the "settings" table.
 type Setting struct {
-	Id     int32  `db:"id"`
-	Name   string `db:"name"`
-	Value  string `db:"value"`
+	Id     int32
+	Name   string
+	Value  string
 	User   *User
-	UserId string `db:"user_id"`
+	UserId string
 }
 
 // TableName returns the table name.
@@ -347,9 +310,9 @@ func SettingUserIdOrderBy(asc bool) FilterApplier {
 }
 
 // Create creates a new Setting.
-func (t *settingStorage) Create(ctx context.Context, model *Setting, opts ...Option) (*int32, error) {
+func (t *settingStorage) Create(ctx context.Context, model *Setting, opts ...Option) error {
 	if model == nil {
-		return nil, errors.New("model is nil")
+		return errors.New("model is nil")
 	}
 
 	// set default options
@@ -370,32 +333,24 @@ func (t *settingStorage) Create(ctx context.Context, model *Setting, opts ...Opt
 			model.UserId,
 		)
 
-	// add RETURNING "id" to query
-	query = query.Suffix("RETURNING \"id\"")
-
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return errors.Wrap(err, "failed to build query")
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	var id int32
-	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
+	_, err = t.DB().ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		if IsPgUniqueViolation(err) {
-			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
-		}
-
-		return nil, errors.Wrap(err, "failed to create Setting")
+		return errors.Wrap(err, "failed to create Setting")
 	}
 
-	return &id, nil
+	return nil
 }
 
 // BatchCreate creates multiple Setting records in a single batch.
-func (t *settingStorage) BatchCreate(ctx context.Context, models []*Setting, opts ...Option) ([]string, error) {
+func (t *settingStorage) BatchCreate(ctx context.Context, models []*Setting, opts ...Option) error {
 	if len(models) == 0 {
-		return nil, errors.New("no models to insert")
+		return errors.New("no models to insert")
 	}
 
 	options := &Options{}
@@ -404,7 +359,7 @@ func (t *settingStorage) BatchCreate(ctx context.Context, models []*Setting, opt
 	}
 
 	if options.relations {
-		return nil, errors.New("relations are not supported in batch create")
+		return errors.New("relations are not supported in batch create")
 	}
 
 	query := t.queryBuilder.Insert(t.TableName()).
@@ -416,7 +371,7 @@ func (t *settingStorage) BatchCreate(ctx context.Context, models []*Setting, opt
 
 	for _, model := range models {
 		if model == nil {
-			return nil, errors.New("one of the models is nil")
+			return errors.New("one of the models is nil")
 		}
 		query = query.Values(
 			model.Name,
@@ -425,24 +380,15 @@ func (t *settingStorage) BatchCreate(ctx context.Context, models []*Setting, opt
 		)
 	}
 
-	if options.ignoreConflictField != "" {
-		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO NOTHING RETURNING \"id\"")
-	} else {
-		query = query.Suffix("RETURNING \"id\"")
-	}
-
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return errors.Wrap(err, "failed to build query")
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		if IsPgUniqueViolation(err) {
-			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
-		}
-		return nil, errors.Wrap(err, "failed to execute bulk insert")
+		return errors.Wrap(err, "failed to execute bulk insert")
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -450,123 +396,8 @@ func (t *settingStorage) BatchCreate(ctx context.Context, models []*Setting, opt
 		}
 	}()
 
-	var returnIDs []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, errors.Wrap(err, "failed to scan id")
-		}
-		returnIDs = append(returnIDs, id)
-	}
-
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "rows iteration error")
-	}
-
-	return returnIDs, nil
-}
-
-// SettingUpdate is used to update an existing Setting.
-type SettingUpdate struct {
-	// Use regular pointer types for non-optional fields
-	Name *string
-	// Use regular pointer types for non-optional fields
-	Value *string
-	// Use regular pointer types for non-optional fields
-	UserId *string
-}
-
-// Update updates an existing Setting based on non-nil fields.
-func (t *settingStorage) Update(ctx context.Context, id int32, updateData *SettingUpdate) error {
-	if updateData == nil {
-		return errors.New("update data is nil")
-	}
-
-	query := t.queryBuilder.Update("settings")
-	// Handle fields that are not optional using a nil check
-	if updateData.Name != nil {
-		query = query.Set("name", *updateData.Name) // Dereference pointer value
-	}
-	// Handle fields that are not optional using a nil check
-	if updateData.Value != nil {
-		query = query.Set("value", *updateData.Value) // Dereference pointer value
-	}
-	// Handle fields that are not optional using a nil check
-	if updateData.UserId != nil {
-		query = query.Set("user_id", *updateData.UserId) // Dereference pointer value
-	}
-
-	query = query.Where("id = ?", id)
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to update Setting")
-	}
-
-	return nil
-}
-
-// DeleteById - deletes a Setting by its id.
-func (t *settingStorage) DeleteById(ctx context.Context, id int32, opts ...Option) error {
-	// set default options
-	options := &Options{}
-	for _, o := range opts {
-		o(options)
-	}
-
-	query := t.queryBuilder.Delete("settings").Where("id = ?", id)
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete Setting")
-	}
-
-	return nil
-}
-
-// DeleteMany removes entries from the settings table using the provided filters
-func (t *settingStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilder) error {
-	// build query
-	query := t.queryBuilder.Delete("settings")
-
-	var withFilter bool
-	for _, builder := range builders {
-		if builder == nil {
-			continue
-		}
-
-		// apply filter options
-		for _, option := range builder.filterOptions {
-			query = option.ApplyDelete(query)
-			withFilter = true
-		}
-	}
-
-	if !withFilter {
-		return errors.New("filters are required for delete operation")
-	}
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete settings")
+		return errors.Wrap(err, "rows iteration error")
 	}
 
 	return nil
@@ -639,7 +470,7 @@ func (t *settingStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
@@ -681,125 +512,63 @@ func (t *settingStorage) FindOne(ctx context.Context, builders ...*QueryBuilder)
 	return results[0], nil
 }
 
-// Count counts Setting based on the provided options.
-func (t *settingStorage) Count(ctx context.Context, builders ...*QueryBuilder) (int64, error) {
-	// build query
-	query := t.queryBuilder.Select("COUNT(*)").From(t.TableName())
-
-	// apply options from builder
-	for _, builder := range builders {
-		if builder == nil {
-			continue
-		}
-
-		// apply filter options
-		for _, option := range builder.filterOptions {
-			query = option.Apply(query)
-		}
-
-		// apply custom filters
-		query = builder.ApplyCustomFilters(query)
+// FindManyWithCursorPagination finds multiple Setting using cursor-based pagination.
+func (t *settingStorage) FindManyWithCursorPagination(
+	ctx context.Context,
+	limit int,
+	cursor *string,
+	cursorProvider CursorProvider,
+	builders ...*QueryBuilder,
+) ([]*Setting, *CursorPaginator, error) {
+	if limit <= 0 {
+		limit = 10
 	}
 
-	// execute query
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
-	var count int64
-	if err := row.Scan(&count); err != nil {
-		return 0, errors.Wrap(err, "failed to scan count")
+	if cursorProvider == nil {
+		return nil, nil, errors.New("cursor provider is required")
 	}
 
-	return count, nil
-}
-
-// FindManyWithPagination finds multiple Setting with pagination support.
-func (t *settingStorage) FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Setting, *Paginator, error) {
-	// Count the total number of records
-	totalCount, err := t.Count(ctx, builders...)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to count Setting")
+	if cursor != nil && *cursor != "" {
+		builders = append(builders, cursorProvider.CursorBuilder(*cursor))
 	}
 
-	// Calculate offset
-	offset := (page - 1) * limit
-
-	// Build the pagination object
-	paginator := &Paginator{
-		TotalCount: totalCount,
-		Limit:      limit,
-		Page:       page,
-		TotalPages: int(math.Ceil(float64(totalCount) / float64(limit))),
-	}
-
-	// Add pagination to query builder
-	builders = append(builders, PaginateBuilder(uint64(limit), uint64(offset)))
-
-	// Find records using FindMany
+	builders = append(builders, LimitBuilder(uint64(limit+1)))
 	records, err := t.FindMany(ctx, builders...)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to find Setting")
 	}
 
+	var nextCursor *string
+	if len(records) > limit {
+		lastRecord := records[limit]
+		records = records[:limit]
+		nextCursor = cursorProvider.GetCursor(lastRecord)
+	}
+
+	paginator := &CursorPaginator{
+		Limit:      limit,
+		NextCursor: nextCursor,
+	}
+
 	return records, paginator, nil
 }
 
-// SelectForUpdate lock locks the Setting for the given ID.
-func (t *settingStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Setting, error) {
-	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName()).Suffix("FOR UPDATE")
-
-	// apply options from builder
-	for _, builder := range builders {
-		if builder == nil {
-			continue
-		}
-
-		// apply filter options
-		for _, option := range builder.filterOptions {
-			query = option.Apply(query)
-		}
-
-		// apply custom filters
-		query = builder.ApplyCustomFilters(query)
-	}
-
-	// execute query
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
-	var model Setting
-	if err := model.ScanRow(row); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrRowNotFound
-		}
-		return nil, errors.Wrap(err, "failed to scan Setting")
-	}
-
-	return &model, nil
-}
+// clickhouse does not support row-level locking.
 
 // Query executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *settingStorage) Query(ctx context.Context, isWrite bool, query string, args ...interface{}) (sql.Result, error) {
-	return t.DB(ctx, isWrite).ExecContext(ctx, query, args...)
+func (t *settingStorage) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return t.DB().ExecContext(ctx, query, args...)
 }
 
 // QueryRow executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *settingStorage) QueryRow(ctx context.Context, isWrite bool, query string, args ...interface{}) *sql.Row {
-	return t.DB(ctx, isWrite).QueryRowContext(ctx, query, args...)
+func (t *settingStorage) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	return t.DB().QueryRowContext(ctx, query, args...)
 }
 
 // QueryRows executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *settingStorage) QueryRows(ctx context.Context, isWrite bool, query string, args ...interface{}) (*sql.Rows, error) {
-	return t.DB(ctx, isWrite).QueryContext(ctx, query, args...)
+func (t *settingStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	return t.DB().QueryContext(ctx, query, args...)
 }

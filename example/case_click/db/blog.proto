@@ -67,6 +67,39 @@ message Bot {
   User user = 9  [(structify.field) = {relation: { field: "user_id", reference: "id", foreign: { cascade: true } } }];
 }
 
+message BotView {
+  // Unique identifier for the bot
+  string id = 1 [(structify.field) = {primary_key: true, uuid: true, default: "uuid_generate_v4()"}];
+
+  // User identifier associated with the bot
+  string user_id = 2 [(structify.field) = { uuid: true}];
+
+  // Bot name
+  string name = 3;
+
+  // Bot token
+  string token = 4 [(structify.field) = { unique: true}];
+
+  // Flag to indicate if the bot is published
+  bool is_publish = 5;
+
+  // Timestamp for when the bot was created
+  google.protobuf.Timestamp created_at = 6  [(structify.field) = { in_filter: true}];
+
+  // Timestamp for the last update to the bot
+  google.protobuf.Timestamp updated_at = 7;
+
+  // Timestamp for when the bot was deleted (if applicable)
+  optional google.protobuf.Timestamp deleted_at = 8;
+
+  // relationship to the user table
+  User user = 9  [(structify.field) = {relation: { field: "user_id", reference: "id", foreign: { cascade: true } } }];
+
+  option (structify.opts) = {
+    table: "bots_view"
+  };
+}
+
 
 /**
   * @structify.table users

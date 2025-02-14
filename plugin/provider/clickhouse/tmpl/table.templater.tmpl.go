@@ -265,32 +265,42 @@ const TableConditionFilters = `
 `
 
 const TableFindWithPaginationMethodTemplate = `
-// FindManyWithPagination finds multiple {{ structureName }} with pagination support.
-func (t *{{ storageName | lowerCamelCase }}) FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*{{structureName}}, *Paginator, error) {
-	// Count the total number of records
-	totalCount, err := t.Count(ctx, builders...)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to count {{ structureName }}")
+// FindManyWithCursorPagination finds multiple {{ structureName }} using cursor-based pagination.
+func (t *{{ storageName | lowerCamelCase }}) FindManyWithCursorPagination(
+	ctx context.Context,
+	limit int,
+	cursor *string,
+	cursorProvider CursorProvider,
+	builders ...*QueryBuilder,
+) ([]*{{structureName}}, *CursorPaginator, error) {
+	if limit <= 0 {
+		limit = 10
 	}
 
-	// Calculate offset
-	offset := (page - 1) * limit
-
-	// Build the pagination object
-	paginator := &Paginator{
-		TotalCount: totalCount,
-		Limit:      limit,
-		Page:       page,
-		TotalPages: int(math.Ceil(float64(totalCount) / float64(limit))),
+	if cursorProvider == nil {
+		return nil, nil, errors.New("cursor provider is required")
 	}
 
-	// Add pagination to query builder
-	builders = append(builders, PaginateBuilder(uint64(limit), uint64(offset)))
+	if cursor != nil && *cursor != "" {
+		builders = append(builders, cursorProvider.CursorBuilder(*cursor))
+	}
 
-	// Find records using FindMany
+	builders = append(builders, LimitBuilder(uint64(limit+1)))
 	records, err := t.FindMany(ctx, builders...)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to find {{ structureName }}")
+	}
+
+	var nextCursor *string
+	if len(records) > limit {
+		lastRecord := records[limit]
+		records = records[:limit]
+		nextCursor = cursorProvider.GetCursor(lastRecord)
+	}
+
+	paginator := &CursorPaginator{
+		Limit:     limit,
+		NextCursor: nextCursor,
 	}
 
 	return records, paginator, nil
@@ -298,81 +308,10 @@ func (t *{{ storageName | lowerCamelCase }}) FindManyWithPagination(ctx context.
 `
 
 const TableLockMethodTemplate = `
-// SelectForUpdate lock locks the {{ structureName }} for the given ID.
-func (t *{{ storageName | lowerCamelCase }}) SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*{{structureName}}, error) {
-	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName()).Suffix("FOR UPDATE")
-
-	// apply options from builder
-	for _, builder := range builders {
-		if builder == nil {
-			continue
-		}
-
-		// apply filter options
-		for _, option := range builder.filterOptions {
-			query = option.Apply(query)
-		}
-
-		// apply custom filters
-		query = builder.ApplyCustomFilters(query)
-	}
-
-	// execute query
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
-	var model {{ structureName }}
-    if err := model.ScanRow(row); err != nil {
-        if errors.Is(err, sql.ErrNoRows){
-            return nil, ErrRowNotFound
-        }
-        return nil, errors.Wrap(err, "failed to scan {{ structureName }}")
-    }
-
-	return &model, nil
-}
+// clickhouse does not support row-level locking.
 `
 
 const TableCountMethodTemplate = `
-// Count counts {{ structureName }} based on the provided options.
-func (t *{{ storageName | lowerCamelCase }}) Count(ctx context.Context, builders ...*QueryBuilder) (int64, error) {
-	// build query
-	query := t.queryBuilder.Select("COUNT(*)").From(t.TableName())
-
-	// apply options from builder
-	for _, builder := range builders {
-		if builder == nil {
-			continue
-		}
-
-		// apply filter options
-		for _, option := range builder.filterOptions {
-			query = option.Apply(query)
-		}
-
-		// apply custom filters
-		query = builder.ApplyCustomFilters(query)
-	}
-
-	// execute query
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
-	var count int64
-	if err := row.Scan(&count); err != nil {
-		return 0, errors.Wrap(err, "failed to scan count")
-	}
-
-	return count, nil
-}
 `
 
 const TableFindOneMethodTemplate = `
@@ -444,7 +383,7 @@ func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, build
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
@@ -493,189 +432,32 @@ func (t *{{ storageName | lowerCamelCase }}) FindBy{{ getPrimaryKey.GetName | ca
 const TableRawQueryMethodTemplate = `
 // Query executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *{{ storageName | lowerCamelCase }}) Query(ctx context.Context, isWrite bool, query string, args ...interface{}) (sql.Result, error) {
-	return t.DB(ctx, isWrite).ExecContext(ctx, query, args...)
+func (t *{{ storageName | lowerCamelCase }}) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return t.DB().ExecContext(ctx, query, args...)
 }
 
 // QueryRow executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *{{ storageName | lowerCamelCase }}) QueryRow(ctx context.Context, isWrite bool, query string, args ...interface{}) *sql.Row {
-	return t.DB(ctx, isWrite).QueryRowContext(ctx, query, args...)
+func (t *{{ storageName | lowerCamelCase }}) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	return t.DB().QueryRowContext(ctx, query, args...)
 }
 
 // QueryRows executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *{{ storageName | lowerCamelCase }}) QueryRows(ctx context.Context, isWrite bool, query string, args ...interface{}) (*sql.Rows, error) {
-	return t.DB(ctx, isWrite).QueryContext(ctx, query, args...)
+func (t *{{ storageName | lowerCamelCase }}) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	return t.DB().QueryContext(ctx, query, args...)
 }
 `
 
-const TableDeleteMethodTemplate = `
-{{- if (hasPrimaryKey) }}
-// DeleteBy{{ getPrimaryKey.GetName | camelCase }} - deletes a {{ structureName }} by its {{ getPrimaryKey.GetName }}.
-func (t *{{ storageName | lowerCamelCase }}) DeleteBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, {{getPrimaryKey.GetName}} {{IDType}}, opts ...Option) error {
-	// set default options
-	options := &Options{}
-	for _, o := range opts {
-		o(options)
-	}
+const TableDeleteMethodTemplate = ``
 
-	query := t.queryBuilder.Delete("{{ tableName }}").Where("id = ?", id)
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	_, err = t.DB(ctx, true).ExecContext(ctx,sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete {{ structureName }}")
-	}
-
-	return nil
-}
-{{- end }}
-
-// DeleteMany removes entries from the {{ tableName }} table using the provided filters
-func (t *{{ storageName | lowerCamelCase }}) DeleteMany(ctx context.Context, builders ...*QueryBuilder) error {
-	// build query
-	query := t.queryBuilder.Delete("{{ tableName }}")
-
-	var withFilter bool
-	for _, builder := range builders {
-		if builder == nil {
-			continue
-		}
-
-		// apply filter options
-		for _, option := range builder.filterOptions {
-			query = option.ApplyDelete(query)
-			withFilter = true
-		}
-	}
-
-	if !withFilter {
-		return errors.New("filters are required for delete operation")
-	}
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete {{ tableName }}")
-	}
-	
-	return nil
-}
-`
-
-const TableUpdateMethodTemplate = `
-// {{ structureName }}Update is used to update an existing {{ structureName }}.
-type {{ structureName }}Update struct {
-	{{- range $index, $field := fields }}
-	{{- if not ($field | isRelation) }}
-	{{- if not ($field | isAutoIncrement) }}
-	{{- if not ($field | isPrimary) }}
-	{{- if ($field | isCurrentOptional) }}
-		// Use null types for optional fields
-		{{ $field | fieldName }} {{ $field | fieldTypeToNullType }}
-	{{- else }}
-		// Use regular pointer types for non-optional fields
-		{{ $field | fieldName }} {{- if not ($field | findPointer) }}*{{- end }}{{ $field | fieldType }}
-	{{- end }}
-	{{- end }}
-	{{- end }}
-	{{- end }}
-	{{- end }}
-}
-
-// Update updates an existing {{ structureName }} based on non-nil fields.
-func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{IDType}}, updateData *{{structureName}}Update) error {
-	if updateData == nil {
-		return errors.New("update data is nil")
-	}
-
-	query := t.queryBuilder.Update("{{ tableName }}")
-
-	{{- range $index, $field := fields }}
-	{{- if not ($field | isRelation) }}
-	{{- if not ($field | isAutoIncrement) }}
-	{{- if not ($field | isPrimary) }}
-	{{- if ($field | isCurrentOptional) }}
-		// Handle fields that are optional and can be explicitly set to NULL
-		if updateData.{{ $field | fieldName }}.Valid {
-			{{- if (eq ($field | fieldTypeToNullType) "null.String") }}
-			// Handle null.String specifically
-			if updateData.{{ $field | fieldName }}.String == "" {
-				query = query.Set("{{ $field | sourceName }}", nil) // Explicitly set NULL for empty string
-			} else {
-				query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.ValueOrZero())
-			}
-			{{- else if (eq ($field | fieldTypeToNullType) "null.Int") }}
-			// Handle null.Int specifically
-			query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.ValueOrZero())
-			{{- else if (eq ($field | fieldTypeToNullType) "null.Float") }}
-			// Handle null.Float specifically
-			query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.ValueOrZero())
-			{{- else if (eq ($field | fieldTypeToNullType) "null.Bool") }}
-			// Handle null.Bool specifically
-			query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.ValueOrZero())
-			{{- else if (eq ($field | fieldTypeToNullType) "null.Time") }}
-			// Handle null.Time specifically
-			if updateData.{{ $field | fieldName }}.Time.IsZero() {
-				query = query.Set("{{ $field | sourceName }}", nil) // Explicitly set NULL if time is zero
-			} else {
-				query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.Time)
-			}
-			{{- else if ($field | isJSON) }}
-			if updateData.{{ $field | fieldName }}.Data == nil {
-				query = query.Set("{{ $field | sourceName }}", nil) // Explicitly set NULL
-			} else {
-				query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.Data)
-			}
-			{{- else }}
-			// Handle other null types
-			// ... add more specific handling here if needed
-			{{- end }}
-		}
-	{{- else }}
-		// Handle fields that are not optional using a nil check
-		if updateData.{{ $field | fieldName }} != nil {
-			query = query.Set("{{ $field | sourceName }}", *updateData.{{ $field | fieldName }}) // Dereference pointer value
-		}
-	{{- end }}
-	{{- end }}
-	{{- end }}
-	{{- end }}
-	{{- end }}
-
-	query = query.Where("id = ?", id)
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to update {{ structureName }}")
-	}
-
-	return nil
-}
-`
+const TableUpdateMethodTemplate = ``
 
 const StructureTemplate = `
 // {{ structureName }} is a struct for the "{{ tableName }}" table.
 type {{ structureName }} struct {
 {{ range $field := fields }}
-	{{ $field | fieldName }} {{ $field | fieldType }}{{if not ($field | isRelation) }}` + " `db:\"{{ $field | sourceName }}\"`" + `{{end}}{{end}}
+	{{ $field | fieldName }} {{ $field | fieldType }}{{if not ($field | isRelation) }}` + "" + `{{end}}{{end}}
 }
 
 // TableName returns the table name.
@@ -702,9 +484,9 @@ func (t *{{ structureName }}) ScanRows(r *sql.Rows) error {
 
 const TableBatchCreateMethodTemplate = `
 // BatchCreate creates multiple {{ structureName }} records in a single batch.
-func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, models []*{{structureName}}, opts ...Option) ({{ if (hasID) }}[]string, {{ end }}error) {
+func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, models []*{{structureName}}, opts ...Option) error {
 	if len(models) == 0 {
-		{{ if (hasID) }} return nil, errors.New("no models to insert") {{ else }} return errors.New("no models to insert") {{ end }}
+		return errors.New("no models to insert")
 	}
 
 	options := &Options{}
@@ -713,7 +495,7 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 	}
 
 	if options.relations {
-		{{ if (hasID) }} return nil, errors.New("relations are not supported in batch create") {{ else }} return errors.New("relations are not supported in batch create") {{ end }}
+		return errors.New("relations are not supported in batch create")
 	}
 
 	query := t.queryBuilder.Insert(t.TableName()).
@@ -731,7 +513,7 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 
 	for _, model := range models {
 		if model == nil {
-			{{ if (hasID) }} return nil, errors.New("one of the models is nil") {{ else }} return errors.New("one of the models is nil") {{ end }}
+			return errors.New("one of the models is nil")
 		}
 		query = query.Values(
 			{{- range $index, $field := fields }}
@@ -742,13 +524,11 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 			{{- if ($field | isRepeated) }}
 				{{ $field | fieldName | lowerCamelCase }},
 			{{- else }}
-			
 				{{- if (findPointer $field) }}
 				nullValue(model.{{ $field | fieldName }}),
 				{{- else }}
 				model.{{ $field | fieldName }},
 				{{- end }}
-
 			{{- end}}
 
 			{{- end}}
@@ -758,30 +538,15 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 		)
 	}
 
-	{{ if (hasID) }}
-	if options.ignoreConflictField != "" {
-		query = query.Suffix("ON CONFLICT ("+options.ignoreConflictField+") DO NOTHING RETURNING \"id\"")
-	} else {
-		query = query.Suffix("RETURNING \"id\"")
-	}
-	{{ else }}
-	if options.ignoreConflictField != "" {
-		query = query.Suffix("ON CONFLICT ("+options.ignoreConflictField+") DO NOTHING")
-	}
-	{{ end }}
-
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		{{ if (hasID) }} return nil, errors.Wrap(err, "failed to build query") {{ else }} return errors.Wrap(err, "failed to build query") {{ end }}
+		return errors.Wrap(err, "failed to build query")
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		if IsPgUniqueViolation(err) {
-			{{ if (hasID) }} return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error()) {{ else }} return errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error()) {{ end }}
-		}
-		{{ if (hasID) }} return nil, errors.Wrap(err, "failed to execute bulk insert") {{ else }} return errors.Wrap(err, "failed to execute bulk insert") {{ end }}
+		return errors.Wrap(err, "failed to execute bulk insert")
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -789,29 +554,19 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 		}
 	}()
 
-	{{ if (hasID) }} var returnIDs []string {{ end }} {{ if (hasID) }}
-	for rows.Next() {
-		var {{ getPrimaryKey.GetName }} string
-		if err := rows.Scan(&{{ getPrimaryKey.GetName }}); err != nil {
-			{{ if (hasID) }} return nil, errors.Wrap(err, "failed to scan {{ getPrimaryKey.GetName }}") {{ else }} return errors.Wrap(err, "failed to scan {{ getPrimaryKey.GetName }}") {{ end }}
-		}
-		returnIDs = append(returnIDs, {{ getPrimaryKey.GetName }})
-	}
-	{{ end }}
-
 	if err := rows.Err(); err != nil {
-		{{ if (hasID) }} return nil, errors.Wrap(err, "rows iteration error") {{ else }} return errors.Wrap(err, "rows iteration error") {{ end }}
+		return errors.Wrap(err, "rows iteration error")
 	}
 
-	return {{ if (hasID) }} returnIDs, nil {{ else }} nil {{ end }}
+	return nil
 }
 `
 
 const TableCreateMethodTemplate = `
 // Create creates a new {{ structureName }}.
-{{ if (hasID) }} func (t *{{ storageName | lowerCamelCase }}) Create(ctx context.Context, model *{{structureName}}, opts ...Option) (*{{IDType}}, error) { {{ else }} func (t *{{ storageName | lowerCamelCase }}) Create(ctx context.Context, model *{{structureName}}, opts ...Option) error { {{ end }}
+func (t *{{ storageName | lowerCamelCase }}) Create(ctx context.Context, model *{{structureName}}, opts ...Option) error { 
 	if model == nil {
-		{{ if (hasID) }}return nil, errors.New("model is nil") {{ else }}return errors.New("model is nil") {{ end }}
+		return errors.New("model is nil")
 	}
 
 	// set default options
@@ -826,7 +581,7 @@ const TableCreateMethodTemplate = `
 	// get value of {{ $field | fieldName | lowerCamelCase }}
 	{{ $field | fieldName | lowerCamelCase }}, err := model.{{ $field | fieldName }}.Value()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get value of {{ $field | fieldName }}")
+		return errors.Wrap(err, "failed to get value of {{ $field | fieldName }}")
 	}
 	{{- end}}
 	{{- end}}
@@ -867,58 +622,45 @@ const TableCreateMethodTemplate = `
 			{{- end}}
 			{{- end}}
 	)
-	{{ if (hasID) }}
-		// add RETURNING "id" to query
-		query = query.Suffix("RETURNING \"id\"")
-	{{ end }}
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		{{ if (hasID) }} return nil, errors.Wrap(err, "failed to build query") {{ else }} return errors.Wrap(err, "failed to build query") {{ end }}
+		return errors.Wrap(err, "failed to build query")
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	{{ if (hasID) }}var id {{IDType}}
-	err = t.DB(ctx, true).QueryRowContext(ctx,sqlQuery, args...).Scan(&id) {{ else }} _, err = t.DB(ctx, true).ExecContext(ctx,sqlQuery, args...) {{ end }}
+	_, err = t.DB().ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		if IsPgUniqueViolation(err) {
-			{{ if (hasID) }}return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error()) {{ else }}return errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error()) {{ end }}
-		}
-
-		{{ if (hasID) }} return nil, errors.Wrap(err, "failed to create {{ structureName }}") {{ else }} return errors.Wrap(err, "failed to create {{ structureName }}") {{ end }}
+		return errors.Wrap(err, "failed to create {{ structureName }}")
 	}
 
-	{{ if (hasID) }}
 	{{- range $index, $field := fields }}
 	{{- if and ($field | isRelation) ($field | relationAllowSubCreating) }}
 	    if options.relations && model.{{ $field | fieldName }} != nil { {{ if ($field | isRepeated) }}
 			for _, item := range model.{{ $field | fieldName }} {
-				item.{{ $field | getRefID }} = id
 				s, err := New{{ $field | relationStorageName }}(t.config)
 				if err != nil {
-					return nil, errors.Wrap(err, "failed to create {{ $field | fieldName }}")
+					return errors.Wrap(err, "failed to create {{ $field | fieldName }}")
 				}
 
-                {{ if ($field | hasIDFromRelation) }} _, err = s.Create(ctx, item) {{ else }} err = s.Create(ctx, item) {{ end }}
+				err = s.Create(ctx, item)
 				if err != nil {
-				{{ if (hasID) }} return nil, errors.Wrap(err, "failed to create {{ $field | fieldName }}") {{ else }} return errors.Wrap(err, "failed to create {{ $field | fieldName }}") {{ end }}
+					return errors.Wrap(err, "failed to create {{ $field | fieldName }}")
 				}
 			} {{ else }}
 			s, err := New{{ $field | relationStorageName }}(t.config)
 			if err != nil {
-				{{ if (hasID) }} return nil, errors.Wrap(err, "failed to create {{ $field | fieldName }}") {{ else }} return errors.Wrap(err, "failed to create {{ $field | fieldName }}") {{ end }}
+				return errors.Wrap(err, "failed to create {{ $field | fieldName }}")
 			}
 
-			model.{{ $field | fieldName }}.{{ $field | getRefID }} = id
-			{{ if ($field | hasIDFromRelation) }} _, err = s.Create(ctx, model.{{ $field | fieldName }}) {{ else }} err = s.Create(ctx, model.{{ $field | fieldName }}) {{ end }}
+			err = s.Create(ctx, model.{{ $field | fieldName }})
 			if err != nil {
-				{{ if (hasID) }} return nil, errors.Wrap(err, "failed to create {{ $field | fieldName }}") {{ else }} return errors.Wrap(err, "failed to create {{ $field | fieldName }}") {{ end }}
+				return errors.Wrap(err, "failed to create {{ $field | fieldName }}")
 			} {{- end}}
 	    } {{- end}}
 	{{- end}}
-	{{- end}}
 
-	{{ if (hasID) }} return &id, nil {{ else }} return nil {{ end }}
+	return nil
 }
 `
 
@@ -941,19 +683,8 @@ type {{structureName}}TableManager interface {
 
 // {{structureName}}CRUDOperations is an interface for managing the {{ tableName }} table.
 type {{structureName}}CRUDOperations interface {
-	{{- if (hasID) }}
-	Create(ctx context.Context, model *{{structureName}}, opts ...Option) (*{{IDType}}, error)
-	{{- else }} 
 	Create(ctx context.Context, model *{{structureName}}, opts ...Option) error
-	{{- end }}
-	{{ if (hasID) }}BatchCreate(ctx context.Context, models []*{{structureName}}, opts ...Option) ([]string, error)
-	{{- else }}
 	BatchCreate(ctx context.Context, models []*{{structureName}}, opts ...Option) error
-	{{- end }}
-	Update(ctx context.Context, id {{IDType}}, updateData *{{structureName}}Update) error
-	{{- if (hasPrimaryKey) }}
-	DeleteBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, {{getPrimaryKey.GetName}} {{IDType}}, opts ...Option) error
-	{{- end }}
 	{{- if (hasPrimaryKey) }}
 	FindBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}, opts ...Option) (*{{ structureName }}, error)
 	{{- end }}
@@ -963,13 +694,11 @@ type {{structureName}}CRUDOperations interface {
 type {{structureName}}SearchOperations interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*{{structureName}}, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*{{structureName}}, error)
-	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
-	SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*{{structureName}}, error)
 }
 
 // {{structureName}}PaginationOperations is an interface for pagination operations.
 type {{structureName}}PaginationOperations interface {
-	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*{{structureName}}, *Paginator, error)
+	FindManyWithCursorPagination(ctx context.Context, limit int, cursor *string, cursorProvider CursorProvider, builders ...*QueryBuilder) ([]*{{structureName}}, *CursorPaginator, error)
 }
 
 // {{structureName}}RelationLoading is an interface for loading relations.
@@ -986,16 +715,11 @@ type {{structureName}}RelationLoading interface {
 	{{- end }}
 }
 
-// {{structureName}}AdvancedDeletion is an interface for advanced deletion operations.
-type {{structureName}}AdvancedDeletion interface {
-	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
-}
-
 // {{structureName}}RawQueryOperations is an interface for executing raw queries.
 type {{structureName}}RawQueryOperations interface {
-	Query(ctx context.Context, isWrite bool, query string, args ...interface{}) (sql.Result, error)
-	QueryRow(ctx context.Context, isWrite bool, query string, args ...interface{}) *sql.Row
-	QueryRows(ctx context.Context, isWrite bool, query string, args ...interface{}) (*sql.Rows, error)
+	Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
+	QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 }
 
 // {{ storageName }} is a struct for the "{{ tableName }}" table.
@@ -1007,7 +731,6 @@ type {{ storageName }} interface {
 	{{structureName}}SearchOperations
 	{{structureName}}PaginationOperations
 	{{structureName}}RelationLoading
-	{{structureName}}AdvancedDeletion
 	{{structureName}}RawQueryOperations
 }
 
@@ -1017,18 +740,12 @@ func New{{ storageName }}(config *Config) ({{ storageName }}, error) {
 		return nil, errors.New("config is nil")
 	}
 	if config.DB == nil {
-		return nil, errors.New("config.DB is nil")
-	}
-	if config.DB.DBRead == nil {
-		return nil, errors.New("config.DB.DBRead is nil")
-	}
-	if config.DB.DBWrite == nil {
-		config.DB.DBWrite = config.DB.DBRead
+		return nil, errors.New("config.DB connection is nil")
 	}
 
 	return &{{ storageName | lowerCamelCase }}{
 		config: config,
-		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
+		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Question),
 	}, nil
 }
 
@@ -1059,28 +776,8 @@ func (t *{{ storageName | lowerCamelCase }}) Columns() []string {
 }
 
 // DB returns the underlying DB. This is useful for doing transactions.
-func (t *{{ storageName | lowerCamelCase }}) DB(ctx context.Context, isWrite bool) QueryExecer {
-	var db QueryExecer
-
-	// Check if there is an active transaction in the context.
-	if tx, ok := TxFromContext(ctx); ok {
-		if tx == nil {
-			t.logError(ctx, errors.New("transaction is nil"), "failed to get transaction from context")
-			// set default connection
-			return t.config.DB.DBWrite
-		}
-
-		return tx
-	}
-
-	// Use the appropriate connection based on the operation type.
-	if isWrite {
-		db = t.config.DB.DBWrite
-	} else {
-		db = t.config.DB.DBRead
-	}
-
-	return db
+func (t *{{ storageName | lowerCamelCase }}) DB() QueryExecer {
+	return t.config.DB
 }
 
 {{ if .CRUDSchemas }}
@@ -1139,7 +836,7 @@ func (t *{{ storageName | lowerCamelCase }}) CreateTable(ctx context.Context) er
 		{{- end }}
 	` + "`" + `
 
-	_, err := t.DB(ctx, true).ExecContext(ctx,sqlQuery)
+	_, err := t.DB().ExecContext(ctx,sqlQuery)
 	return err
 }
 
@@ -1149,7 +846,7 @@ func (t *{{ storageName | lowerCamelCase }}) DropTable(ctx context.Context) erro
 		DROP TABLE IF EXISTS {{ tableName }};
 	` + "`" + `
 
-	_, err := t.DB(ctx, true).ExecContext(ctx,sqlQuery)
+	_, err := t.DB().ExecContext(ctx,sqlQuery)
 	return err
 }
 
@@ -1159,7 +856,7 @@ func (t *{{ storageName | lowerCamelCase }}) TruncateTable(ctx context.Context) 
 		TRUNCATE TABLE {{ tableName }};
 	` + "`" + `
 
-	_, err := t.DB(ctx, true).ExecContext(ctx,sqlQuery)
+	_, err := t.DB().ExecContext(ctx,sqlQuery)
 	return err
 }
 

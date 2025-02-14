@@ -9,54 +9,54 @@ import (
 	"time"
 )
 
-// botStorage is a struct for the "bots" table.
-type botStorage struct {
+// botViewStorage is a struct for the "bots_view" table.
+type botViewStorage struct {
 	config       *Config
 	queryBuilder sq.StatementBuilderType
 }
 
-// BotCRUDOperations is an interface for managing the bots table.
-type BotCRUDOperations interface {
-	Create(ctx context.Context, model *Bot, opts ...Option) error
-	BatchCreate(ctx context.Context, models []*Bot, opts ...Option) error
-	FindById(ctx context.Context, id string, opts ...Option) (*Bot, error)
+// BotViewCRUDOperations is an interface for managing the bots_view table.
+type BotViewCRUDOperations interface {
+	Create(ctx context.Context, model *BotView, opts ...Option) error
+	BatchCreate(ctx context.Context, models []*BotView, opts ...Option) error
+	FindById(ctx context.Context, id string, opts ...Option) (*BotView, error)
 }
 
-// BotSearchOperations is an interface for searching the bots table.
-type BotSearchOperations interface {
-	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*Bot, error)
-	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Bot, error)
+// BotViewSearchOperations is an interface for searching the bots_view table.
+type BotViewSearchOperations interface {
+	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*BotView, error)
+	FindOne(ctx context.Context, builders ...*QueryBuilder) (*BotView, error)
 }
 
-// BotPaginationOperations is an interface for pagination operations.
-type BotPaginationOperations interface {
-	FindManyWithCursorPagination(ctx context.Context, limit int, cursor *string, cursorProvider CursorProvider, builders ...*QueryBuilder) ([]*Bot, *CursorPaginator, error)
+// BotViewPaginationOperations is an interface for pagination operations.
+type BotViewPaginationOperations interface {
+	FindManyWithCursorPagination(ctx context.Context, limit int, cursor *string, cursorProvider CursorProvider, builders ...*QueryBuilder) ([]*BotView, *CursorPaginator, error)
 }
 
-// BotRelationLoading is an interface for loading relations.
-type BotRelationLoading interface {
-	LoadUser(ctx context.Context, model *Bot, builders ...*QueryBuilder) error
-	LoadBatchUser(ctx context.Context, items []*Bot, builders ...*QueryBuilder) error
+// BotViewRelationLoading is an interface for loading relations.
+type BotViewRelationLoading interface {
+	LoadUser(ctx context.Context, model *BotView, builders ...*QueryBuilder) error
+	LoadBatchUser(ctx context.Context, items []*BotView, builders ...*QueryBuilder) error
 }
 
-// BotRawQueryOperations is an interface for executing raw queries.
-type BotRawQueryOperations interface {
+// BotViewRawQueryOperations is an interface for executing raw queries.
+type BotViewRawQueryOperations interface {
 	Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
 	QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 }
 
-// BotStorage is a struct for the "bots" table.
-type BotStorage interface {
-	BotCRUDOperations
-	BotSearchOperations
-	BotPaginationOperations
-	BotRelationLoading
-	BotRawQueryOperations
+// BotViewStorage is a struct for the "bots_view" table.
+type BotViewStorage interface {
+	BotViewCRUDOperations
+	BotViewSearchOperations
+	BotViewPaginationOperations
+	BotViewRelationLoading
+	BotViewRawQueryOperations
 }
 
-// NewBotStorage returns a new botStorage.
-func NewBotStorage(config *Config) (BotStorage, error) {
+// NewBotViewStorage returns a new botViewStorage.
+func NewBotViewStorage(config *Config) (BotViewStorage, error) {
 	if config == nil {
 		return nil, errors.New("config is nil")
 	}
@@ -64,47 +64,47 @@ func NewBotStorage(config *Config) (BotStorage, error) {
 		return nil, errors.New("config.DB connection is nil")
 	}
 
-	return &botStorage{
+	return &botViewStorage{
 		config:       config,
 		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Question),
 	}, nil
 }
 
 // logQuery logs the query if query logging is enabled.
-func (t *botStorage) logQuery(ctx context.Context, query string, args ...interface{}) {
+func (t *botViewStorage) logQuery(ctx context.Context, query string, args ...interface{}) {
 	if t.config.QueryLogMethod != nil {
 		t.config.QueryLogMethod(ctx, t.TableName(), query, args...)
 	}
 }
 
 // logError logs the error if error logging is enabled.
-func (t *botStorage) logError(ctx context.Context, err error, message string) {
+func (t *botViewStorage) logError(ctx context.Context, err error, message string) {
 	if t.config.ErrorLogMethod != nil {
 		t.config.ErrorLogMethod(ctx, err, message)
 	}
 }
 
 // TableName returns the table name.
-func (t *botStorage) TableName() string {
-	return "bots"
+func (t *botViewStorage) TableName() string {
+	return "bots_view"
 }
 
 // Columns returns the columns for the table.
-func (t *botStorage) Columns() []string {
+func (t *botViewStorage) Columns() []string {
 	return []string{
 		"id", "user_id", "name", "token", "is_publish", "created_at", "updated_at", "deleted_at",
 	}
 }
 
 // DB returns the underlying DB. This is useful for doing transactions.
-func (t *botStorage) DB() QueryExecer {
+func (t *botViewStorage) DB() QueryExecer {
 	return t.config.DB
 }
 
 // LoadUser loads the User relation.
-func (t *botStorage) LoadUser(ctx context.Context, model *Bot, builders ...*QueryBuilder) error {
+func (t *botViewStorage) LoadUser(ctx context.Context, model *BotView, builders ...*QueryBuilder) error {
 	if model == nil {
-		return errors.Wrap(ErrModelIsNil, "Bot is nil")
+		return errors.Wrap(ErrModelIsNil, "BotView is nil")
 	}
 
 	// NewUserStorage creates a new UserStorage.
@@ -124,7 +124,7 @@ func (t *botStorage) LoadUser(ctx context.Context, model *Bot, builders ...*Quer
 }
 
 // LoadBatchUser loads the User relation.
-func (t *botStorage) LoadBatchUser(ctx context.Context, items []*Bot, builders ...*QueryBuilder) error {
+func (t *botViewStorage) LoadBatchUser(ctx context.Context, items []*BotView, builders ...*QueryBuilder) error {
 	requestItems := make([]interface{}, 0, len(items))
 	for _, item := range items {
 		// Append the value directly for non-optional fields
@@ -160,8 +160,8 @@ func (t *botStorage) LoadBatchUser(ctx context.Context, items []*Bot, builders .
 	return nil
 }
 
-// Bot is a struct for the "bots" table.
-type Bot struct {
+// BotView is a struct for the "bots_view" table.
+type BotView struct {
 	Id        string
 	UserId    string
 	Name      string
@@ -174,17 +174,17 @@ type Bot struct {
 }
 
 // TableName returns the table name.
-func (t *Bot) TableName() string {
-	return "bots"
+func (t *BotView) TableName() string {
+	return "bots_view"
 }
 
-// ScanRow scans a row into a Bot.
-func (t *Bot) ScanRow(r *sql.Row) error {
+// ScanRow scans a row into a BotView.
+func (t *BotView) ScanRow(r *sql.Row) error {
 	return r.Scan(&t.Id, &t.UserId, &t.Name, &t.Token, &t.IsPublish, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt)
 }
 
-// ScanRows scans a single row into the Bot.
-func (t *Bot) ScanRows(r *sql.Rows) error {
+// ScanRows scans a single row into the BotView.
+func (t *BotView) ScanRows(r *sql.Rows) error {
 	return r.Scan(
 		&t.Id,
 		&t.UserId,
@@ -197,195 +197,195 @@ func (t *Bot) ScanRows(r *sql.Rows) error {
 	)
 }
 
-// BotFilters is a struct that holds filters for Bot.
-type BotFilters struct {
+// BotViewFilters is a struct that holds filters for BotView.
+type BotViewFilters struct {
 	Id        *string
 	UserId    *string
 	CreatedAt *time.Time
 }
 
-// BotIdEq returns a condition that checks if the field equals the value.
-func BotIdEq(value string) FilterApplier {
+// BotViewIdEq returns a condition that checks if the field equals the value.
+func BotViewIdEq(value string) FilterApplier {
 	return EqualsCondition{Field: "id", Value: value}
 }
 
-// BotUserIdEq returns a condition that checks if the field equals the value.
-func BotUserIdEq(value string) FilterApplier {
+// BotViewUserIdEq returns a condition that checks if the field equals the value.
+func BotViewUserIdEq(value string) FilterApplier {
 	return EqualsCondition{Field: "user_id", Value: value}
 }
 
-// BotCreatedAtEq returns a condition that checks if the field equals the value.
-func BotCreatedAtEq(value time.Time) FilterApplier {
+// BotViewCreatedAtEq returns a condition that checks if the field equals the value.
+func BotViewCreatedAtEq(value time.Time) FilterApplier {
 	return EqualsCondition{Field: "created_at", Value: value}
 }
 
-// BotIdNotEq returns a condition that checks if the field equals the value.
-func BotIdNotEq(value string) FilterApplier {
+// BotViewIdNotEq returns a condition that checks if the field equals the value.
+func BotViewIdNotEq(value string) FilterApplier {
 	return NotEqualsCondition{Field: "id", Value: value}
 }
 
-// BotUserIdNotEq returns a condition that checks if the field equals the value.
-func BotUserIdNotEq(value string) FilterApplier {
+// BotViewUserIdNotEq returns a condition that checks if the field equals the value.
+func BotViewUserIdNotEq(value string) FilterApplier {
 	return NotEqualsCondition{Field: "user_id", Value: value}
 }
 
-// BotCreatedAtNotEq returns a condition that checks if the field equals the value.
-func BotCreatedAtNotEq(value time.Time) FilterApplier {
+// BotViewCreatedAtNotEq returns a condition that checks if the field equals the value.
+func BotViewCreatedAtNotEq(value time.Time) FilterApplier {
 	return NotEqualsCondition{Field: "created_at", Value: value}
 }
 
-// BotIdGT greaterThanCondition than condition.
-func BotIdGT(value string) FilterApplier {
+// BotViewIdGT greaterThanCondition than condition.
+func BotViewIdGT(value string) FilterApplier {
 	return GreaterThanCondition{Field: "id", Value: value}
 }
 
-// BotUserIdGT greaterThanCondition than condition.
-func BotUserIdGT(value string) FilterApplier {
+// BotViewUserIdGT greaterThanCondition than condition.
+func BotViewUserIdGT(value string) FilterApplier {
 	return GreaterThanCondition{Field: "user_id", Value: value}
 }
 
-// BotCreatedAtGT greaterThanCondition than condition.
-func BotCreatedAtGT(value time.Time) FilterApplier {
+// BotViewCreatedAtGT greaterThanCondition than condition.
+func BotViewCreatedAtGT(value time.Time) FilterApplier {
 	return GreaterThanCondition{Field: "created_at", Value: value}
 }
 
-// BotIdLT less than condition.
-func BotIdLT(value string) FilterApplier {
+// BotViewIdLT less than condition.
+func BotViewIdLT(value string) FilterApplier {
 	return LessThanCondition{Field: "id", Value: value}
 }
 
-// BotUserIdLT less than condition.
-func BotUserIdLT(value string) FilterApplier {
+// BotViewUserIdLT less than condition.
+func BotViewUserIdLT(value string) FilterApplier {
 	return LessThanCondition{Field: "user_id", Value: value}
 }
 
-// BotCreatedAtLT less than condition.
-func BotCreatedAtLT(value time.Time) FilterApplier {
+// BotViewCreatedAtLT less than condition.
+func BotViewCreatedAtLT(value time.Time) FilterApplier {
 	return LessThanCondition{Field: "created_at", Value: value}
 }
 
-// BotIdGTE greater than or equal condition.
-func BotIdGTE(value string) FilterApplier {
+// BotViewIdGTE greater than or equal condition.
+func BotViewIdGTE(value string) FilterApplier {
 	return GreaterThanOrEqualCondition{Field: "id", Value: value}
 }
 
-// BotUserIdGTE greater than or equal condition.
-func BotUserIdGTE(value string) FilterApplier {
+// BotViewUserIdGTE greater than or equal condition.
+func BotViewUserIdGTE(value string) FilterApplier {
 	return GreaterThanOrEqualCondition{Field: "user_id", Value: value}
 }
 
-// BotCreatedAtGTE greater than or equal condition.
-func BotCreatedAtGTE(value time.Time) FilterApplier {
+// BotViewCreatedAtGTE greater than or equal condition.
+func BotViewCreatedAtGTE(value time.Time) FilterApplier {
 	return GreaterThanOrEqualCondition{Field: "created_at", Value: value}
 }
 
-// BotIdLTE less than or equal condition.
-func BotIdLTE(value string) FilterApplier {
+// BotViewIdLTE less than or equal condition.
+func BotViewIdLTE(value string) FilterApplier {
 	return LessThanOrEqualCondition{Field: "id", Value: value}
 }
 
-// BotUserIdLTE less than or equal condition.
-func BotUserIdLTE(value string) FilterApplier {
+// BotViewUserIdLTE less than or equal condition.
+func BotViewUserIdLTE(value string) FilterApplier {
 	return LessThanOrEqualCondition{Field: "user_id", Value: value}
 }
 
-// BotCreatedAtLTE less than or equal condition.
-func BotCreatedAtLTE(value time.Time) FilterApplier {
+// BotViewCreatedAtLTE less than or equal condition.
+func BotViewCreatedAtLTE(value time.Time) FilterApplier {
 	return LessThanOrEqualCondition{Field: "created_at", Value: value}
 }
 
-// BotIdBetween between condition.
-func BotIdBetween(min, max string) FilterApplier {
+// BotViewIdBetween between condition.
+func BotViewIdBetween(min, max string) FilterApplier {
 	return BetweenCondition{Field: "id", Min: min, Max: max}
 }
 
-// BotUserIdBetween between condition.
-func BotUserIdBetween(min, max string) FilterApplier {
+// BotViewUserIdBetween between condition.
+func BotViewUserIdBetween(min, max string) FilterApplier {
 	return BetweenCondition{Field: "user_id", Min: min, Max: max}
 }
 
-// BotCreatedAtBetween between condition.
-func BotCreatedAtBetween(min, max time.Time) FilterApplier {
+// BotViewCreatedAtBetween between condition.
+func BotViewCreatedAtBetween(min, max time.Time) FilterApplier {
 	return BetweenCondition{Field: "created_at", Min: min, Max: max}
 }
 
-// BotIdILike iLike condition %
-func BotIdILike(value string) FilterApplier {
+// BotViewIdILike iLike condition %
+func BotViewIdILike(value string) FilterApplier {
 	return ILikeCondition{Field: "id", Value: value}
 }
 
-// BotUserIdILike iLike condition %
-func BotUserIdILike(value string) FilterApplier {
+// BotViewUserIdILike iLike condition %
+func BotViewUserIdILike(value string) FilterApplier {
 	return ILikeCondition{Field: "user_id", Value: value}
 }
 
-// BotIdLike like condition %
-func BotIdLike(value string) FilterApplier {
+// BotViewIdLike like condition %
+func BotViewIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "id", Value: value}
 }
 
-// BotUserIdLike like condition %
-func BotUserIdLike(value string) FilterApplier {
+// BotViewUserIdLike like condition %
+func BotViewUserIdLike(value string) FilterApplier {
 	return LikeCondition{Field: "user_id", Value: value}
 }
 
-// BotIdNotLike not like condition
-func BotIdNotLike(value string) FilterApplier {
+// BotViewIdNotLike not like condition
+func BotViewIdNotLike(value string) FilterApplier {
 	return NotLikeCondition{Field: "id", Value: value}
 }
 
-// BotUserIdNotLike not like condition
-func BotUserIdNotLike(value string) FilterApplier {
+// BotViewUserIdNotLike not like condition
+func BotViewUserIdNotLike(value string) FilterApplier {
 	return NotLikeCondition{Field: "user_id", Value: value}
 }
 
-// BotIdIn condition
-func BotIdIn(values ...interface{}) FilterApplier {
+// BotViewIdIn condition
+func BotViewIdIn(values ...interface{}) FilterApplier {
 	return InCondition{Field: "id", Values: values}
 }
 
-// BotUserIdIn condition
-func BotUserIdIn(values ...interface{}) FilterApplier {
+// BotViewUserIdIn condition
+func BotViewUserIdIn(values ...interface{}) FilterApplier {
 	return InCondition{Field: "user_id", Values: values}
 }
 
-// BotCreatedAtIn condition
-func BotCreatedAtIn(values ...interface{}) FilterApplier {
+// BotViewCreatedAtIn condition
+func BotViewCreatedAtIn(values ...interface{}) FilterApplier {
 	return InCondition{Field: "created_at", Values: values}
 }
 
-// BotIdNotIn not in condition
-func BotIdNotIn(values ...interface{}) FilterApplier {
+// BotViewIdNotIn not in condition
+func BotViewIdNotIn(values ...interface{}) FilterApplier {
 	return NotInCondition{Field: "id", Values: values}
 }
 
-// BotUserIdNotIn not in condition
-func BotUserIdNotIn(values ...interface{}) FilterApplier {
+// BotViewUserIdNotIn not in condition
+func BotViewUserIdNotIn(values ...interface{}) FilterApplier {
 	return NotInCondition{Field: "user_id", Values: values}
 }
 
-// BotCreatedAtNotIn not in condition
-func BotCreatedAtNotIn(values ...interface{}) FilterApplier {
+// BotViewCreatedAtNotIn not in condition
+func BotViewCreatedAtNotIn(values ...interface{}) FilterApplier {
 	return NotInCondition{Field: "created_at", Values: values}
 }
 
-// BotIdOrderBy sorts the result in ascending order.
-func BotIdOrderBy(asc bool) FilterApplier {
+// BotViewIdOrderBy sorts the result in ascending order.
+func BotViewIdOrderBy(asc bool) FilterApplier {
 	return OrderBy("id", asc)
 }
 
-// BotUserIdOrderBy sorts the result in ascending order.
-func BotUserIdOrderBy(asc bool) FilterApplier {
+// BotViewUserIdOrderBy sorts the result in ascending order.
+func BotViewUserIdOrderBy(asc bool) FilterApplier {
 	return OrderBy("user_id", asc)
 }
 
-// BotCreatedAtOrderBy sorts the result in ascending order.
-func BotCreatedAtOrderBy(asc bool) FilterApplier {
+// BotViewCreatedAtOrderBy sorts the result in ascending order.
+func BotViewCreatedAtOrderBy(asc bool) FilterApplier {
 	return OrderBy("created_at", asc)
 }
 
-// Create creates a new Bot.
-func (t *botStorage) Create(ctx context.Context, model *Bot, opts ...Option) error {
+// Create creates a new BotView.
+func (t *botViewStorage) Create(ctx context.Context, model *BotView, opts ...Option) error {
 	if model == nil {
 		return errors.New("model is nil")
 	}
@@ -396,7 +396,7 @@ func (t *botStorage) Create(ctx context.Context, model *Bot, opts ...Option) err
 		o(options)
 	}
 
-	query := t.queryBuilder.Insert("bots").
+	query := t.queryBuilder.Insert("bots_view").
 		Columns(
 			"user_id",
 			"name",
@@ -424,14 +424,14 @@ func (t *botStorage) Create(ctx context.Context, model *Bot, opts ...Option) err
 
 	_, err = t.DB().ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to create Bot")
+		return errors.Wrap(err, "failed to create BotView")
 	}
 
 	return nil
 }
 
-// BatchCreate creates multiple Bot records in a single batch.
-func (t *botStorage) BatchCreate(ctx context.Context, models []*Bot, opts ...Option) error {
+// BatchCreate creates multiple BotView records in a single batch.
+func (t *botViewStorage) BatchCreate(ctx context.Context, models []*BotView, opts ...Option) error {
 	if len(models) == 0 {
 		return errors.New("no models to insert")
 	}
@@ -494,25 +494,25 @@ func (t *botStorage) BatchCreate(ctx context.Context, models []*Bot, opts ...Opt
 	return nil
 }
 
-// FindById retrieves a Bot by its id.
-func (t *botStorage) FindById(ctx context.Context, id string, opts ...Option) (*Bot, error) {
+// FindById retrieves a BotView by its id.
+func (t *botViewStorage) FindById(ctx context.Context, id string, opts ...Option) (*BotView, error) {
 	builder := NewQueryBuilder()
 	{
-		builder.WithFilter(BotIdEq(id))
+		builder.WithFilter(BotViewIdEq(id))
 		builder.WithOptions(opts...)
 	}
 
 	// Use FindOne to get a single result
 	model, err := t.FindOne(ctx, builder)
 	if err != nil {
-		return nil, errors.Wrap(err, "find one Bot: ")
+		return nil, errors.Wrap(err, "find one BotView: ")
 	}
 
 	return model, nil
 }
 
-// FindMany finds multiple Bot based on the provided options.
-func (t *botStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) ([]*Bot, error) {
+// FindMany finds multiple BotView based on the provided options.
+func (t *botViewStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) ([]*BotView, error) {
 	// build query
 	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName())
 
@@ -571,11 +571,11 @@ func (t *botStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) ([
 		}
 	}()
 
-	var results []*Bot
+	var results []*BotView
 	for rows.Next() {
-		model := &Bot{}
+		model := &BotView{}
 		if err := model.ScanRows(rows); err != nil {
-			return nil, errors.Wrap(err, "failed to scan Bot")
+			return nil, errors.Wrap(err, "failed to scan BotView")
 		}
 		results = append(results, model)
 	}
@@ -587,13 +587,13 @@ func (t *botStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) ([
 	return results, nil
 }
 
-// FindOne finds a single Bot based on the provided options.
-func (t *botStorage) FindOne(ctx context.Context, builders ...*QueryBuilder) (*Bot, error) {
+// FindOne finds a single BotView based on the provided options.
+func (t *botViewStorage) FindOne(ctx context.Context, builders ...*QueryBuilder) (*BotView, error) {
 	// Use findMany but limit the results to 1
 	builders = append(builders, LimitBuilder(1))
 	results, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to findOne Bot")
+		return nil, errors.Wrap(err, "failed to findOne BotView")
 	}
 
 	if len(results) == 0 {
@@ -603,14 +603,14 @@ func (t *botStorage) FindOne(ctx context.Context, builders ...*QueryBuilder) (*B
 	return results[0], nil
 }
 
-// FindManyWithCursorPagination finds multiple Bot using cursor-based pagination.
-func (t *botStorage) FindManyWithCursorPagination(
+// FindManyWithCursorPagination finds multiple BotView using cursor-based pagination.
+func (t *botViewStorage) FindManyWithCursorPagination(
 	ctx context.Context,
 	limit int,
 	cursor *string,
 	cursorProvider CursorProvider,
 	builders ...*QueryBuilder,
-) ([]*Bot, *CursorPaginator, error) {
+) ([]*BotView, *CursorPaginator, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -626,7 +626,7 @@ func (t *botStorage) FindManyWithCursorPagination(
 	builders = append(builders, LimitBuilder(uint64(limit+1)))
 	records, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to find Bot")
+		return nil, nil, errors.Wrap(err, "failed to find BotView")
 	}
 
 	var nextCursor *string
@@ -648,18 +648,18 @@ func (t *botStorage) FindManyWithCursorPagination(
 
 // Query executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *botStorage) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+func (t *botViewStorage) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	return t.DB().ExecContext(ctx, query, args...)
 }
 
 // QueryRow executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *botStorage) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
+func (t *botViewStorage) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	return t.DB().QueryRowContext(ctx, query, args...)
 }
 
 // QueryRows executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *botStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+func (t *botViewStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	return t.DB().QueryContext(ctx, query, args...)
 }

@@ -123,7 +123,6 @@ func (t *tableTemplater) Imports() importpkg.ImportSet {
 		importpkg.ImportLibPQ,
 		importpkg.ImportErrors,
 		importpkg.ImportSquirrel,
-		importpkg.ImportMath,
 	)
 
 	tmp := t.BuildTemplate()

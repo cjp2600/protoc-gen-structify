@@ -91,29 +91,15 @@ func (i *initTemplater) Imports() importpkg.ImportSet {
 	is := importpkg.ImportSet{}
 	is.Enable(
 		importpkg.ImportDb,
-		importpkg.ImportLibPQ,
 		importpkg.ImportFMT,
 		importpkg.ImportErrors,
 		importpkg.ImportJson,
-		importpkg.ImportSQLDriver,
-		importpkg.ImportLibPQWOAlias,
 		importpkg.ImportStrings,
 		importpkg.ImportContext,
 		importpkg.ImportSquirrel,
+		importpkg.ImportClickhouse,
+		importpkg.ImportClickhouseDriver,
 	)
-
-	if i.IncludeConnection {
-		is.Add(importpkg.ImportTime)
-		is.Add(importpkg.ImportStrconv)
-	}
-
-	/*	tmp := i.BuildTemplate()
-		if strings.Contains(tmp, "time.Time") {
-			is.Add(importpkg.ImportTime)
-		}
-		if strings.Contains(tmp, "strconv.") {
-			is.Add(importpkg.ImportStrconv)
-		}*/
 
 	return is
 }

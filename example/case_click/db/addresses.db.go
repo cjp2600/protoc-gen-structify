@@ -6,8 +6,6 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
-	"gopkg.in/guregu/null.v4"
-	"math"
 	"time"
 )
 
@@ -19,10 +17,8 @@ type addressStorage struct {
 
 // AddressCRUDOperations is an interface for managing the addresses table.
 type AddressCRUDOperations interface {
-	Create(ctx context.Context, model *Address, opts ...Option) (*string, error)
-	BatchCreate(ctx context.Context, models []*Address, opts ...Option) ([]string, error)
-	Update(ctx context.Context, id string, updateData *AddressUpdate) error
-	DeleteById(ctx context.Context, id string, opts ...Option) error
+	Create(ctx context.Context, model *Address, opts ...Option) error
+	BatchCreate(ctx context.Context, models []*Address, opts ...Option) error
 	FindById(ctx context.Context, id string, opts ...Option) (*Address, error)
 }
 
@@ -30,13 +26,11 @@ type AddressCRUDOperations interface {
 type AddressSearchOperations interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*Address, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Address, error)
-	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
-	SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Address, error)
 }
 
 // AddressPaginationOperations is an interface for pagination operations.
 type AddressPaginationOperations interface {
-	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Address, *Paginator, error)
+	FindManyWithCursorPagination(ctx context.Context, limit int, cursor *string, cursorProvider CursorProvider, builders ...*QueryBuilder) ([]*Address, *CursorPaginator, error)
 }
 
 // AddressRelationLoading is an interface for loading relations.
@@ -45,16 +39,11 @@ type AddressRelationLoading interface {
 	LoadBatchUser(ctx context.Context, items []*Address, builders ...*QueryBuilder) error
 }
 
-// AddressAdvancedDeletion is an interface for advanced deletion operations.
-type AddressAdvancedDeletion interface {
-	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
-}
-
 // AddressRawQueryOperations is an interface for executing raw queries.
 type AddressRawQueryOperations interface {
-	Query(ctx context.Context, isWrite bool, query string, args ...interface{}) (sql.Result, error)
-	QueryRow(ctx context.Context, isWrite bool, query string, args ...interface{}) *sql.Row
-	QueryRows(ctx context.Context, isWrite bool, query string, args ...interface{}) (*sql.Rows, error)
+	Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
+	QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 }
 
 // AddressStorage is a struct for the "addresses" table.
@@ -63,7 +52,6 @@ type AddressStorage interface {
 	AddressSearchOperations
 	AddressPaginationOperations
 	AddressRelationLoading
-	AddressAdvancedDeletion
 	AddressRawQueryOperations
 }
 
@@ -73,18 +61,12 @@ func NewAddressStorage(config *Config) (AddressStorage, error) {
 		return nil, errors.New("config is nil")
 	}
 	if config.DB == nil {
-		return nil, errors.New("config.DB is nil")
-	}
-	if config.DB.DBRead == nil {
-		return nil, errors.New("config.DB.DBRead is nil")
-	}
-	if config.DB.DBWrite == nil {
-		config.DB.DBWrite = config.DB.DBRead
+		return nil, errors.New("config.DB connection is nil")
 	}
 
 	return &addressStorage{
 		config:       config,
-		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
+		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Question),
 	}, nil
 }
 
@@ -115,28 +97,8 @@ func (t *addressStorage) Columns() []string {
 }
 
 // DB returns the underlying DB. This is useful for doing transactions.
-func (t *addressStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
-	var db QueryExecer
-
-	// Check if there is an active transaction in the context.
-	if tx, ok := TxFromContext(ctx); ok {
-		if tx == nil {
-			t.logError(ctx, errors.New("transaction is nil"), "failed to get transaction from context")
-			// set default connection
-			return t.config.DB.DBWrite
-		}
-
-		return tx
-	}
-
-	// Use the appropriate connection based on the operation type.
-	if isWrite {
-		db = t.config.DB.DBWrite
-	} else {
-		db = t.config.DB.DBRead
-	}
-
-	return db
+func (t *addressStorage) DB() QueryExecer {
+	return t.config.DB
 }
 
 // LoadUser loads the User relation.
@@ -200,15 +162,15 @@ func (t *addressStorage) LoadBatchUser(ctx context.Context, items []*Address, bu
 
 // Address is a struct for the "addresses" table.
 type Address struct {
-	Id        string `db:"id"`
-	Street    string `db:"street"`
-	City      string `db:"city"`
-	State     int32  `db:"state"`
-	Zip       int64  `db:"zip"`
+	Id        string
+	Street    string
+	City      string
+	State     int32
+	Zip       int64
 	User      *User
-	UserId    string     `db:"user_id"`
-	CreatedAt time.Time  `db:"created_at"`
-	UpdatedAt *time.Time `db:"updated_at"`
+	UserId    string
+	CreatedAt time.Time
+	UpdatedAt *time.Time
 }
 
 // TableName returns the table name.
@@ -372,9 +334,9 @@ func AddressUserIdOrderBy(asc bool) FilterApplier {
 }
 
 // Create creates a new Address.
-func (t *addressStorage) Create(ctx context.Context, model *Address, opts ...Option) (*string, error) {
+func (t *addressStorage) Create(ctx context.Context, model *Address, opts ...Option) error {
 	if model == nil {
-		return nil, errors.New("model is nil")
+		return errors.New("model is nil")
 	}
 
 	// set default options
@@ -403,32 +365,24 @@ func (t *addressStorage) Create(ctx context.Context, model *Address, opts ...Opt
 			nullValue(model.UpdatedAt),
 		)
 
-	// add RETURNING "id" to query
-	query = query.Suffix("RETURNING \"id\"")
-
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return errors.Wrap(err, "failed to build query")
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	var id string
-	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
+	_, err = t.DB().ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		if IsPgUniqueViolation(err) {
-			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
-		}
-
-		return nil, errors.Wrap(err, "failed to create Address")
+		return errors.Wrap(err, "failed to create Address")
 	}
 
-	return &id, nil
+	return nil
 }
 
 // BatchCreate creates multiple Address records in a single batch.
-func (t *addressStorage) BatchCreate(ctx context.Context, models []*Address, opts ...Option) ([]string, error) {
+func (t *addressStorage) BatchCreate(ctx context.Context, models []*Address, opts ...Option) error {
 	if len(models) == 0 {
-		return nil, errors.New("no models to insert")
+		return errors.New("no models to insert")
 	}
 
 	options := &Options{}
@@ -437,7 +391,7 @@ func (t *addressStorage) BatchCreate(ctx context.Context, models []*Address, opt
 	}
 
 	if options.relations {
-		return nil, errors.New("relations are not supported in batch create")
+		return errors.New("relations are not supported in batch create")
 	}
 
 	query := t.queryBuilder.Insert(t.TableName()).
@@ -453,7 +407,7 @@ func (t *addressStorage) BatchCreate(ctx context.Context, models []*Address, opt
 
 	for _, model := range models {
 		if model == nil {
-			return nil, errors.New("one of the models is nil")
+			return errors.New("one of the models is nil")
 		}
 		query = query.Values(
 			model.Street,
@@ -466,24 +420,15 @@ func (t *addressStorage) BatchCreate(ctx context.Context, models []*Address, opt
 		)
 	}
 
-	if options.ignoreConflictField != "" {
-		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO NOTHING RETURNING \"id\"")
-	} else {
-		query = query.Suffix("RETURNING \"id\"")
-	}
-
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return errors.Wrap(err, "failed to build query")
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		if IsPgUniqueViolation(err) {
-			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
-		}
-		return nil, errors.Wrap(err, "failed to execute bulk insert")
+		return errors.Wrap(err, "failed to execute bulk insert")
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -491,152 +436,8 @@ func (t *addressStorage) BatchCreate(ctx context.Context, models []*Address, opt
 		}
 	}()
 
-	var returnIDs []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, errors.Wrap(err, "failed to scan id")
-		}
-		returnIDs = append(returnIDs, id)
-	}
-
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "rows iteration error")
-	}
-
-	return returnIDs, nil
-}
-
-// AddressUpdate is used to update an existing Address.
-type AddressUpdate struct {
-	// Use regular pointer types for non-optional fields
-	Street *string
-	// Use regular pointer types for non-optional fields
-	City *string
-	// Use regular pointer types for non-optional fields
-	State *int32
-	// Use regular pointer types for non-optional fields
-	Zip *int64
-	// Use regular pointer types for non-optional fields
-	UserId *string
-	// Use regular pointer types for non-optional fields
-	CreatedAt *time.Time
-	// Use null types for optional fields
-	UpdatedAt null.Time
-}
-
-// Update updates an existing Address based on non-nil fields.
-func (t *addressStorage) Update(ctx context.Context, id string, updateData *AddressUpdate) error {
-	if updateData == nil {
-		return errors.New("update data is nil")
-	}
-
-	query := t.queryBuilder.Update("addresses")
-	// Handle fields that are not optional using a nil check
-	if updateData.Street != nil {
-		query = query.Set("street", *updateData.Street) // Dereference pointer value
-	}
-	// Handle fields that are not optional using a nil check
-	if updateData.City != nil {
-		query = query.Set("city", *updateData.City) // Dereference pointer value
-	}
-	// Handle fields that are not optional using a nil check
-	if updateData.State != nil {
-		query = query.Set("state", *updateData.State) // Dereference pointer value
-	}
-	// Handle fields that are not optional using a nil check
-	if updateData.Zip != nil {
-		query = query.Set("zip", *updateData.Zip) // Dereference pointer value
-	}
-	// Handle fields that are not optional using a nil check
-	if updateData.UserId != nil {
-		query = query.Set("user_id", *updateData.UserId) // Dereference pointer value
-	}
-	// Handle fields that are not optional using a nil check
-	if updateData.CreatedAt != nil {
-		query = query.Set("created_at", *updateData.CreatedAt) // Dereference pointer value
-	}
-	// Handle fields that are optional and can be explicitly set to NULL
-	if updateData.UpdatedAt.Valid {
-		// Handle null.Time specifically
-		if updateData.UpdatedAt.Time.IsZero() {
-			query = query.Set("updated_at", nil) // Explicitly set NULL if time is zero
-		} else {
-			query = query.Set("updated_at", updateData.UpdatedAt.Time)
-		}
-	}
-
-	query = query.Where("id = ?", id)
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to update Address")
-	}
-
-	return nil
-}
-
-// DeleteById - deletes a Address by its id.
-func (t *addressStorage) DeleteById(ctx context.Context, id string, opts ...Option) error {
-	// set default options
-	options := &Options{}
-	for _, o := range opts {
-		o(options)
-	}
-
-	query := t.queryBuilder.Delete("addresses").Where("id = ?", id)
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete Address")
-	}
-
-	return nil
-}
-
-// DeleteMany removes entries from the addresses table using the provided filters
-func (t *addressStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilder) error {
-	// build query
-	query := t.queryBuilder.Delete("addresses")
-
-	var withFilter bool
-	for _, builder := range builders {
-		if builder == nil {
-			continue
-		}
-
-		// apply filter options
-		for _, option := range builder.filterOptions {
-			query = option.ApplyDelete(query)
-			withFilter = true
-		}
-	}
-
-	if !withFilter {
-		return errors.New("filters are required for delete operation")
-	}
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete addresses")
+		return errors.Wrap(err, "rows iteration error")
 	}
 
 	return nil
@@ -709,7 +510,7 @@ func (t *addressStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
@@ -751,125 +552,63 @@ func (t *addressStorage) FindOne(ctx context.Context, builders ...*QueryBuilder)
 	return results[0], nil
 }
 
-// Count counts Address based on the provided options.
-func (t *addressStorage) Count(ctx context.Context, builders ...*QueryBuilder) (int64, error) {
-	// build query
-	query := t.queryBuilder.Select("COUNT(*)").From(t.TableName())
-
-	// apply options from builder
-	for _, builder := range builders {
-		if builder == nil {
-			continue
-		}
-
-		// apply filter options
-		for _, option := range builder.filterOptions {
-			query = option.Apply(query)
-		}
-
-		// apply custom filters
-		query = builder.ApplyCustomFilters(query)
+// FindManyWithCursorPagination finds multiple Address using cursor-based pagination.
+func (t *addressStorage) FindManyWithCursorPagination(
+	ctx context.Context,
+	limit int,
+	cursor *string,
+	cursorProvider CursorProvider,
+	builders ...*QueryBuilder,
+) ([]*Address, *CursorPaginator, error) {
+	if limit <= 0 {
+		limit = 10
 	}
 
-	// execute query
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
-	var count int64
-	if err := row.Scan(&count); err != nil {
-		return 0, errors.Wrap(err, "failed to scan count")
+	if cursorProvider == nil {
+		return nil, nil, errors.New("cursor provider is required")
 	}
 
-	return count, nil
-}
-
-// FindManyWithPagination finds multiple Address with pagination support.
-func (t *addressStorage) FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Address, *Paginator, error) {
-	// Count the total number of records
-	totalCount, err := t.Count(ctx, builders...)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to count Address")
+	if cursor != nil && *cursor != "" {
+		builders = append(builders, cursorProvider.CursorBuilder(*cursor))
 	}
 
-	// Calculate offset
-	offset := (page - 1) * limit
-
-	// Build the pagination object
-	paginator := &Paginator{
-		TotalCount: totalCount,
-		Limit:      limit,
-		Page:       page,
-		TotalPages: int(math.Ceil(float64(totalCount) / float64(limit))),
-	}
-
-	// Add pagination to query builder
-	builders = append(builders, PaginateBuilder(uint64(limit), uint64(offset)))
-
-	// Find records using FindMany
+	builders = append(builders, LimitBuilder(uint64(limit+1)))
 	records, err := t.FindMany(ctx, builders...)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to find Address")
 	}
 
+	var nextCursor *string
+	if len(records) > limit {
+		lastRecord := records[limit]
+		records = records[:limit]
+		nextCursor = cursorProvider.GetCursor(lastRecord)
+	}
+
+	paginator := &CursorPaginator{
+		Limit:      limit,
+		NextCursor: nextCursor,
+	}
+
 	return records, paginator, nil
 }
 
-// SelectForUpdate lock locks the Address for the given ID.
-func (t *addressStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Address, error) {
-	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName()).Suffix("FOR UPDATE")
-
-	// apply options from builder
-	for _, builder := range builders {
-		if builder == nil {
-			continue
-		}
-
-		// apply filter options
-		for _, option := range builder.filterOptions {
-			query = option.Apply(query)
-		}
-
-		// apply custom filters
-		query = builder.ApplyCustomFilters(query)
-	}
-
-	// execute query
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
-	var model Address
-	if err := model.ScanRow(row); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrRowNotFound
-		}
-		return nil, errors.Wrap(err, "failed to scan Address")
-	}
-
-	return &model, nil
-}
+// clickhouse does not support row-level locking.
 
 // Query executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *addressStorage) Query(ctx context.Context, isWrite bool, query string, args ...interface{}) (sql.Result, error) {
-	return t.DB(ctx, isWrite).ExecContext(ctx, query, args...)
+func (t *addressStorage) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return t.DB().ExecContext(ctx, query, args...)
 }
 
 // QueryRow executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *addressStorage) QueryRow(ctx context.Context, isWrite bool, query string, args ...interface{}) *sql.Row {
-	return t.DB(ctx, isWrite).QueryRowContext(ctx, query, args...)
+func (t *addressStorage) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	return t.DB().QueryRowContext(ctx, query, args...)
 }
 
 // QueryRows executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *addressStorage) QueryRows(ctx context.Context, isWrite bool, query string, args ...interface{}) (*sql.Rows, error) {
-	return t.DB(ctx, isWrite).QueryContext(ctx, query, args...)
+func (t *addressStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	return t.DB().QueryContext(ctx, query, args...)
 }

@@ -6,7 +6,6 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
-	"math"
 )
 
 // deviceStorage is a struct for the "devices" table.
@@ -18,38 +17,29 @@ type deviceStorage struct {
 // DeviceCRUDOperations is an interface for managing the devices table.
 type DeviceCRUDOperations interface {
 	Create(ctx context.Context, model *Device, opts ...Option) error
-
 	BatchCreate(ctx context.Context, models []*Device, opts ...Option) error
-	Update(ctx context.Context, id int64, updateData *DeviceUpdate) error
 }
 
 // DeviceSearchOperations is an interface for searching the devices table.
 type DeviceSearchOperations interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*Device, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Device, error)
-	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
-	SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Device, error)
 }
 
 // DevicePaginationOperations is an interface for pagination operations.
 type DevicePaginationOperations interface {
-	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Device, *Paginator, error)
+	FindManyWithCursorPagination(ctx context.Context, limit int, cursor *string, cursorProvider CursorProvider, builders ...*QueryBuilder) ([]*Device, *CursorPaginator, error)
 }
 
 // DeviceRelationLoading is an interface for loading relations.
 type DeviceRelationLoading interface {
 }
 
-// DeviceAdvancedDeletion is an interface for advanced deletion operations.
-type DeviceAdvancedDeletion interface {
-	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
-}
-
 // DeviceRawQueryOperations is an interface for executing raw queries.
 type DeviceRawQueryOperations interface {
-	Query(ctx context.Context, isWrite bool, query string, args ...interface{}) (sql.Result, error)
-	QueryRow(ctx context.Context, isWrite bool, query string, args ...interface{}) *sql.Row
-	QueryRows(ctx context.Context, isWrite bool, query string, args ...interface{}) (*sql.Rows, error)
+	Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
+	QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 }
 
 // DeviceStorage is a struct for the "devices" table.
@@ -58,7 +48,6 @@ type DeviceStorage interface {
 	DeviceSearchOperations
 	DevicePaginationOperations
 	DeviceRelationLoading
-	DeviceAdvancedDeletion
 	DeviceRawQueryOperations
 }
 
@@ -68,18 +57,12 @@ func NewDeviceStorage(config *Config) (DeviceStorage, error) {
 		return nil, errors.New("config is nil")
 	}
 	if config.DB == nil {
-		return nil, errors.New("config.DB is nil")
-	}
-	if config.DB.DBRead == nil {
-		return nil, errors.New("config.DB.DBRead is nil")
-	}
-	if config.DB.DBWrite == nil {
-		config.DB.DBWrite = config.DB.DBRead
+		return nil, errors.New("config.DB connection is nil")
 	}
 
 	return &deviceStorage{
 		config:       config,
-		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
+		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Question),
 	}, nil
 }
 
@@ -110,35 +93,15 @@ func (t *deviceStorage) Columns() []string {
 }
 
 // DB returns the underlying DB. This is useful for doing transactions.
-func (t *deviceStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
-	var db QueryExecer
-
-	// Check if there is an active transaction in the context.
-	if tx, ok := TxFromContext(ctx); ok {
-		if tx == nil {
-			t.logError(ctx, errors.New("transaction is nil"), "failed to get transaction from context")
-			// set default connection
-			return t.config.DB.DBWrite
-		}
-
-		return tx
-	}
-
-	// Use the appropriate connection based on the operation type.
-	if isWrite {
-		db = t.config.DB.DBWrite
-	} else {
-		db = t.config.DB.DBRead
-	}
-
-	return db
+func (t *deviceStorage) DB() QueryExecer {
+	return t.config.DB
 }
 
 // Device is a struct for the "devices" table.
 type Device struct {
-	Name   string `db:"name"`
-	Value  string `db:"value"`
-	UserId string `db:"user_id"`
+	Name   string
+	Value  string
+	UserId string
 }
 
 // TableName returns the table name.
@@ -260,12 +223,8 @@ func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Optio
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
+	_, err = t.DB().ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		if IsPgUniqueViolation(err) {
-			return errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
-		}
-
 		return errors.Wrap(err, "failed to create Device")
 	}
 
@@ -305,21 +264,14 @@ func (t *deviceStorage) BatchCreate(ctx context.Context, models []*Device, opts 
 		)
 	}
 
-	if options.ignoreConflictField != "" {
-		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO NOTHING")
-	}
-
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
 		return errors.Wrap(err, "failed to build query")
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		if IsPgUniqueViolation(err) {
-			return errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
-		}
 		return errors.Wrap(err, "failed to execute bulk insert")
 	}
 	defer func() {
@@ -330,88 +282,6 @@ func (t *deviceStorage) BatchCreate(ctx context.Context, models []*Device, opts 
 
 	if err := rows.Err(); err != nil {
 		return errors.Wrap(err, "rows iteration error")
-	}
-
-	return nil
-}
-
-// DeviceUpdate is used to update an existing Device.
-type DeviceUpdate struct {
-	// Use regular pointer types for non-optional fields
-	Name *string
-	// Use regular pointer types for non-optional fields
-	Value *string
-	// Use regular pointer types for non-optional fields
-	UserId *string
-}
-
-// Update updates an existing Device based on non-nil fields.
-func (t *deviceStorage) Update(ctx context.Context, id int64, updateData *DeviceUpdate) error {
-	if updateData == nil {
-		return errors.New("update data is nil")
-	}
-
-	query := t.queryBuilder.Update("devices")
-	// Handle fields that are not optional using a nil check
-	if updateData.Name != nil {
-		query = query.Set("name", *updateData.Name) // Dereference pointer value
-	}
-	// Handle fields that are not optional using a nil check
-	if updateData.Value != nil {
-		query = query.Set("value", *updateData.Value) // Dereference pointer value
-	}
-	// Handle fields that are not optional using a nil check
-	if updateData.UserId != nil {
-		query = query.Set("user_id", *updateData.UserId) // Dereference pointer value
-	}
-
-	query = query.Where("id = ?", id)
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to update Device")
-	}
-
-	return nil
-}
-
-// DeleteMany removes entries from the devices table using the provided filters
-func (t *deviceStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilder) error {
-	// build query
-	query := t.queryBuilder.Delete("devices")
-
-	var withFilter bool
-	for _, builder := range builders {
-		if builder == nil {
-			continue
-		}
-
-		// apply filter options
-		for _, option := range builder.filterOptions {
-			query = option.ApplyDelete(query)
-			withFilter = true
-		}
-	}
-
-	if !withFilter {
-		return errors.New("filters are required for delete operation")
-	}
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete devices")
 	}
 
 	return nil
@@ -467,7 +337,7 @@ func (t *deviceStorage) FindMany(ctx context.Context, builders ...*QueryBuilder)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
@@ -509,125 +379,63 @@ func (t *deviceStorage) FindOne(ctx context.Context, builders ...*QueryBuilder) 
 	return results[0], nil
 }
 
-// Count counts Device based on the provided options.
-func (t *deviceStorage) Count(ctx context.Context, builders ...*QueryBuilder) (int64, error) {
-	// build query
-	query := t.queryBuilder.Select("COUNT(*)").From(t.TableName())
-
-	// apply options from builder
-	for _, builder := range builders {
-		if builder == nil {
-			continue
-		}
-
-		// apply filter options
-		for _, option := range builder.filterOptions {
-			query = option.Apply(query)
-		}
-
-		// apply custom filters
-		query = builder.ApplyCustomFilters(query)
+// FindManyWithCursorPagination finds multiple Device using cursor-based pagination.
+func (t *deviceStorage) FindManyWithCursorPagination(
+	ctx context.Context,
+	limit int,
+	cursor *string,
+	cursorProvider CursorProvider,
+	builders ...*QueryBuilder,
+) ([]*Device, *CursorPaginator, error) {
+	if limit <= 0 {
+		limit = 10
 	}
 
-	// execute query
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
-	var count int64
-	if err := row.Scan(&count); err != nil {
-		return 0, errors.Wrap(err, "failed to scan count")
+	if cursorProvider == nil {
+		return nil, nil, errors.New("cursor provider is required")
 	}
 
-	return count, nil
-}
-
-// FindManyWithPagination finds multiple Device with pagination support.
-func (t *deviceStorage) FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*Device, *Paginator, error) {
-	// Count the total number of records
-	totalCount, err := t.Count(ctx, builders...)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to count Device")
+	if cursor != nil && *cursor != "" {
+		builders = append(builders, cursorProvider.CursorBuilder(*cursor))
 	}
 
-	// Calculate offset
-	offset := (page - 1) * limit
-
-	// Build the pagination object
-	paginator := &Paginator{
-		TotalCount: totalCount,
-		Limit:      limit,
-		Page:       page,
-		TotalPages: int(math.Ceil(float64(totalCount) / float64(limit))),
-	}
-
-	// Add pagination to query builder
-	builders = append(builders, PaginateBuilder(uint64(limit), uint64(offset)))
-
-	// Find records using FindMany
+	builders = append(builders, LimitBuilder(uint64(limit+1)))
 	records, err := t.FindMany(ctx, builders...)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to find Device")
 	}
 
+	var nextCursor *string
+	if len(records) > limit {
+		lastRecord := records[limit]
+		records = records[:limit]
+		nextCursor = cursorProvider.GetCursor(lastRecord)
+	}
+
+	paginator := &CursorPaginator{
+		Limit:      limit,
+		NextCursor: nextCursor,
+	}
+
 	return records, paginator, nil
 }
 
-// SelectForUpdate lock locks the Device for the given ID.
-func (t *deviceStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*Device, error) {
-	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName()).Suffix("FOR UPDATE")
-
-	// apply options from builder
-	for _, builder := range builders {
-		if builder == nil {
-			continue
-		}
-
-		// apply filter options
-		for _, option := range builder.filterOptions {
-			query = option.Apply(query)
-		}
-
-		// apply custom filters
-		query = builder.ApplyCustomFilters(query)
-	}
-
-	// execute query
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
-	var model Device
-	if err := model.ScanRow(row); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrRowNotFound
-		}
-		return nil, errors.Wrap(err, "failed to scan Device")
-	}
-
-	return &model, nil
-}
+// clickhouse does not support row-level locking.
 
 // Query executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *deviceStorage) Query(ctx context.Context, isWrite bool, query string, args ...interface{}) (sql.Result, error) {
-	return t.DB(ctx, isWrite).ExecContext(ctx, query, args...)
+func (t *deviceStorage) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return t.DB().ExecContext(ctx, query, args...)
 }
 
 // QueryRow executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *deviceStorage) QueryRow(ctx context.Context, isWrite bool, query string, args ...interface{}) *sql.Row {
-	return t.DB(ctx, isWrite).QueryRowContext(ctx, query, args...)
+func (t *deviceStorage) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	return t.DB().QueryRowContext(ctx, query, args...)
 }
 
 // QueryRows executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *deviceStorage) QueryRows(ctx context.Context, isWrite bool, query string, args ...interface{}) (*sql.Rows, error) {
-	return t.DB(ctx, isWrite).QueryContext(ctx, query, args...)
+func (t *deviceStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	return t.DB().QueryContext(ctx, query, args...)
 }

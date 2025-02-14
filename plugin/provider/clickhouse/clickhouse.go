@@ -2,7 +2,7 @@ package clickhouse
 
 import (
 	importpkg "github.com/cjp2600/protoc-gen-structify/plugin/import"
-	templaterpkg "github.com/cjp2600/protoc-gen-structify/plugin/provider/postgres/templater"
+	templaterpkg "github.com/cjp2600/protoc-gen-structify/plugin/provider/clickhouse/templater"
 	statepkg "github.com/cjp2600/protoc-gen-structify/plugin/state"
 )
 

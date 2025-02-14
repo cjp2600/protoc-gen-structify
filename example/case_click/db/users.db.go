@@ -6,8 +6,6 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
-	"gopkg.in/guregu/null.v4"
-	"math"
 	"time"
 )
 
@@ -19,10 +17,8 @@ type userStorage struct {
 
 // UserCRUDOperations is an interface for managing the users table.
 type UserCRUDOperations interface {
-	Create(ctx context.Context, model *User, opts ...Option) (*string, error)
-	BatchCreate(ctx context.Context, models []*User, opts ...Option) ([]string, error)
-	Update(ctx context.Context, id string, updateData *UserUpdate) error
-	DeleteById(ctx context.Context, id string, opts ...Option) error
+	Create(ctx context.Context, model *User, opts ...Option) error
+	BatchCreate(ctx context.Context, models []*User, opts ...Option) error
 	FindById(ctx context.Context, id string, opts ...Option) (*User, error)
 }
 
@@ -30,13 +26,11 @@ type UserCRUDOperations interface {
 type UserSearchOperations interface {
 	FindMany(ctx context.Context, builder ...*QueryBuilder) ([]*User, error)
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*User, error)
-	Count(ctx context.Context, builders ...*QueryBuilder) (int64, error)
-	SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*User, error)
 }
 
 // UserPaginationOperations is an interface for pagination operations.
 type UserPaginationOperations interface {
-	FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*User, *Paginator, error)
+	FindManyWithCursorPagination(ctx context.Context, limit int, cursor *string, cursorProvider CursorProvider, builders ...*QueryBuilder) ([]*User, *CursorPaginator, error)
 }
 
 // UserRelationLoading is an interface for loading relations.
@@ -51,16 +45,11 @@ type UserRelationLoading interface {
 	LoadBatchPosts(ctx context.Context, items []*User, builders ...*QueryBuilder) error
 }
 
-// UserAdvancedDeletion is an interface for advanced deletion operations.
-type UserAdvancedDeletion interface {
-	DeleteMany(ctx context.Context, builders ...*QueryBuilder) error
-}
-
 // UserRawQueryOperations is an interface for executing raw queries.
 type UserRawQueryOperations interface {
-	Query(ctx context.Context, isWrite bool, query string, args ...interface{}) (sql.Result, error)
-	QueryRow(ctx context.Context, isWrite bool, query string, args ...interface{}) *sql.Row
-	QueryRows(ctx context.Context, isWrite bool, query string, args ...interface{}) (*sql.Rows, error)
+	Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
+	QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 }
 
 // UserStorage is a struct for the "users" table.
@@ -69,7 +58,6 @@ type UserStorage interface {
 	UserSearchOperations
 	UserPaginationOperations
 	UserRelationLoading
-	UserAdvancedDeletion
 	UserRawQueryOperations
 }
 
@@ -79,18 +67,12 @@ func NewUserStorage(config *Config) (UserStorage, error) {
 		return nil, errors.New("config is nil")
 	}
 	if config.DB == nil {
-		return nil, errors.New("config.DB is nil")
-	}
-	if config.DB.DBRead == nil {
-		return nil, errors.New("config.DB.DBRead is nil")
-	}
-	if config.DB.DBWrite == nil {
-		config.DB.DBWrite = config.DB.DBRead
+		return nil, errors.New("config.DB connection is nil")
 	}
 
 	return &userStorage{
 		config:       config,
-		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Dollar),
+		queryBuilder: sq.StatementBuilder.PlaceholderFormat(sq.Question),
 	}, nil
 }
 
@@ -121,28 +103,8 @@ func (t *userStorage) Columns() []string {
 }
 
 // DB returns the underlying DB. This is useful for doing transactions.
-func (t *userStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
-	var db QueryExecer
-
-	// Check if there is an active transaction in the context.
-	if tx, ok := TxFromContext(ctx); ok {
-		if tx == nil {
-			t.logError(ctx, errors.New("transaction is nil"), "failed to get transaction from context")
-			// set default connection
-			return t.config.DB.DBWrite
-		}
-
-		return tx
-	}
-
-	// Use the appropriate connection based on the operation type.
-	if isWrite {
-		db = t.config.DB.DBWrite
-	} else {
-		db = t.config.DB.DBRead
-	}
-
-	return db
+func (t *userStorage) DB() QueryExecer {
+	return t.config.DB
 }
 
 // LoadDevice loads the Device relation.
@@ -383,22 +345,22 @@ func (t *userStorage) LoadBatchPosts(ctx context.Context, items []*User, builder
 
 // User is a struct for the "users" table.
 type User struct {
-	Id                   string  `db:"id"`
-	Name                 string  `db:"name"`
-	Age                  int32   `db:"age"`
-	Email                string  `db:"email"`
-	LastName             *string `db:"last_name"`
+	Id                   string
+	Name                 string
+	Age                  int32
+	Email                string
+	LastName             *string
 	Device               *Device
 	Settings             *Setting
 	Addresses            []*Address
 	Posts                []*Post
-	CreatedAt            time.Time                `db:"created_at"`
-	UpdatedAt            *time.Time               `db:"updated_at"`
-	NotificationSettings *UserNotificationSetting `db:"notification_settings"`
-	Phones               UserPhonesRepeated       `db:"phones"`
-	Balls                UserBallsRepeated        `db:"balls"`
-	Numrs                UserNumrsRepeated        `db:"numrs"`
-	Comments             UserCommentsRepeated     `db:"comments"`
+	CreatedAt            time.Time
+	UpdatedAt            *time.Time
+	NotificationSettings *UserNotificationSetting
+	Phones               UserPhonesRepeated
+	Balls                UserBallsRepeated
+	Numrs                UserNumrsRepeated
+	Comments             UserCommentsRepeated
 }
 
 // TableName returns the table name.
@@ -683,9 +645,9 @@ func UserEmailOrderBy(asc bool) FilterApplier {
 }
 
 // Create creates a new User.
-func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) (*string, error) {
+func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) error {
 	if model == nil {
-		return nil, errors.New("model is nil")
+		return errors.New("model is nil")
 	}
 
 	// set default options
@@ -696,22 +658,22 @@ func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) (
 	// get value of phones
 	phones, err := model.Phones.Value()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get value of Phones")
+		return errors.Wrap(err, "failed to get value of Phones")
 	}
 	// get value of balls
 	balls, err := model.Balls.Value()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get value of Balls")
+		return errors.Wrap(err, "failed to get value of Balls")
 	}
 	// get value of numrs
 	numrs, err := model.Numrs.Value()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get value of Numrs")
+		return errors.Wrap(err, "failed to get value of Numrs")
 	}
 	// get value of comments
 	comments, err := model.Comments.Value()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get value of Comments")
+		return errors.Wrap(err, "failed to get value of Comments")
 	}
 
 	query := t.queryBuilder.Insert("users").
@@ -742,71 +704,59 @@ func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) (
 			comments,
 		)
 
-	// add RETURNING "id" to query
-	query = query.Suffix("RETURNING \"id\"")
-
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return errors.Wrap(err, "failed to build query")
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	var id string
-	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
+	_, err = t.DB().ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		if IsPgUniqueViolation(err) {
-			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
-		}
-
-		return nil, errors.Wrap(err, "failed to create User")
+		return errors.Wrap(err, "failed to create User")
 	}
-
 	if options.relations && model.Device != nil {
 		s, err := NewDeviceStorage(t.config)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create Device")
+			return errors.Wrap(err, "failed to create Device")
 		}
 
-		model.Device.UserId = id
 		err = s.Create(ctx, model.Device)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create Device")
+			return errors.Wrap(err, "failed to create Device")
 		}
 	}
 	if options.relations && model.Settings != nil {
 		s, err := NewSettingStorage(t.config)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create Settings")
+			return errors.Wrap(err, "failed to create Settings")
 		}
 
-		model.Settings.UserId = id
-		_, err = s.Create(ctx, model.Settings)
+		err = s.Create(ctx, model.Settings)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create Settings")
+			return errors.Wrap(err, "failed to create Settings")
 		}
 	}
 	if options.relations && model.Addresses != nil {
 		for _, item := range model.Addresses {
-			item.UserId = id
 			s, err := NewAddressStorage(t.config)
 			if err != nil {
-				return nil, errors.Wrap(err, "failed to create Addresses")
+				return errors.Wrap(err, "failed to create Addresses")
 			}
 
-			_, err = s.Create(ctx, item)
+			err = s.Create(ctx, item)
 			if err != nil {
-				return nil, errors.Wrap(err, "failed to create Addresses")
+				return errors.Wrap(err, "failed to create Addresses")
 			}
 		}
 	}
 
-	return &id, nil
+	return nil
 }
 
 // BatchCreate creates multiple User records in a single batch.
-func (t *userStorage) BatchCreate(ctx context.Context, models []*User, opts ...Option) ([]string, error) {
+func (t *userStorage) BatchCreate(ctx context.Context, models []*User, opts ...Option) error {
 	if len(models) == 0 {
-		return nil, errors.New("no models to insert")
+		return errors.New("no models to insert")
 	}
 
 	options := &Options{}
@@ -815,7 +765,7 @@ func (t *userStorage) BatchCreate(ctx context.Context, models []*User, opts ...O
 	}
 
 	if options.relations {
-		return nil, errors.New("relations are not supported in batch create")
+		return errors.New("relations are not supported in batch create")
 	}
 
 	query := t.queryBuilder.Insert(t.TableName()).
@@ -835,7 +785,7 @@ func (t *userStorage) BatchCreate(ctx context.Context, models []*User, opts ...O
 
 	for _, model := range models {
 		if model == nil {
-			return nil, errors.New("one of the models is nil")
+			return errors.New("one of the models is nil")
 		}
 		query = query.Values(
 			model.Name,
@@ -852,24 +802,15 @@ func (t *userStorage) BatchCreate(ctx context.Context, models []*User, opts ...O
 		)
 	}
 
-	if options.ignoreConflictField != "" {
-		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO NOTHING RETURNING \"id\"")
-	} else {
-		query = query.Suffix("RETURNING \"id\"")
-	}
-
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return errors.Wrap(err, "failed to build query")
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		if IsPgUniqueViolation(err) {
-			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
-		}
-		return nil, errors.Wrap(err, "failed to execute bulk insert")
+		return errors.Wrap(err, "failed to execute bulk insert")
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -877,185 +818,8 @@ func (t *userStorage) BatchCreate(ctx context.Context, models []*User, opts ...O
 		}
 	}()
 
-	var returnIDs []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, errors.Wrap(err, "failed to scan id")
-		}
-		returnIDs = append(returnIDs, id)
-	}
-
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "rows iteration error")
-	}
-
-	return returnIDs, nil
-}
-
-// UserUpdate is used to update an existing User.
-type UserUpdate struct {
-	// Use regular pointer types for non-optional fields
-	Name *string
-	// Use regular pointer types for non-optional fields
-	Age *int32
-	// Use regular pointer types for non-optional fields
-	Email *string
-	// Use null types for optional fields
-	LastName null.String
-	// Use regular pointer types for non-optional fields
-	CreatedAt *time.Time
-	// Use null types for optional fields
-	UpdatedAt null.Time
-	// Use null types for optional fields
-	NotificationSettings NullableJSON[*UserNotificationSetting]
-	// Use regular pointer types for non-optional fields
-	Phones *UserPhonesRepeated
-	// Use regular pointer types for non-optional fields
-	Balls *UserBallsRepeated
-	// Use regular pointer types for non-optional fields
-	Numrs *UserNumrsRepeated
-	// Use regular pointer types for non-optional fields
-	Comments *UserCommentsRepeated
-}
-
-// Update updates an existing User based on non-nil fields.
-func (t *userStorage) Update(ctx context.Context, id string, updateData *UserUpdate) error {
-	if updateData == nil {
-		return errors.New("update data is nil")
-	}
-
-	query := t.queryBuilder.Update("users")
-	// Handle fields that are not optional using a nil check
-	if updateData.Name != nil {
-		query = query.Set("name", *updateData.Name) // Dereference pointer value
-	}
-	// Handle fields that are not optional using a nil check
-	if updateData.Age != nil {
-		query = query.Set("age", *updateData.Age) // Dereference pointer value
-	}
-	// Handle fields that are not optional using a nil check
-	if updateData.Email != nil {
-		query = query.Set("email", *updateData.Email) // Dereference pointer value
-	}
-	// Handle fields that are optional and can be explicitly set to NULL
-	if updateData.LastName.Valid {
-		// Handle null.String specifically
-		if updateData.LastName.String == "" {
-			query = query.Set("last_name", nil) // Explicitly set NULL for empty string
-		} else {
-			query = query.Set("last_name", updateData.LastName.ValueOrZero())
-		}
-	}
-	// Handle fields that are not optional using a nil check
-	if updateData.CreatedAt != nil {
-		query = query.Set("created_at", *updateData.CreatedAt) // Dereference pointer value
-	}
-	// Handle fields that are optional and can be explicitly set to NULL
-	if updateData.UpdatedAt.Valid {
-		// Handle null.Time specifically
-		if updateData.UpdatedAt.Time.IsZero() {
-			query = query.Set("updated_at", nil) // Explicitly set NULL if time is zero
-		} else {
-			query = query.Set("updated_at", updateData.UpdatedAt.Time)
-		}
-	}
-	// Handle fields that are optional and can be explicitly set to NULL
-	if updateData.NotificationSettings.Valid {
-		if updateData.NotificationSettings.Data == nil {
-			query = query.Set("notification_settings", nil) // Explicitly set NULL
-		} else {
-			query = query.Set("notification_settings", updateData.NotificationSettings.Data)
-		}
-	}
-	// Handle fields that are not optional using a nil check
-	if updateData.Phones != nil {
-		query = query.Set("phones", *updateData.Phones) // Dereference pointer value
-	}
-	// Handle fields that are not optional using a nil check
-	if updateData.Balls != nil {
-		query = query.Set("balls", *updateData.Balls) // Dereference pointer value
-	}
-	// Handle fields that are not optional using a nil check
-	if updateData.Numrs != nil {
-		query = query.Set("numrs", *updateData.Numrs) // Dereference pointer value
-	}
-	// Handle fields that are not optional using a nil check
-	if updateData.Comments != nil {
-		query = query.Set("comments", *updateData.Comments) // Dereference pointer value
-	}
-
-	query = query.Where("id = ?", id)
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to update User")
-	}
-
-	return nil
-}
-
-// DeleteById - deletes a User by its id.
-func (t *userStorage) DeleteById(ctx context.Context, id string, opts ...Option) error {
-	// set default options
-	options := &Options{}
-	for _, o := range opts {
-		o(options)
-	}
-
-	query := t.queryBuilder.Delete("users").Where("id = ?", id)
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete User")
-	}
-
-	return nil
-}
-
-// DeleteMany removes entries from the users table using the provided filters
-func (t *userStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilder) error {
-	// build query
-	query := t.queryBuilder.Delete("users")
-
-	var withFilter bool
-	for _, builder := range builders {
-		if builder == nil {
-			continue
-		}
-
-		// apply filter options
-		for _, option := range builder.filterOptions {
-			query = option.ApplyDelete(query)
-			withFilter = true
-		}
-	}
-
-	if !withFilter {
-		return errors.New("filters are required for delete operation")
-	}
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to delete users")
+		return errors.Wrap(err, "rows iteration error")
 	}
 
 	return nil
@@ -1128,7 +892,7 @@ func (t *userStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
@@ -1170,125 +934,63 @@ func (t *userStorage) FindOne(ctx context.Context, builders ...*QueryBuilder) (*
 	return results[0], nil
 }
 
-// Count counts User based on the provided options.
-func (t *userStorage) Count(ctx context.Context, builders ...*QueryBuilder) (int64, error) {
-	// build query
-	query := t.queryBuilder.Select("COUNT(*)").From(t.TableName())
-
-	// apply options from builder
-	for _, builder := range builders {
-		if builder == nil {
-			continue
-		}
-
-		// apply filter options
-		for _, option := range builder.filterOptions {
-			query = option.Apply(query)
-		}
-
-		// apply custom filters
-		query = builder.ApplyCustomFilters(query)
+// FindManyWithCursorPagination finds multiple User using cursor-based pagination.
+func (t *userStorage) FindManyWithCursorPagination(
+	ctx context.Context,
+	limit int,
+	cursor *string,
+	cursorProvider CursorProvider,
+	builders ...*QueryBuilder,
+) ([]*User, *CursorPaginator, error) {
+	if limit <= 0 {
+		limit = 10
 	}
 
-	// execute query
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
-	var count int64
-	if err := row.Scan(&count); err != nil {
-		return 0, errors.Wrap(err, "failed to scan count")
+	if cursorProvider == nil {
+		return nil, nil, errors.New("cursor provider is required")
 	}
 
-	return count, nil
-}
-
-// FindManyWithPagination finds multiple User with pagination support.
-func (t *userStorage) FindManyWithPagination(ctx context.Context, limit int, page int, builders ...*QueryBuilder) ([]*User, *Paginator, error) {
-	// Count the total number of records
-	totalCount, err := t.Count(ctx, builders...)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to count User")
+	if cursor != nil && *cursor != "" {
+		builders = append(builders, cursorProvider.CursorBuilder(*cursor))
 	}
 
-	// Calculate offset
-	offset := (page - 1) * limit
-
-	// Build the pagination object
-	paginator := &Paginator{
-		TotalCount: totalCount,
-		Limit:      limit,
-		Page:       page,
-		TotalPages: int(math.Ceil(float64(totalCount) / float64(limit))),
-	}
-
-	// Add pagination to query builder
-	builders = append(builders, PaginateBuilder(uint64(limit), uint64(offset)))
-
-	// Find records using FindMany
+	builders = append(builders, LimitBuilder(uint64(limit+1)))
 	records, err := t.FindMany(ctx, builders...)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to find User")
 	}
 
+	var nextCursor *string
+	if len(records) > limit {
+		lastRecord := records[limit]
+		records = records[:limit]
+		nextCursor = cursorProvider.GetCursor(lastRecord)
+	}
+
+	paginator := &CursorPaginator{
+		Limit:      limit,
+		NextCursor: nextCursor,
+	}
+
 	return records, paginator, nil
 }
 
-// SelectForUpdate lock locks the User for the given ID.
-func (t *userStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBuilder) (*User, error) {
-	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName()).Suffix("FOR UPDATE")
-
-	// apply options from builder
-	for _, builder := range builders {
-		if builder == nil {
-			continue
-		}
-
-		// apply filter options
-		for _, option := range builder.filterOptions {
-			query = option.Apply(query)
-		}
-
-		// apply custom filters
-		query = builder.ApplyCustomFilters(query)
-	}
-
-	// execute query
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
-	var model User
-	if err := model.ScanRow(row); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrRowNotFound
-		}
-		return nil, errors.Wrap(err, "failed to scan User")
-	}
-
-	return &model, nil
-}
+// clickhouse does not support row-level locking.
 
 // Query executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *userStorage) Query(ctx context.Context, isWrite bool, query string, args ...interface{}) (sql.Result, error) {
-	return t.DB(ctx, isWrite).ExecContext(ctx, query, args...)
+func (t *userStorage) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return t.DB().ExecContext(ctx, query, args...)
 }
 
 // QueryRow executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *userStorage) QueryRow(ctx context.Context, isWrite bool, query string, args ...interface{}) *sql.Row {
-	return t.DB(ctx, isWrite).QueryRowContext(ctx, query, args...)
+func (t *userStorage) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	return t.DB().QueryRowContext(ctx, query, args...)
 }
 
 // QueryRows executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
-func (t *userStorage) QueryRows(ctx context.Context, isWrite bool, query string, args ...interface{}) (*sql.Rows, error) {
-	return t.DB(ctx, isWrite).QueryContext(ctx, query, args...)
+func (t *userStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	return t.DB().QueryContext(ctx, query, args...)
 }
