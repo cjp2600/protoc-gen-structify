@@ -397,29 +397,6 @@ func (t *User) ScanRow(row driver.Row) error {
 	)
 }
 
-// ScanRows scans multiple rows into the struct User.
-func (t *User) ScanRows(rows driver.Rows) error {
-	for rows.Next() {
-		if err := rows.Scan(
-			&t.Id,
-			&t.Name,
-			&t.Age,
-			&t.Email,
-			&t.LastName,
-			&t.CreatedAt,
-			&t.UpdatedAt,
-			&t.NotificationSettings,
-			&t.Phones,
-			&t.Balls,
-			&t.Numrs,
-			&t.Comments,
-		); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
-}
-
 // UserFilters is a struct that holds filters for User.
 type UserFilters struct {
 	Id    *string
@@ -1023,7 +1000,7 @@ func (t *userStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 	var results []*User
 	for rows.Next() {
 		model := &User{}
-		if err := model.ScanRows(rows); err != nil {
+		if err := model.ScanRow(rows); err != nil { // Используем ScanRow вместо ScanRows
 			return nil, errors.Wrap(err, "failed to scan User")
 		}
 		results = append(results, model)

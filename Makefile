@@ -47,7 +47,7 @@ endif
 	@$(PROTOC) -I/usr/local/include -I.  \
 	-I$(DB_DIR)/proto \
 	--plugin=protoc-gen-structify=$(GOBIN)/structify \
-	--structify_out=. --structify_opt=paths=source_relative,include_connection=true \
+	--structify_out=. --structify_opt=paths=source_relative,include_connection=false \
 	$(f)
 
 .PHONY: install-protoc

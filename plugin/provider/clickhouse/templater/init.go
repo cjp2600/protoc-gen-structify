@@ -96,9 +96,12 @@ func (i *initTemplater) Imports() importpkg.ImportSet {
 		importpkg.ImportStrings,
 		importpkg.ImportContext,
 		importpkg.ImportSquirrel,
-		importpkg.ImportClickhouse,
 		importpkg.ImportClickhouseDriver,
 	)
+
+	if i.IncludeConnection {
+		is.Add(importpkg.ImportClickhouse)
+	}
 
 	return is
 }

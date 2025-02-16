@@ -130,20 +130,6 @@ func (t *Device) ScanRow(row driver.Row) error {
 	)
 }
 
-// ScanRows scans multiple rows into the struct Device.
-func (t *Device) ScanRows(rows driver.Rows) error {
-	for rows.Next() {
-		if err := rows.Scan(
-			&t.Name,
-			&t.Value,
-			&t.UserId,
-		); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
-}
-
 // DeviceFilters is a struct that holds filters for Device.
 type DeviceFilters struct {
 	UserId *string
@@ -394,7 +380,7 @@ func (t *deviceStorage) FindMany(ctx context.Context, builders ...*QueryBuilder)
 	var results []*Device
 	for rows.Next() {
 		model := &Device{}
-		if err := model.ScanRows(rows); err != nil {
+		if err := model.ScanRow(rows); err != nil { // Используем ScanRow вместо ScanRows
 			return nil, errors.Wrap(err, "failed to scan Device")
 		}
 		results = append(results, model)

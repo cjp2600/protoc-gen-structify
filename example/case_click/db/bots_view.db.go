@@ -203,25 +203,6 @@ func (t *BotView) ScanRow(row driver.Row) error {
 	)
 }
 
-// ScanRows scans multiple rows into the struct BotView.
-func (t *BotView) ScanRows(rows driver.Rows) error {
-	for rows.Next() {
-		if err := rows.Scan(
-			&t.Id,
-			&t.UserId,
-			&t.Name,
-			&t.Token,
-			&t.IsPublish,
-			&t.CreatedAt,
-			&t.UpdatedAt,
-			&t.DeletedAt,
-		); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
-}
-
 // BotViewFilters is a struct that holds filters for BotView.
 type BotViewFilters struct {
 	Id        *string
@@ -609,7 +590,7 @@ func (t *botViewStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	var results []*BotView
 	for rows.Next() {
 		model := &BotView{}
-		if err := model.ScanRows(rows); err != nil {
+		if err := model.ScanRow(rows); err != nil { // Используем ScanRow вместо ScanRows
 			return nil, errors.Wrap(err, "failed to scan BotView")
 		}
 		results = append(results, model)

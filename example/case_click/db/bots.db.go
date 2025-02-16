@@ -203,25 +203,6 @@ func (t *Bot) ScanRow(row driver.Row) error {
 	)
 }
 
-// ScanRows scans multiple rows into the struct Bot.
-func (t *Bot) ScanRows(rows driver.Rows) error {
-	for rows.Next() {
-		if err := rows.Scan(
-			&t.Id,
-			&t.UserId,
-			&t.Name,
-			&t.Token,
-			&t.IsPublish,
-			&t.CreatedAt,
-			&t.UpdatedAt,
-			&t.DeletedAt,
-		); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
-}
-
 // BotFilters is a struct that holds filters for Bot.
 type BotFilters struct {
 	Id        *string
@@ -609,7 +590,7 @@ func (t *botStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) ([
 	var results []*Bot
 	for rows.Next() {
 		model := &Bot{}
-		if err := model.ScanRows(rows); err != nil {
+		if err := model.ScanRow(rows); err != nil { // Используем ScanRow вместо ScanRows
 			return nil, errors.Wrap(err, "failed to scan Bot")
 		}
 		results = append(results, model)

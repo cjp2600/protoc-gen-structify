@@ -194,21 +194,6 @@ func (t *Post) ScanRow(row driver.Row) error {
 	)
 }
 
-// ScanRows scans multiple rows into the struct Post.
-func (t *Post) ScanRows(rows driver.Rows) error {
-	for rows.Next() {
-		if err := rows.Scan(
-			&t.Id,
-			&t.Title,
-			&t.Body,
-			&t.AuthorId,
-		); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
-}
-
 // PostFilters is a struct that holds filters for Post.
 type PostFilters struct {
 	Id       *int32
@@ -510,7 +495,7 @@ func (t *postStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 	var results []*Post
 	for rows.Next() {
 		model := &Post{}
-		if err := model.ScanRows(rows); err != nil {
+		if err := model.ScanRow(rows); err != nil { // Используем ScanRow вместо ScanRows
 			return nil, errors.Wrap(err, "failed to scan Post")
 		}
 		results = append(results, model)

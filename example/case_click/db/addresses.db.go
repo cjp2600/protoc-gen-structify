@@ -203,25 +203,6 @@ func (t *Address) ScanRow(row driver.Row) error {
 	)
 }
 
-// ScanRows scans multiple rows into the struct Address.
-func (t *Address) ScanRows(rows driver.Rows) error {
-	for rows.Next() {
-		if err := rows.Scan(
-			&t.Id,
-			&t.Street,
-			&t.City,
-			&t.State,
-			&t.Zip,
-			&t.UserId,
-			&t.CreatedAt,
-			&t.UpdatedAt,
-		); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
-}
-
 // AddressFilters is a struct that holds filters for Address.
 type AddressFilters struct {
 	Id     *string
@@ -558,7 +539,7 @@ func (t *addressStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	var results []*Address
 	for rows.Next() {
 		model := &Address{}
-		if err := model.ScanRows(rows); err != nil {
+		if err := model.ScanRow(rows); err != nil { // Используем ScanRow вместо ScanRows
 			return nil, errors.Wrap(err, "failed to scan Address")
 		}
 		results = append(results, model)

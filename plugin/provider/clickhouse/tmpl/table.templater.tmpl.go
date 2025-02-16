@@ -350,11 +350,11 @@ func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, build
 			t.logError(ctx, err, "failed to close rows")
 		}
 	}()
-	
+
 	var results []*{{structureName}}
 	for rows.Next() {
 		model := &{{structureName}}{}
-		if err := model.ScanRows(rows); err != nil {
+		if err := model.ScanRow(rows); err != nil { // Используем ScanRow вместо ScanRows
 			return nil, errors.Wrap(err, "failed to scan {{ structureName }}")
 		}
 		results = append(results, model)
@@ -422,22 +422,6 @@ func (t *{{ structureName }}) ScanRow(row driver.Row) error {
 		{{- end }}
 		{{- end }}
 	)
-}
-
-// ScanRows scans multiple rows into the struct {{ structureName }}.
-func (t *{{ structureName }}) ScanRows(rows driver.Rows) error {
-	for rows.Next() {
-		if err := rows.Scan(
-			{{- range $field := fields }}
-			{{- if not ($field | isRelation) }}
-			&t.{{ $field | fieldName }},
-			{{- end }}
-			{{- end }}
-		); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
 }`
 
 const TableBatchCreateMethodTemplate = `

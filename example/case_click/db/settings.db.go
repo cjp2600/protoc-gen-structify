@@ -194,21 +194,6 @@ func (t *Setting) ScanRow(row driver.Row) error {
 	)
 }
 
-// ScanRows scans multiple rows into the struct Setting.
-func (t *Setting) ScanRows(rows driver.Rows) error {
-	for rows.Next() {
-		if err := rows.Scan(
-			&t.Id,
-			&t.Name,
-			&t.Value,
-			&t.UserId,
-		); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
-}
-
 // SettingFilters is a struct that holds filters for Setting.
 type SettingFilters struct {
 	Id     *int32
@@ -510,7 +495,7 @@ func (t *settingStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	var results []*Setting
 	for rows.Next() {
 		model := &Setting{}
-		if err := model.ScanRows(rows); err != nil {
+		if err := model.ScanRow(rows); err != nil { // Используем ScanRow вместо ScanRows
 			return nil, errors.Wrap(err, "failed to scan Setting")
 		}
 		results = append(results, model)

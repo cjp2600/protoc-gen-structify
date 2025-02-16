@@ -335,21 +335,6 @@ func (t *Message) ScanRow(row driver.Row) error {
 	)
 }
 
-// ScanRows scans multiple rows into the struct Message.
-func (t *Message) ScanRows(rows driver.Rows) error {
-	for rows.Next() {
-		if err := rows.Scan(
-			&t.Id,
-			&t.FromUserId,
-			&t.ToUserId,
-			&t.BotId,
-		); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
-}
-
 // MessageFilters is a struct that holds filters for Message.
 type MessageFilters struct {
 	Id       *string
@@ -742,7 +727,7 @@ func (t *messageStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	var results []*Message
 	for rows.Next() {
 		model := &Message{}
-		if err := model.ScanRows(rows); err != nil {
+		if err := model.ScanRow(rows); err != nil { // Используем ScanRow вместо ScanRows
 			return nil, errors.Wrap(err, "failed to scan Message")
 		}
 		results = append(results, model)
