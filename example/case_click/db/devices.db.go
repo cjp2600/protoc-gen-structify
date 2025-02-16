@@ -2,9 +2,8 @@ package db
 
 import (
 	"context"
-	"database/sql"
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	sq "github.com/Masterminds/squirrel"
-	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 )
 
@@ -17,6 +16,7 @@ type deviceStorage struct {
 // DeviceCRUDOperations is an interface for managing the devices table.
 type DeviceCRUDOperations interface {
 	Create(ctx context.Context, model *Device, opts ...Option) error
+	AsyncCreate(ctx context.Context, model *Device, opts ...Option) error
 	BatchCreate(ctx context.Context, models []*Device, opts ...Option) error
 }
 
@@ -26,9 +26,10 @@ type DeviceSearchOperations interface {
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Device, error)
 }
 
-// DevicePaginationOperations is an interface for pagination operations.
-type DevicePaginationOperations interface {
-	FindManyWithCursorPagination(ctx context.Context, limit int, cursor *string, cursorProvider CursorProvider, builders ...*QueryBuilder) ([]*Device, *CursorPaginator, error)
+type DeviceSettings interface {
+	Conn() driver.Conn
+	SetConfig(config *Config) DeviceStorage
+	SetQueryBuilder(builder sq.StatementBuilderType) DeviceStorage
 }
 
 // DeviceRelationLoading is an interface for loading relations.
@@ -37,18 +38,19 @@ type DeviceRelationLoading interface {
 
 // DeviceRawQueryOperations is an interface for executing raw queries.
 type DeviceRawQueryOperations interface {
-	Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
-	QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	Select(ctx context.Context, query string, dest any, args ...any) error
+	Exec(ctx context.Context, query string, args ...interface{}) error
+	QueryRow(ctx context.Context, query string, args ...interface{}) driver.Row
+	QueryRows(ctx context.Context, query string, args ...interface{}) (driver.Rows, error)
 }
 
 // DeviceStorage is a struct for the "devices" table.
 type DeviceStorage interface {
 	DeviceCRUDOperations
 	DeviceSearchOperations
-	DevicePaginationOperations
 	DeviceRelationLoading
 	DeviceRawQueryOperations
+	DeviceSettings
 }
 
 // NewDeviceStorage returns a new deviceStorage.
@@ -97,6 +99,16 @@ func (t *deviceStorage) DB() QueryExecer {
 	return t.config.DB
 }
 
+func (t *deviceStorage) SetConfig(config *Config) DeviceStorage {
+	t.config = config
+	return t
+}
+
+func (t *deviceStorage) SetQueryBuilder(builder sq.StatementBuilderType) DeviceStorage {
+	t.queryBuilder = builder
+	return t
+}
+
 // Device is a struct for the "devices" table.
 type Device struct {
 	Name   string
@@ -110,17 +122,26 @@ func (t *Device) TableName() string {
 }
 
 // ScanRow scans a row into a Device.
-func (t *Device) ScanRow(r *sql.Row) error {
-	return r.Scan(&t.Name, &t.Value, &t.UserId)
-}
-
-// ScanRows scans a single row into the Device.
-func (t *Device) ScanRows(r *sql.Rows) error {
-	return r.Scan(
+func (t *Device) ScanRow(row driver.Row) error {
+	return row.Scan(
 		&t.Name,
 		&t.Value,
 		&t.UserId,
 	)
+}
+
+// ScanRows scans multiple rows into the struct Device.
+func (t *Device) ScanRows(rows driver.Rows) error {
+	for rows.Next() {
+		if err := rows.Scan(
+			&t.Name,
+			&t.Value,
+			&t.UserId,
+		); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
 
 // DeviceFilters is a struct that holds filters for Device.
@@ -193,6 +214,43 @@ func DeviceUserIdOrderBy(asc bool) FilterApplier {
 	return OrderBy("user_id", asc)
 }
 
+// AsyncCreate asynchronously inserts a new Device.
+func (t *deviceStorage) AsyncCreate(ctx context.Context, model *Device, opts ...Option) error {
+	if model == nil {
+		return errors.New("model is nil")
+	}
+
+	// Set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	query := t.queryBuilder.Insert("devices").
+		Columns(
+			"name",
+			"value",
+			"user_id",
+		).
+		Values(
+			model.Name,
+			model.Value,
+			model.UserId,
+		)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return errors.Wrap(err, "failed to build query")
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	if err := t.DB().AsyncInsert(ctx, sqlQuery, false, args...); err != nil {
+		return errors.Wrap(err, "failed to asynchronously create Device")
+	}
+
+	return nil
+}
+
 // Create creates a new Device.
 func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Option) error {
 	if model == nil {
@@ -223,7 +281,7 @@ func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Optio
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	_, err = t.DB().ExecContext(ctx, sqlQuery, args...)
+	err = t.DB().Exec(ctx, sqlQuery, args...)
 	if err != nil {
 		return errors.Wrap(err, "failed to create Device")
 	}
@@ -246,42 +304,28 @@ func (t *deviceStorage) BatchCreate(ctx context.Context, models []*Device, opts 
 		return errors.New("relations are not supported in batch create")
 	}
 
-	query := t.queryBuilder.Insert(t.TableName()).
-		Columns(
-			"name",
-			"value",
-			"user_id",
-		)
+	batch, err := t.DB().PrepareBatch(ctx, "INSERT INTO "+t.TableName())
+	if err != nil {
+		return errors.Wrap(err, "failed to prepare batch")
+	}
 
 	for _, model := range models {
 		if model == nil {
 			return errors.New("one of the models is nil")
 		}
-		query = query.Values(
+
+		err := batch.Append(
 			model.Name,
 			model.Value,
 			model.UserId,
 		)
-	}
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to execute bulk insert")
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			t.logError(ctx, err, "failed to close rows")
+		if err != nil {
+			return errors.Wrap(err, "failed to append to batch")
 		}
-	}()
+	}
 
-	if err := rows.Err(); err != nil {
-		return errors.Wrap(err, "rows iteration error")
+	if err := batch.Send(); err != nil {
+		return errors.Wrap(err, "failed to execute batch insert")
 	}
 
 	return nil
@@ -337,7 +381,7 @@ func (t *deviceStorage) FindMany(ctx context.Context, builders ...*QueryBuilder)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB().Query(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
@@ -379,63 +423,27 @@ func (t *deviceStorage) FindOne(ctx context.Context, builders ...*QueryBuilder) 
 	return results[0], nil
 }
 
-// FindManyWithCursorPagination finds multiple Device using cursor-based pagination.
-func (t *deviceStorage) FindManyWithCursorPagination(
-	ctx context.Context,
-	limit int,
-	cursor *string,
-	cursorProvider CursorProvider,
-	builders ...*QueryBuilder,
-) ([]*Device, *CursorPaginator, error) {
-	if limit <= 0 {
-		limit = 10
-	}
-
-	if cursorProvider == nil {
-		return nil, nil, errors.New("cursor provider is required")
-	}
-
-	if cursor != nil && *cursor != "" {
-		builders = append(builders, cursorProvider.CursorBuilder(*cursor))
-	}
-
-	builders = append(builders, LimitBuilder(uint64(limit+1)))
-	records, err := t.FindMany(ctx, builders...)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to find Device")
-	}
-
-	var nextCursor *string
-	if len(records) > limit {
-		lastRecord := records[limit]
-		records = records[:limit]
-		nextCursor = cursorProvider.GetCursor(lastRecord)
-	}
-
-	paginator := &CursorPaginator{
-		Limit:      limit,
-		NextCursor: nextCursor,
-	}
-
-	return records, paginator, nil
+// Select executes a raw query and returns the result.
+func (t *deviceStorage) Select(ctx context.Context, query string, dest any, args ...any) error {
+	return t.DB().Select(ctx, dest, query, args...)
 }
 
-// clickhouse does not support row-level locking.
-
-// Query executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *deviceStorage) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return t.DB().ExecContext(ctx, query, args...)
+// Exec executes a raw query and returns the result.
+func (t *deviceStorage) Exec(ctx context.Context, query string, args ...interface{}) error {
+	return t.DB().Exec(ctx, query, args...)
 }
 
 // QueryRow executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *deviceStorage) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return t.DB().QueryRowContext(ctx, query, args...)
+func (t *deviceStorage) QueryRow(ctx context.Context, query string, args ...interface{}) driver.Row {
+	return t.DB().QueryRow(ctx, query, args...)
 }
 
 // QueryRows executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *deviceStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return t.DB().QueryContext(ctx, query, args...)
+func (t *deviceStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (driver.Rows, error) {
+	return t.DB().Query(ctx, query, args...)
+}
+
+// Conn returns the connection.
+func (t *deviceStorage) Conn() driver.Conn {
+	return t.DB()
 }

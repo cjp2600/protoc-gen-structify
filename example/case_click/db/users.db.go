@@ -2,9 +2,8 @@ package db
 
 import (
 	"context"
-	"database/sql"
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	sq "github.com/Masterminds/squirrel"
-	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 	"time"
 )
@@ -18,8 +17,8 @@ type userStorage struct {
 // UserCRUDOperations is an interface for managing the users table.
 type UserCRUDOperations interface {
 	Create(ctx context.Context, model *User, opts ...Option) error
+	AsyncCreate(ctx context.Context, model *User, opts ...Option) error
 	BatchCreate(ctx context.Context, models []*User, opts ...Option) error
-	FindById(ctx context.Context, id string, opts ...Option) (*User, error)
 }
 
 // UserSearchOperations is an interface for searching the users table.
@@ -28,9 +27,10 @@ type UserSearchOperations interface {
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*User, error)
 }
 
-// UserPaginationOperations is an interface for pagination operations.
-type UserPaginationOperations interface {
-	FindManyWithCursorPagination(ctx context.Context, limit int, cursor *string, cursorProvider CursorProvider, builders ...*QueryBuilder) ([]*User, *CursorPaginator, error)
+type UserSettings interface {
+	Conn() driver.Conn
+	SetConfig(config *Config) UserStorage
+	SetQueryBuilder(builder sq.StatementBuilderType) UserStorage
 }
 
 // UserRelationLoading is an interface for loading relations.
@@ -47,18 +47,19 @@ type UserRelationLoading interface {
 
 // UserRawQueryOperations is an interface for executing raw queries.
 type UserRawQueryOperations interface {
-	Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
-	QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	Select(ctx context.Context, query string, dest any, args ...any) error
+	Exec(ctx context.Context, query string, args ...interface{}) error
+	QueryRow(ctx context.Context, query string, args ...interface{}) driver.Row
+	QueryRows(ctx context.Context, query string, args ...interface{}) (driver.Rows, error)
 }
 
 // UserStorage is a struct for the "users" table.
 type UserStorage interface {
 	UserCRUDOperations
 	UserSearchOperations
-	UserPaginationOperations
 	UserRelationLoading
 	UserRawQueryOperations
+	UserSettings
 }
 
 // NewUserStorage returns a new userStorage.
@@ -105,6 +106,16 @@ func (t *userStorage) Columns() []string {
 // DB returns the underlying DB. This is useful for doing transactions.
 func (t *userStorage) DB() QueryExecer {
 	return t.config.DB
+}
+
+func (t *userStorage) SetConfig(config *Config) UserStorage {
+	t.config = config
+	return t
+}
+
+func (t *userStorage) SetQueryBuilder(builder sq.StatementBuilderType) UserStorage {
+	t.queryBuilder = builder
+	return t
 }
 
 // LoadDevice loads the Device relation.
@@ -369,13 +380,8 @@ func (t *User) TableName() string {
 }
 
 // ScanRow scans a row into a User.
-func (t *User) ScanRow(r *sql.Row) error {
-	return r.Scan(&t.Id, &t.Name, &t.Age, &t.Email, &t.LastName, &t.CreatedAt, &t.UpdatedAt, &t.NotificationSettings, &t.Phones, &t.Balls, &t.Numrs, &t.Comments)
-}
-
-// ScanRows scans a single row into the User.
-func (t *User) ScanRows(r *sql.Rows) error {
-	return r.Scan(
+func (t *User) ScanRow(row driver.Row) error {
+	return row.Scan(
 		&t.Id,
 		&t.Name,
 		&t.Age,
@@ -389,6 +395,29 @@ func (t *User) ScanRows(r *sql.Rows) error {
 		&t.Numrs,
 		&t.Comments,
 	)
+}
+
+// ScanRows scans multiple rows into the struct User.
+func (t *User) ScanRows(rows driver.Rows) error {
+	for rows.Next() {
+		if err := rows.Scan(
+			&t.Id,
+			&t.Name,
+			&t.Age,
+			&t.Email,
+			&t.LastName,
+			&t.CreatedAt,
+			&t.UpdatedAt,
+			&t.NotificationSettings,
+			&t.Phones,
+			&t.Balls,
+			&t.Numrs,
+			&t.Comments,
+		); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
 
 // UserFilters is a struct that holds filters for User.
@@ -644,6 +673,114 @@ func UserEmailOrderBy(asc bool) FilterApplier {
 	return OrderBy("email", asc)
 }
 
+// AsyncCreate asynchronously inserts a new User.
+func (t *userStorage) AsyncCreate(ctx context.Context, model *User, opts ...Option) error {
+	if model == nil {
+		return errors.New("model is nil")
+	}
+
+	// Set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+	// Get value of phones
+	phones, err := model.Phones.Value()
+	if err != nil {
+		return errors.Wrap(err, "failed to get value of Phones")
+	}
+	// Get value of balls
+	balls, err := model.Balls.Value()
+	if err != nil {
+		return errors.Wrap(err, "failed to get value of Balls")
+	}
+	// Get value of numrs
+	numrs, err := model.Numrs.Value()
+	if err != nil {
+		return errors.Wrap(err, "failed to get value of Numrs")
+	}
+	// Get value of comments
+	comments, err := model.Comments.Value()
+	if err != nil {
+		return errors.Wrap(err, "failed to get value of Comments")
+	}
+
+	query := t.queryBuilder.Insert("users").
+		Columns(
+			"name",
+			"age",
+			"email",
+			"last_name",
+			"created_at",
+			"updated_at",
+			"notification_settings",
+			"phones",
+			"balls",
+			"numrs",
+			"comments",
+		).
+		Values(
+			model.Name,
+			model.Age,
+			model.Email,
+			nullValue(model.LastName),
+			model.CreatedAt,
+			nullValue(model.UpdatedAt),
+			nullValue(model.NotificationSettings),
+			phones,
+			balls,
+			numrs,
+			comments,
+		)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return errors.Wrap(err, "failed to build query")
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	if err := t.DB().AsyncInsert(ctx, sqlQuery, false, args...); err != nil {
+		return errors.Wrap(err, "failed to asynchronously create User")
+	}
+	if options.relations && model.Device != nil {
+		s, err := NewDeviceStorage(t.config)
+		if err != nil {
+			return errors.Wrap(err, "failed to create Device")
+		}
+
+		err = s.AsyncCreate(ctx, model.Device)
+		if err != nil {
+			return errors.Wrap(err, "failed to asynchronously create Device")
+		}
+	}
+	if options.relations && model.Settings != nil {
+		s, err := NewSettingStorage(t.config)
+		if err != nil {
+			return errors.Wrap(err, "failed to create Settings")
+		}
+
+		err = s.AsyncCreate(ctx, model.Settings)
+		if err != nil {
+			return errors.Wrap(err, "failed to asynchronously create Settings")
+		}
+	}
+	if options.relations && model.Addresses != nil {
+		for _, item := range model.Addresses {
+			s, err := NewAddressStorage(t.config)
+			if err != nil {
+				return errors.Wrap(err, "failed to create Addresses")
+			}
+
+			err = s.AsyncCreate(ctx, item)
+			if err != nil {
+				return errors.Wrap(err, "failed to asynchronously create Addresses")
+			}
+		}
+	}
+
+	return nil
+}
+
 // Create creates a new User.
 func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) error {
 	if model == nil {
@@ -710,7 +847,7 @@ func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) e
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	_, err = t.DB().ExecContext(ctx, sqlQuery, args...)
+	err = t.DB().Exec(ctx, sqlQuery, args...)
 	if err != nil {
 		return errors.Wrap(err, "failed to create User")
 	}
@@ -768,26 +905,37 @@ func (t *userStorage) BatchCreate(ctx context.Context, models []*User, opts ...O
 		return errors.New("relations are not supported in batch create")
 	}
 
-	query := t.queryBuilder.Insert(t.TableName()).
-		Columns(
-			"name",
-			"age",
-			"email",
-			"last_name",
-			"created_at",
-			"updated_at",
-			"notification_settings",
-			"phones",
-			"balls",
-			"numrs",
-			"comments",
-		)
+	batch, err := t.DB().PrepareBatch(ctx, "INSERT INTO "+t.TableName())
+	if err != nil {
+		return errors.Wrap(err, "failed to prepare batch")
+	}
 
 	for _, model := range models {
 		if model == nil {
 			return errors.New("one of the models is nil")
 		}
-		query = query.Values(
+		// Get value of phones
+		phones, err := model.Phones.Value()
+		if err != nil {
+			return errors.Wrap(err, "failed to get value of Phones")
+		}
+		// Get value of balls
+		balls, err := model.Balls.Value()
+		if err != nil {
+			return errors.Wrap(err, "failed to get value of Balls")
+		}
+		// Get value of numrs
+		numrs, err := model.Numrs.Value()
+		if err != nil {
+			return errors.Wrap(err, "failed to get value of Numrs")
+		}
+		// Get value of comments
+		comments, err := model.Comments.Value()
+		if err != nil {
+			return errors.Wrap(err, "failed to get value of Comments")
+		}
+
+		err = batch.Append(
 			model.Name,
 			model.Age,
 			model.Email,
@@ -800,46 +948,16 @@ func (t *userStorage) BatchCreate(ctx context.Context, models []*User, opts ...O
 			numrs,
 			comments,
 		)
-	}
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to execute bulk insert")
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			t.logError(ctx, err, "failed to close rows")
+		if err != nil {
+			return errors.Wrap(err, "failed to append to batch")
 		}
-	}()
+	}
 
-	if err := rows.Err(); err != nil {
-		return errors.Wrap(err, "rows iteration error")
+	if err := batch.Send(); err != nil {
+		return errors.Wrap(err, "failed to execute batch insert")
 	}
 
 	return nil
-}
-
-// FindById retrieves a User by its id.
-func (t *userStorage) FindById(ctx context.Context, id string, opts ...Option) (*User, error) {
-	builder := NewQueryBuilder()
-	{
-		builder.WithFilter(UserIdEq(id))
-		builder.WithOptions(opts...)
-	}
-
-	// Use FindOne to get a single result
-	model, err := t.FindOne(ctx, builder)
-	if err != nil {
-		return nil, errors.Wrap(err, "find one User: ")
-	}
-
-	return model, nil
 }
 
 // FindMany finds multiple User based on the provided options.
@@ -892,7 +1010,7 @@ func (t *userStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB().Query(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
@@ -934,63 +1052,27 @@ func (t *userStorage) FindOne(ctx context.Context, builders ...*QueryBuilder) (*
 	return results[0], nil
 }
 
-// FindManyWithCursorPagination finds multiple User using cursor-based pagination.
-func (t *userStorage) FindManyWithCursorPagination(
-	ctx context.Context,
-	limit int,
-	cursor *string,
-	cursorProvider CursorProvider,
-	builders ...*QueryBuilder,
-) ([]*User, *CursorPaginator, error) {
-	if limit <= 0 {
-		limit = 10
-	}
-
-	if cursorProvider == nil {
-		return nil, nil, errors.New("cursor provider is required")
-	}
-
-	if cursor != nil && *cursor != "" {
-		builders = append(builders, cursorProvider.CursorBuilder(*cursor))
-	}
-
-	builders = append(builders, LimitBuilder(uint64(limit+1)))
-	records, err := t.FindMany(ctx, builders...)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to find User")
-	}
-
-	var nextCursor *string
-	if len(records) > limit {
-		lastRecord := records[limit]
-		records = records[:limit]
-		nextCursor = cursorProvider.GetCursor(lastRecord)
-	}
-
-	paginator := &CursorPaginator{
-		Limit:      limit,
-		NextCursor: nextCursor,
-	}
-
-	return records, paginator, nil
+// Select executes a raw query and returns the result.
+func (t *userStorage) Select(ctx context.Context, query string, dest any, args ...any) error {
+	return t.DB().Select(ctx, dest, query, args...)
 }
 
-// clickhouse does not support row-level locking.
-
-// Query executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *userStorage) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return t.DB().ExecContext(ctx, query, args...)
+// Exec executes a raw query and returns the result.
+func (t *userStorage) Exec(ctx context.Context, query string, args ...interface{}) error {
+	return t.DB().Exec(ctx, query, args...)
 }
 
 // QueryRow executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *userStorage) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return t.DB().QueryRowContext(ctx, query, args...)
+func (t *userStorage) QueryRow(ctx context.Context, query string, args ...interface{}) driver.Row {
+	return t.DB().QueryRow(ctx, query, args...)
 }
 
 // QueryRows executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *userStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return t.DB().QueryContext(ctx, query, args...)
+func (t *userStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (driver.Rows, error) {
+	return t.DB().Query(ctx, query, args...)
+}
+
+// Conn returns the connection.
+func (t *userStorage) Conn() driver.Conn {
+	return t.DB()
 }

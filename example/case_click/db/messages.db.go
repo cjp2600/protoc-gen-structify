@@ -2,9 +2,8 @@ package db
 
 import (
 	"context"
-	"database/sql"
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	sq "github.com/Masterminds/squirrel"
-	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 )
 
@@ -17,8 +16,8 @@ type messageStorage struct {
 // MessageCRUDOperations is an interface for managing the messages table.
 type MessageCRUDOperations interface {
 	Create(ctx context.Context, model *Message, opts ...Option) error
+	AsyncCreate(ctx context.Context, model *Message, opts ...Option) error
 	BatchCreate(ctx context.Context, models []*Message, opts ...Option) error
-	FindById(ctx context.Context, id string, opts ...Option) (*Message, error)
 }
 
 // MessageSearchOperations is an interface for searching the messages table.
@@ -27,9 +26,10 @@ type MessageSearchOperations interface {
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Message, error)
 }
 
-// MessagePaginationOperations is an interface for pagination operations.
-type MessagePaginationOperations interface {
-	FindManyWithCursorPagination(ctx context.Context, limit int, cursor *string, cursorProvider CursorProvider, builders ...*QueryBuilder) ([]*Message, *CursorPaginator, error)
+type MessageSettings interface {
+	Conn() driver.Conn
+	SetConfig(config *Config) MessageStorage
+	SetQueryBuilder(builder sq.StatementBuilderType) MessageStorage
 }
 
 // MessageRelationLoading is an interface for loading relations.
@@ -44,18 +44,19 @@ type MessageRelationLoading interface {
 
 // MessageRawQueryOperations is an interface for executing raw queries.
 type MessageRawQueryOperations interface {
-	Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
-	QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	Select(ctx context.Context, query string, dest any, args ...any) error
+	Exec(ctx context.Context, query string, args ...interface{}) error
+	QueryRow(ctx context.Context, query string, args ...interface{}) driver.Row
+	QueryRows(ctx context.Context, query string, args ...interface{}) (driver.Rows, error)
 }
 
 // MessageStorage is a struct for the "messages" table.
 type MessageStorage interface {
 	MessageCRUDOperations
 	MessageSearchOperations
-	MessagePaginationOperations
 	MessageRelationLoading
 	MessageRawQueryOperations
+	MessageSettings
 }
 
 // NewMessageStorage returns a new messageStorage.
@@ -102,6 +103,16 @@ func (t *messageStorage) Columns() []string {
 // DB returns the underlying DB. This is useful for doing transactions.
 func (t *messageStorage) DB() QueryExecer {
 	return t.config.DB
+}
+
+func (t *messageStorage) SetConfig(config *Config) MessageStorage {
+	t.config = config
+	return t
+}
+
+func (t *messageStorage) SetQueryBuilder(builder sq.StatementBuilderType) MessageStorage {
+	t.queryBuilder = builder
+	return t
 }
 
 // LoadBot loads the Bot relation.
@@ -315,18 +326,28 @@ func (t *Message) TableName() string {
 }
 
 // ScanRow scans a row into a Message.
-func (t *Message) ScanRow(r *sql.Row) error {
-	return r.Scan(&t.Id, &t.FromUserId, &t.ToUserId, &t.BotId)
-}
-
-// ScanRows scans a single row into the Message.
-func (t *Message) ScanRows(r *sql.Rows) error {
-	return r.Scan(
+func (t *Message) ScanRow(row driver.Row) error {
+	return row.Scan(
 		&t.Id,
 		&t.FromUserId,
 		&t.ToUserId,
 		&t.BotId,
 	)
+}
+
+// ScanRows scans multiple rows into the struct Message.
+func (t *Message) ScanRows(rows driver.Rows) error {
+	for rows.Next() {
+		if err := rows.Scan(
+			&t.Id,
+			&t.FromUserId,
+			&t.ToUserId,
+			&t.BotId,
+		); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
 
 // MessageFilters is a struct that holds filters for Message.
@@ -541,6 +562,43 @@ func MessageBotIdOrderBy(asc bool) FilterApplier {
 	return OrderBy("bot_id", asc)
 }
 
+// AsyncCreate asynchronously inserts a new Message.
+func (t *messageStorage) AsyncCreate(ctx context.Context, model *Message, opts ...Option) error {
+	if model == nil {
+		return errors.New("model is nil")
+	}
+
+	// Set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	query := t.queryBuilder.Insert("messages").
+		Columns(
+			"from_user_id",
+			"to_user_id",
+			"bot_id",
+		).
+		Values(
+			model.FromUserId,
+			model.ToUserId,
+			nullValue(model.BotId),
+		)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return errors.Wrap(err, "failed to build query")
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	if err := t.DB().AsyncInsert(ctx, sqlQuery, false, args...); err != nil {
+		return errors.Wrap(err, "failed to asynchronously create Message")
+	}
+
+	return nil
+}
+
 // Create creates a new Message.
 func (t *messageStorage) Create(ctx context.Context, model *Message, opts ...Option) error {
 	if model == nil {
@@ -571,7 +629,7 @@ func (t *messageStorage) Create(ctx context.Context, model *Message, opts ...Opt
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	_, err = t.DB().ExecContext(ctx, sqlQuery, args...)
+	err = t.DB().Exec(ctx, sqlQuery, args...)
 	if err != nil {
 		return errors.Wrap(err, "failed to create Message")
 	}
@@ -594,62 +652,31 @@ func (t *messageStorage) BatchCreate(ctx context.Context, models []*Message, opt
 		return errors.New("relations are not supported in batch create")
 	}
 
-	query := t.queryBuilder.Insert(t.TableName()).
-		Columns(
-			"from_user_id",
-			"to_user_id",
-			"bot_id",
-		)
+	batch, err := t.DB().PrepareBatch(ctx, "INSERT INTO "+t.TableName())
+	if err != nil {
+		return errors.Wrap(err, "failed to prepare batch")
+	}
 
 	for _, model := range models {
 		if model == nil {
 			return errors.New("one of the models is nil")
 		}
-		query = query.Values(
+
+		err := batch.Append(
 			model.FromUserId,
 			model.ToUserId,
 			nullValue(model.BotId),
 		)
-	}
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to execute bulk insert")
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			t.logError(ctx, err, "failed to close rows")
+		if err != nil {
+			return errors.Wrap(err, "failed to append to batch")
 		}
-	}()
+	}
 
-	if err := rows.Err(); err != nil {
-		return errors.Wrap(err, "rows iteration error")
+	if err := batch.Send(); err != nil {
+		return errors.Wrap(err, "failed to execute batch insert")
 	}
 
 	return nil
-}
-
-// FindById retrieves a Message by its id.
-func (t *messageStorage) FindById(ctx context.Context, id string, opts ...Option) (*Message, error) {
-	builder := NewQueryBuilder()
-	{
-		builder.WithFilter(MessageIdEq(id))
-		builder.WithOptions(opts...)
-	}
-
-	// Use FindOne to get a single result
-	model, err := t.FindOne(ctx, builder)
-	if err != nil {
-		return nil, errors.Wrap(err, "find one Message: ")
-	}
-
-	return model, nil
 }
 
 // FindMany finds multiple Message based on the provided options.
@@ -702,7 +729,7 @@ func (t *messageStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB().Query(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
@@ -744,63 +771,27 @@ func (t *messageStorage) FindOne(ctx context.Context, builders ...*QueryBuilder)
 	return results[0], nil
 }
 
-// FindManyWithCursorPagination finds multiple Message using cursor-based pagination.
-func (t *messageStorage) FindManyWithCursorPagination(
-	ctx context.Context,
-	limit int,
-	cursor *string,
-	cursorProvider CursorProvider,
-	builders ...*QueryBuilder,
-) ([]*Message, *CursorPaginator, error) {
-	if limit <= 0 {
-		limit = 10
-	}
-
-	if cursorProvider == nil {
-		return nil, nil, errors.New("cursor provider is required")
-	}
-
-	if cursor != nil && *cursor != "" {
-		builders = append(builders, cursorProvider.CursorBuilder(*cursor))
-	}
-
-	builders = append(builders, LimitBuilder(uint64(limit+1)))
-	records, err := t.FindMany(ctx, builders...)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to find Message")
-	}
-
-	var nextCursor *string
-	if len(records) > limit {
-		lastRecord := records[limit]
-		records = records[:limit]
-		nextCursor = cursorProvider.GetCursor(lastRecord)
-	}
-
-	paginator := &CursorPaginator{
-		Limit:      limit,
-		NextCursor: nextCursor,
-	}
-
-	return records, paginator, nil
+// Select executes a raw query and returns the result.
+func (t *messageStorage) Select(ctx context.Context, query string, dest any, args ...any) error {
+	return t.DB().Select(ctx, dest, query, args...)
 }
 
-// clickhouse does not support row-level locking.
-
-// Query executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *messageStorage) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return t.DB().ExecContext(ctx, query, args...)
+// Exec executes a raw query and returns the result.
+func (t *messageStorage) Exec(ctx context.Context, query string, args ...interface{}) error {
+	return t.DB().Exec(ctx, query, args...)
 }
 
 // QueryRow executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *messageStorage) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return t.DB().QueryRowContext(ctx, query, args...)
+func (t *messageStorage) QueryRow(ctx context.Context, query string, args ...interface{}) driver.Row {
+	return t.DB().QueryRow(ctx, query, args...)
 }
 
 // QueryRows executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *messageStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return t.DB().QueryContext(ctx, query, args...)
+func (t *messageStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (driver.Rows, error) {
+	return t.DB().Query(ctx, query, args...)
+}
+
+// Conn returns the connection.
+func (t *messageStorage) Conn() driver.Conn {
+	return t.DB()
 }

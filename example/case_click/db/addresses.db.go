@@ -2,9 +2,8 @@ package db
 
 import (
 	"context"
-	"database/sql"
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	sq "github.com/Masterminds/squirrel"
-	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 	"time"
 )
@@ -18,8 +17,8 @@ type addressStorage struct {
 // AddressCRUDOperations is an interface for managing the addresses table.
 type AddressCRUDOperations interface {
 	Create(ctx context.Context, model *Address, opts ...Option) error
+	AsyncCreate(ctx context.Context, model *Address, opts ...Option) error
 	BatchCreate(ctx context.Context, models []*Address, opts ...Option) error
-	FindById(ctx context.Context, id string, opts ...Option) (*Address, error)
 }
 
 // AddressSearchOperations is an interface for searching the addresses table.
@@ -28,9 +27,10 @@ type AddressSearchOperations interface {
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Address, error)
 }
 
-// AddressPaginationOperations is an interface for pagination operations.
-type AddressPaginationOperations interface {
-	FindManyWithCursorPagination(ctx context.Context, limit int, cursor *string, cursorProvider CursorProvider, builders ...*QueryBuilder) ([]*Address, *CursorPaginator, error)
+type AddressSettings interface {
+	Conn() driver.Conn
+	SetConfig(config *Config) AddressStorage
+	SetQueryBuilder(builder sq.StatementBuilderType) AddressStorage
 }
 
 // AddressRelationLoading is an interface for loading relations.
@@ -41,18 +41,19 @@ type AddressRelationLoading interface {
 
 // AddressRawQueryOperations is an interface for executing raw queries.
 type AddressRawQueryOperations interface {
-	Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
-	QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	Select(ctx context.Context, query string, dest any, args ...any) error
+	Exec(ctx context.Context, query string, args ...interface{}) error
+	QueryRow(ctx context.Context, query string, args ...interface{}) driver.Row
+	QueryRows(ctx context.Context, query string, args ...interface{}) (driver.Rows, error)
 }
 
 // AddressStorage is a struct for the "addresses" table.
 type AddressStorage interface {
 	AddressCRUDOperations
 	AddressSearchOperations
-	AddressPaginationOperations
 	AddressRelationLoading
 	AddressRawQueryOperations
+	AddressSettings
 }
 
 // NewAddressStorage returns a new addressStorage.
@@ -99,6 +100,16 @@ func (t *addressStorage) Columns() []string {
 // DB returns the underlying DB. This is useful for doing transactions.
 func (t *addressStorage) DB() QueryExecer {
 	return t.config.DB
+}
+
+func (t *addressStorage) SetConfig(config *Config) AddressStorage {
+	t.config = config
+	return t
+}
+
+func (t *addressStorage) SetQueryBuilder(builder sq.StatementBuilderType) AddressStorage {
+	t.queryBuilder = builder
+	return t
 }
 
 // LoadUser loads the User relation.
@@ -179,13 +190,8 @@ func (t *Address) TableName() string {
 }
 
 // ScanRow scans a row into a Address.
-func (t *Address) ScanRow(r *sql.Row) error {
-	return r.Scan(&t.Id, &t.Street, &t.City, &t.State, &t.Zip, &t.UserId, &t.CreatedAt, &t.UpdatedAt)
-}
-
-// ScanRows scans a single row into the Address.
-func (t *Address) ScanRows(r *sql.Rows) error {
-	return r.Scan(
+func (t *Address) ScanRow(row driver.Row) error {
+	return row.Scan(
 		&t.Id,
 		&t.Street,
 		&t.City,
@@ -195,6 +201,25 @@ func (t *Address) ScanRows(r *sql.Rows) error {
 		&t.CreatedAt,
 		&t.UpdatedAt,
 	)
+}
+
+// ScanRows scans multiple rows into the struct Address.
+func (t *Address) ScanRows(rows driver.Rows) error {
+	for rows.Next() {
+		if err := rows.Scan(
+			&t.Id,
+			&t.Street,
+			&t.City,
+			&t.State,
+			&t.Zip,
+			&t.UserId,
+			&t.CreatedAt,
+			&t.UpdatedAt,
+		); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
 
 // AddressFilters is a struct that holds filters for Address.
@@ -333,6 +358,51 @@ func AddressUserIdOrderBy(asc bool) FilterApplier {
 	return OrderBy("user_id", asc)
 }
 
+// AsyncCreate asynchronously inserts a new Address.
+func (t *addressStorage) AsyncCreate(ctx context.Context, model *Address, opts ...Option) error {
+	if model == nil {
+		return errors.New("model is nil")
+	}
+
+	// Set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	query := t.queryBuilder.Insert("addresses").
+		Columns(
+			"street",
+			"city",
+			"state",
+			"zip",
+			"user_id",
+			"created_at",
+			"updated_at",
+		).
+		Values(
+			model.Street,
+			model.City,
+			model.State,
+			model.Zip,
+			model.UserId,
+			model.CreatedAt,
+			nullValue(model.UpdatedAt),
+		)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return errors.Wrap(err, "failed to build query")
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	if err := t.DB().AsyncInsert(ctx, sqlQuery, false, args...); err != nil {
+		return errors.Wrap(err, "failed to asynchronously create Address")
+	}
+
+	return nil
+}
+
 // Create creates a new Address.
 func (t *addressStorage) Create(ctx context.Context, model *Address, opts ...Option) error {
 	if model == nil {
@@ -371,7 +441,7 @@ func (t *addressStorage) Create(ctx context.Context, model *Address, opts ...Opt
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	_, err = t.DB().ExecContext(ctx, sqlQuery, args...)
+	err = t.DB().Exec(ctx, sqlQuery, args...)
 	if err != nil {
 		return errors.Wrap(err, "failed to create Address")
 	}
@@ -394,22 +464,17 @@ func (t *addressStorage) BatchCreate(ctx context.Context, models []*Address, opt
 		return errors.New("relations are not supported in batch create")
 	}
 
-	query := t.queryBuilder.Insert(t.TableName()).
-		Columns(
-			"street",
-			"city",
-			"state",
-			"zip",
-			"user_id",
-			"created_at",
-			"updated_at",
-		)
+	batch, err := t.DB().PrepareBatch(ctx, "INSERT INTO "+t.TableName())
+	if err != nil {
+		return errors.Wrap(err, "failed to prepare batch")
+	}
 
 	for _, model := range models {
 		if model == nil {
 			return errors.New("one of the models is nil")
 		}
-		query = query.Values(
+
+		err := batch.Append(
 			model.Street,
 			model.City,
 			model.State,
@@ -418,46 +483,16 @@ func (t *addressStorage) BatchCreate(ctx context.Context, models []*Address, opt
 			model.CreatedAt,
 			nullValue(model.UpdatedAt),
 		)
-	}
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to execute bulk insert")
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			t.logError(ctx, err, "failed to close rows")
+		if err != nil {
+			return errors.Wrap(err, "failed to append to batch")
 		}
-	}()
+	}
 
-	if err := rows.Err(); err != nil {
-		return errors.Wrap(err, "rows iteration error")
+	if err := batch.Send(); err != nil {
+		return errors.Wrap(err, "failed to execute batch insert")
 	}
 
 	return nil
-}
-
-// FindById retrieves a Address by its id.
-func (t *addressStorage) FindById(ctx context.Context, id string, opts ...Option) (*Address, error) {
-	builder := NewQueryBuilder()
-	{
-		builder.WithFilter(AddressIdEq(id))
-		builder.WithOptions(opts...)
-	}
-
-	// Use FindOne to get a single result
-	model, err := t.FindOne(ctx, builder)
-	if err != nil {
-		return nil, errors.Wrap(err, "find one Address: ")
-	}
-
-	return model, nil
 }
 
 // FindMany finds multiple Address based on the provided options.
@@ -510,7 +545,7 @@ func (t *addressStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB().Query(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
@@ -552,63 +587,27 @@ func (t *addressStorage) FindOne(ctx context.Context, builders ...*QueryBuilder)
 	return results[0], nil
 }
 
-// FindManyWithCursorPagination finds multiple Address using cursor-based pagination.
-func (t *addressStorage) FindManyWithCursorPagination(
-	ctx context.Context,
-	limit int,
-	cursor *string,
-	cursorProvider CursorProvider,
-	builders ...*QueryBuilder,
-) ([]*Address, *CursorPaginator, error) {
-	if limit <= 0 {
-		limit = 10
-	}
-
-	if cursorProvider == nil {
-		return nil, nil, errors.New("cursor provider is required")
-	}
-
-	if cursor != nil && *cursor != "" {
-		builders = append(builders, cursorProvider.CursorBuilder(*cursor))
-	}
-
-	builders = append(builders, LimitBuilder(uint64(limit+1)))
-	records, err := t.FindMany(ctx, builders...)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to find Address")
-	}
-
-	var nextCursor *string
-	if len(records) > limit {
-		lastRecord := records[limit]
-		records = records[:limit]
-		nextCursor = cursorProvider.GetCursor(lastRecord)
-	}
-
-	paginator := &CursorPaginator{
-		Limit:      limit,
-		NextCursor: nextCursor,
-	}
-
-	return records, paginator, nil
+// Select executes a raw query and returns the result.
+func (t *addressStorage) Select(ctx context.Context, query string, dest any, args ...any) error {
+	return t.DB().Select(ctx, dest, query, args...)
 }
 
-// clickhouse does not support row-level locking.
-
-// Query executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *addressStorage) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return t.DB().ExecContext(ctx, query, args...)
+// Exec executes a raw query and returns the result.
+func (t *addressStorage) Exec(ctx context.Context, query string, args ...interface{}) error {
+	return t.DB().Exec(ctx, query, args...)
 }
 
 // QueryRow executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *addressStorage) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return t.DB().QueryRowContext(ctx, query, args...)
+func (t *addressStorage) QueryRow(ctx context.Context, query string, args ...interface{}) driver.Row {
+	return t.DB().QueryRow(ctx, query, args...)
 }
 
 // QueryRows executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *addressStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return t.DB().QueryContext(ctx, query, args...)
+func (t *addressStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (driver.Rows, error) {
+	return t.DB().Query(ctx, query, args...)
+}
+
+// Conn returns the connection.
+func (t *addressStorage) Conn() driver.Conn {
+	return t.DB()
 }

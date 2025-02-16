@@ -2,9 +2,8 @@ package db
 
 import (
 	"context"
-	"database/sql"
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	sq "github.com/Masterminds/squirrel"
-	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 )
 
@@ -17,8 +16,8 @@ type postStorage struct {
 // PostCRUDOperations is an interface for managing the posts table.
 type PostCRUDOperations interface {
 	Create(ctx context.Context, model *Post, opts ...Option) error
+	AsyncCreate(ctx context.Context, model *Post, opts ...Option) error
 	BatchCreate(ctx context.Context, models []*Post, opts ...Option) error
-	FindById(ctx context.Context, id int32, opts ...Option) (*Post, error)
 }
 
 // PostSearchOperations is an interface for searching the posts table.
@@ -27,9 +26,10 @@ type PostSearchOperations interface {
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*Post, error)
 }
 
-// PostPaginationOperations is an interface for pagination operations.
-type PostPaginationOperations interface {
-	FindManyWithCursorPagination(ctx context.Context, limit int, cursor *string, cursorProvider CursorProvider, builders ...*QueryBuilder) ([]*Post, *CursorPaginator, error)
+type PostSettings interface {
+	Conn() driver.Conn
+	SetConfig(config *Config) PostStorage
+	SetQueryBuilder(builder sq.StatementBuilderType) PostStorage
 }
 
 // PostRelationLoading is an interface for loading relations.
@@ -40,18 +40,19 @@ type PostRelationLoading interface {
 
 // PostRawQueryOperations is an interface for executing raw queries.
 type PostRawQueryOperations interface {
-	Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
-	QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	Select(ctx context.Context, query string, dest any, args ...any) error
+	Exec(ctx context.Context, query string, args ...interface{}) error
+	QueryRow(ctx context.Context, query string, args ...interface{}) driver.Row
+	QueryRows(ctx context.Context, query string, args ...interface{}) (driver.Rows, error)
 }
 
 // PostStorage is a struct for the "posts" table.
 type PostStorage interface {
 	PostCRUDOperations
 	PostSearchOperations
-	PostPaginationOperations
 	PostRelationLoading
 	PostRawQueryOperations
+	PostSettings
 }
 
 // NewPostStorage returns a new postStorage.
@@ -98,6 +99,16 @@ func (t *postStorage) Columns() []string {
 // DB returns the underlying DB. This is useful for doing transactions.
 func (t *postStorage) DB() QueryExecer {
 	return t.config.DB
+}
+
+func (t *postStorage) SetConfig(config *Config) PostStorage {
+	t.config = config
+	return t
+}
+
+func (t *postStorage) SetQueryBuilder(builder sq.StatementBuilderType) PostStorage {
+	t.queryBuilder = builder
+	return t
 }
 
 // LoadAuthor loads the Author relation.
@@ -174,18 +185,28 @@ func (t *Post) TableName() string {
 }
 
 // ScanRow scans a row into a Post.
-func (t *Post) ScanRow(r *sql.Row) error {
-	return r.Scan(&t.Id, &t.Title, &t.Body, &t.AuthorId)
-}
-
-// ScanRows scans a single row into the Post.
-func (t *Post) ScanRows(r *sql.Rows) error {
-	return r.Scan(
+func (t *Post) ScanRow(row driver.Row) error {
+	return row.Scan(
 		&t.Id,
 		&t.Title,
 		&t.Body,
 		&t.AuthorId,
 	)
+}
+
+// ScanRows scans multiple rows into the struct Post.
+func (t *Post) ScanRows(rows driver.Rows) error {
+	for rows.Next() {
+		if err := rows.Scan(
+			&t.Id,
+			&t.Title,
+			&t.Body,
+			&t.AuthorId,
+		); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
 
 // PostFilters is a struct that holds filters for Post.
@@ -309,6 +330,43 @@ func PostAuthorIdOrderBy(asc bool) FilterApplier {
 	return OrderBy("author_id", asc)
 }
 
+// AsyncCreate asynchronously inserts a new Post.
+func (t *postStorage) AsyncCreate(ctx context.Context, model *Post, opts ...Option) error {
+	if model == nil {
+		return errors.New("model is nil")
+	}
+
+	// Set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	query := t.queryBuilder.Insert("posts").
+		Columns(
+			"title",
+			"body",
+			"author_id",
+		).
+		Values(
+			model.Title,
+			model.Body,
+			model.AuthorId,
+		)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return errors.Wrap(err, "failed to build query")
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	if err := t.DB().AsyncInsert(ctx, sqlQuery, false, args...); err != nil {
+		return errors.Wrap(err, "failed to asynchronously create Post")
+	}
+
+	return nil
+}
+
 // Create creates a new Post.
 func (t *postStorage) Create(ctx context.Context, model *Post, opts ...Option) error {
 	if model == nil {
@@ -339,7 +397,7 @@ func (t *postStorage) Create(ctx context.Context, model *Post, opts ...Option) e
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	_, err = t.DB().ExecContext(ctx, sqlQuery, args...)
+	err = t.DB().Exec(ctx, sqlQuery, args...)
 	if err != nil {
 		return errors.Wrap(err, "failed to create Post")
 	}
@@ -362,62 +420,31 @@ func (t *postStorage) BatchCreate(ctx context.Context, models []*Post, opts ...O
 		return errors.New("relations are not supported in batch create")
 	}
 
-	query := t.queryBuilder.Insert(t.TableName()).
-		Columns(
-			"title",
-			"body",
-			"author_id",
-		)
+	batch, err := t.DB().PrepareBatch(ctx, "INSERT INTO "+t.TableName())
+	if err != nil {
+		return errors.Wrap(err, "failed to prepare batch")
+	}
 
 	for _, model := range models {
 		if model == nil {
 			return errors.New("one of the models is nil")
 		}
-		query = query.Values(
+
+		err := batch.Append(
 			model.Title,
 			model.Body,
 			model.AuthorId,
 		)
-	}
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to execute bulk insert")
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			t.logError(ctx, err, "failed to close rows")
+		if err != nil {
+			return errors.Wrap(err, "failed to append to batch")
 		}
-	}()
+	}
 
-	if err := rows.Err(); err != nil {
-		return errors.Wrap(err, "rows iteration error")
+	if err := batch.Send(); err != nil {
+		return errors.Wrap(err, "failed to execute batch insert")
 	}
 
 	return nil
-}
-
-// FindById retrieves a Post by its id.
-func (t *postStorage) FindById(ctx context.Context, id int32, opts ...Option) (*Post, error) {
-	builder := NewQueryBuilder()
-	{
-		builder.WithFilter(PostIdEq(id))
-		builder.WithOptions(opts...)
-	}
-
-	// Use FindOne to get a single result
-	model, err := t.FindOne(ctx, builder)
-	if err != nil {
-		return nil, errors.Wrap(err, "find one Post: ")
-	}
-
-	return model, nil
 }
 
 // FindMany finds multiple Post based on the provided options.
@@ -470,7 +497,7 @@ func (t *postStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB().Query(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
@@ -512,63 +539,27 @@ func (t *postStorage) FindOne(ctx context.Context, builders ...*QueryBuilder) (*
 	return results[0], nil
 }
 
-// FindManyWithCursorPagination finds multiple Post using cursor-based pagination.
-func (t *postStorage) FindManyWithCursorPagination(
-	ctx context.Context,
-	limit int,
-	cursor *string,
-	cursorProvider CursorProvider,
-	builders ...*QueryBuilder,
-) ([]*Post, *CursorPaginator, error) {
-	if limit <= 0 {
-		limit = 10
-	}
-
-	if cursorProvider == nil {
-		return nil, nil, errors.New("cursor provider is required")
-	}
-
-	if cursor != nil && *cursor != "" {
-		builders = append(builders, cursorProvider.CursorBuilder(*cursor))
-	}
-
-	builders = append(builders, LimitBuilder(uint64(limit+1)))
-	records, err := t.FindMany(ctx, builders...)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to find Post")
-	}
-
-	var nextCursor *string
-	if len(records) > limit {
-		lastRecord := records[limit]
-		records = records[:limit]
-		nextCursor = cursorProvider.GetCursor(lastRecord)
-	}
-
-	paginator := &CursorPaginator{
-		Limit:      limit,
-		NextCursor: nextCursor,
-	}
-
-	return records, paginator, nil
+// Select executes a raw query and returns the result.
+func (t *postStorage) Select(ctx context.Context, query string, dest any, args ...any) error {
+	return t.DB().Select(ctx, dest, query, args...)
 }
 
-// clickhouse does not support row-level locking.
-
-// Query executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *postStorage) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return t.DB().ExecContext(ctx, query, args...)
+// Exec executes a raw query and returns the result.
+func (t *postStorage) Exec(ctx context.Context, query string, args ...interface{}) error {
+	return t.DB().Exec(ctx, query, args...)
 }
 
 // QueryRow executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *postStorage) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return t.DB().QueryRowContext(ctx, query, args...)
+func (t *postStorage) QueryRow(ctx context.Context, query string, args ...interface{}) driver.Row {
+	return t.DB().QueryRow(ctx, query, args...)
 }
 
 // QueryRows executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *postStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return t.DB().QueryContext(ctx, query, args...)
+func (t *postStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (driver.Rows, error) {
+	return t.DB().Query(ctx, query, args...)
+}
+
+// Conn returns the connection.
+func (t *postStorage) Conn() driver.Conn {
+	return t.DB()
 }

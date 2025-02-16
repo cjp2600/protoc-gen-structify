@@ -2,9 +2,8 @@ package db
 
 import (
 	"context"
-	"database/sql"
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	sq "github.com/Masterminds/squirrel"
-	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 	"time"
 )
@@ -18,8 +17,8 @@ type botViewStorage struct {
 // BotViewCRUDOperations is an interface for managing the bots_view table.
 type BotViewCRUDOperations interface {
 	Create(ctx context.Context, model *BotView, opts ...Option) error
+	AsyncCreate(ctx context.Context, model *BotView, opts ...Option) error
 	BatchCreate(ctx context.Context, models []*BotView, opts ...Option) error
-	FindById(ctx context.Context, id string, opts ...Option) (*BotView, error)
 }
 
 // BotViewSearchOperations is an interface for searching the bots_view table.
@@ -28,9 +27,10 @@ type BotViewSearchOperations interface {
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*BotView, error)
 }
 
-// BotViewPaginationOperations is an interface for pagination operations.
-type BotViewPaginationOperations interface {
-	FindManyWithCursorPagination(ctx context.Context, limit int, cursor *string, cursorProvider CursorProvider, builders ...*QueryBuilder) ([]*BotView, *CursorPaginator, error)
+type BotViewSettings interface {
+	Conn() driver.Conn
+	SetConfig(config *Config) BotViewStorage
+	SetQueryBuilder(builder sq.StatementBuilderType) BotViewStorage
 }
 
 // BotViewRelationLoading is an interface for loading relations.
@@ -41,18 +41,19 @@ type BotViewRelationLoading interface {
 
 // BotViewRawQueryOperations is an interface for executing raw queries.
 type BotViewRawQueryOperations interface {
-	Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
-	QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	Select(ctx context.Context, query string, dest any, args ...any) error
+	Exec(ctx context.Context, query string, args ...interface{}) error
+	QueryRow(ctx context.Context, query string, args ...interface{}) driver.Row
+	QueryRows(ctx context.Context, query string, args ...interface{}) (driver.Rows, error)
 }
 
 // BotViewStorage is a struct for the "bots_view" table.
 type BotViewStorage interface {
 	BotViewCRUDOperations
 	BotViewSearchOperations
-	BotViewPaginationOperations
 	BotViewRelationLoading
 	BotViewRawQueryOperations
+	BotViewSettings
 }
 
 // NewBotViewStorage returns a new botViewStorage.
@@ -99,6 +100,16 @@ func (t *botViewStorage) Columns() []string {
 // DB returns the underlying DB. This is useful for doing transactions.
 func (t *botViewStorage) DB() QueryExecer {
 	return t.config.DB
+}
+
+func (t *botViewStorage) SetConfig(config *Config) BotViewStorage {
+	t.config = config
+	return t
+}
+
+func (t *botViewStorage) SetQueryBuilder(builder sq.StatementBuilderType) BotViewStorage {
+	t.queryBuilder = builder
+	return t
 }
 
 // LoadUser loads the User relation.
@@ -179,13 +190,8 @@ func (t *BotView) TableName() string {
 }
 
 // ScanRow scans a row into a BotView.
-func (t *BotView) ScanRow(r *sql.Row) error {
-	return r.Scan(&t.Id, &t.UserId, &t.Name, &t.Token, &t.IsPublish, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt)
-}
-
-// ScanRows scans a single row into the BotView.
-func (t *BotView) ScanRows(r *sql.Rows) error {
-	return r.Scan(
+func (t *BotView) ScanRow(row driver.Row) error {
+	return row.Scan(
 		&t.Id,
 		&t.UserId,
 		&t.Name,
@@ -195,6 +201,25 @@ func (t *BotView) ScanRows(r *sql.Rows) error {
 		&t.UpdatedAt,
 		&t.DeletedAt,
 	)
+}
+
+// ScanRows scans multiple rows into the struct BotView.
+func (t *BotView) ScanRows(rows driver.Rows) error {
+	for rows.Next() {
+		if err := rows.Scan(
+			&t.Id,
+			&t.UserId,
+			&t.Name,
+			&t.Token,
+			&t.IsPublish,
+			&t.CreatedAt,
+			&t.UpdatedAt,
+			&t.DeletedAt,
+		); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
 
 // BotViewFilters is a struct that holds filters for BotView.
@@ -384,6 +409,51 @@ func BotViewCreatedAtOrderBy(asc bool) FilterApplier {
 	return OrderBy("created_at", asc)
 }
 
+// AsyncCreate asynchronously inserts a new BotView.
+func (t *botViewStorage) AsyncCreate(ctx context.Context, model *BotView, opts ...Option) error {
+	if model == nil {
+		return errors.New("model is nil")
+	}
+
+	// Set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	query := t.queryBuilder.Insert("bots_view").
+		Columns(
+			"user_id",
+			"name",
+			"token",
+			"is_publish",
+			"created_at",
+			"updated_at",
+			"deleted_at",
+		).
+		Values(
+			model.UserId,
+			model.Name,
+			model.Token,
+			model.IsPublish,
+			model.CreatedAt,
+			model.UpdatedAt,
+			nullValue(model.DeletedAt),
+		)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return errors.Wrap(err, "failed to build query")
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	if err := t.DB().AsyncInsert(ctx, sqlQuery, false, args...); err != nil {
+		return errors.Wrap(err, "failed to asynchronously create BotView")
+	}
+
+	return nil
+}
+
 // Create creates a new BotView.
 func (t *botViewStorage) Create(ctx context.Context, model *BotView, opts ...Option) error {
 	if model == nil {
@@ -422,7 +492,7 @@ func (t *botViewStorage) Create(ctx context.Context, model *BotView, opts ...Opt
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	_, err = t.DB().ExecContext(ctx, sqlQuery, args...)
+	err = t.DB().Exec(ctx, sqlQuery, args...)
 	if err != nil {
 		return errors.Wrap(err, "failed to create BotView")
 	}
@@ -445,22 +515,17 @@ func (t *botViewStorage) BatchCreate(ctx context.Context, models []*BotView, opt
 		return errors.New("relations are not supported in batch create")
 	}
 
-	query := t.queryBuilder.Insert(t.TableName()).
-		Columns(
-			"user_id",
-			"name",
-			"token",
-			"is_publish",
-			"created_at",
-			"updated_at",
-			"deleted_at",
-		)
+	batch, err := t.DB().PrepareBatch(ctx, "INSERT INTO "+t.TableName())
+	if err != nil {
+		return errors.Wrap(err, "failed to prepare batch")
+	}
 
 	for _, model := range models {
 		if model == nil {
 			return errors.New("one of the models is nil")
 		}
-		query = query.Values(
+
+		err := batch.Append(
 			model.UserId,
 			model.Name,
 			model.Token,
@@ -469,46 +534,16 @@ func (t *botViewStorage) BatchCreate(ctx context.Context, models []*BotView, opt
 			model.UpdatedAt,
 			nullValue(model.DeletedAt),
 		)
-	}
-
-	sqlQuery, args, err := query.ToSql()
-	if err != nil {
-		return errors.Wrap(err, "failed to build query")
-	}
-	t.logQuery(ctx, sqlQuery, args...)
-
-	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to execute bulk insert")
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			t.logError(ctx, err, "failed to close rows")
+		if err != nil {
+			return errors.Wrap(err, "failed to append to batch")
 		}
-	}()
+	}
 
-	if err := rows.Err(); err != nil {
-		return errors.Wrap(err, "rows iteration error")
+	if err := batch.Send(); err != nil {
+		return errors.Wrap(err, "failed to execute batch insert")
 	}
 
 	return nil
-}
-
-// FindById retrieves a BotView by its id.
-func (t *botViewStorage) FindById(ctx context.Context, id string, opts ...Option) (*BotView, error) {
-	builder := NewQueryBuilder()
-	{
-		builder.WithFilter(BotViewIdEq(id))
-		builder.WithOptions(opts...)
-	}
-
-	// Use FindOne to get a single result
-	model, err := t.FindOne(ctx, builder)
-	if err != nil {
-		return nil, errors.Wrap(err, "find one BotView: ")
-	}
-
-	return model, nil
 }
 
 // FindMany finds multiple BotView based on the provided options.
@@ -561,7 +596,7 @@ func (t *botViewStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB().Query(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
@@ -603,63 +638,27 @@ func (t *botViewStorage) FindOne(ctx context.Context, builders ...*QueryBuilder)
 	return results[0], nil
 }
 
-// FindManyWithCursorPagination finds multiple BotView using cursor-based pagination.
-func (t *botViewStorage) FindManyWithCursorPagination(
-	ctx context.Context,
-	limit int,
-	cursor *string,
-	cursorProvider CursorProvider,
-	builders ...*QueryBuilder,
-) ([]*BotView, *CursorPaginator, error) {
-	if limit <= 0 {
-		limit = 10
-	}
-
-	if cursorProvider == nil {
-		return nil, nil, errors.New("cursor provider is required")
-	}
-
-	if cursor != nil && *cursor != "" {
-		builders = append(builders, cursorProvider.CursorBuilder(*cursor))
-	}
-
-	builders = append(builders, LimitBuilder(uint64(limit+1)))
-	records, err := t.FindMany(ctx, builders...)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to find BotView")
-	}
-
-	var nextCursor *string
-	if len(records) > limit {
-		lastRecord := records[limit]
-		records = records[:limit]
-		nextCursor = cursorProvider.GetCursor(lastRecord)
-	}
-
-	paginator := &CursorPaginator{
-		Limit:      limit,
-		NextCursor: nextCursor,
-	}
-
-	return records, paginator, nil
+// Select executes a raw query and returns the result.
+func (t *botViewStorage) Select(ctx context.Context, query string, dest any, args ...any) error {
+	return t.DB().Select(ctx, dest, query, args...)
 }
 
-// clickhouse does not support row-level locking.
-
-// Query executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *botViewStorage) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return t.DB().ExecContext(ctx, query, args...)
+// Exec executes a raw query and returns the result.
+func (t *botViewStorage) Exec(ctx context.Context, query string, args ...interface{}) error {
+	return t.DB().Exec(ctx, query, args...)
 }
 
 // QueryRow executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *botViewStorage) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return t.DB().QueryRowContext(ctx, query, args...)
+func (t *botViewStorage) QueryRow(ctx context.Context, query string, args ...interface{}) driver.Row {
+	return t.DB().QueryRow(ctx, query, args...)
 }
 
 // QueryRows executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *botViewStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return t.DB().QueryContext(ctx, query, args...)
+func (t *botViewStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (driver.Rows, error) {
+	return t.DB().Query(ctx, query, args...)
+}
+
+// Conn returns the connection.
+func (t *botViewStorage) Conn() driver.Conn {
+	return t.DB()
 }

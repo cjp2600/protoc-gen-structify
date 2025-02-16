@@ -53,6 +53,10 @@ func (t *tableTemplater) BuildTemplate() string {
 			Body: tmplpkg.TableCreateMethodTemplate,
 		},
 		helperpkg.IncludeTemplate{
+			Name: "async_create_method",
+			Body: tmplpkg.TableCreateAsyncMethodTemplate,
+		},
+		helperpkg.IncludeTemplate{
 			Name: "batch_create_method",
 			Body: tmplpkg.TableBatchCreateMethodTemplate,
 		},
@@ -119,10 +123,9 @@ func (t *tableTemplater) Imports() importpkg.ImportSet {
 	is := importpkg.ImportSet{}
 	is.Enable(
 		importpkg.ImportContext,
-		importpkg.ImportDb,
-		importpkg.ImportLibPQ,
 		importpkg.ImportErrors,
 		importpkg.ImportSquirrel,
+		importpkg.ImportClickhouseDriver,
 	)
 
 	tmp := t.BuildTemplate()
@@ -452,6 +455,15 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 		// postgresType returns the postgres type.
 		"postgresType": func(f *descriptorpb.FieldDescriptorProto) string {
 			return helperpkg.PostgresType(helperpkg.ConvertType(f), helperpkg.GetFieldOptions(f), t.state.NestedMessages.IsJSON(f))
+		},
+
+		"isHasRepeated": func() bool {
+			for _, f := range t.message.GetField() {
+				if helperpkg.IsRepeated(f) {
+					return true
+				}
+			}
+			return false
 		},
 
 		// storageName returns the upper camel case storage name.

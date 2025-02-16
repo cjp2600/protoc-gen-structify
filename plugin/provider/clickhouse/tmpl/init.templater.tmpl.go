@@ -233,11 +233,16 @@ func Open(ctx context.Context, dsn string) (driver.Conn, error) {
 		return nil, errors.Wrap(err, "parse dsn")
 	}
 
-	conn := clickhouse.OpenDB(parsedOptions)
+	conn, err := clickhouse.Open(parsedOptions)
+	if err != nil {
+		return nil, errors.Wrap(err, "open clickhouse connection")
+	}
 
-	if err := conn.PingContext(ctx); err != nil {
-		conn.Close()
-		return nil, errors.Wrap(err, "failed to ping ClickHouse instance")
+	if err := conn.Ping(ctx); err != nil {
+		if exception, ok := err.(*clickhouse.Exception); ok {
+			fmt.Printf("Exception [%d] %s \n%s\n", exception.Code, exception.Message, exception.StackTrace)
+		}
+		return nil, errors.Wrap(err, "ping clickhouse instance")
 	}
 
 	return conn, nil
@@ -514,32 +519,12 @@ func (m {{ $field.FieldType }}) Get() {{ $field.Descriptor | fieldType }} {
 func (m {{ $field.FieldType }}) String() string {
 	return fmt.Sprintf("%v", m.Get())
 }
-{{ end }}
-
-// Pagination is the pagination.
-type Paginator struct {
-	TotalCount int64
-	Limit      int
-	Page       int
-	TotalPages int
-}
-
-type CursorPaginator struct {
-	Limit      int
-	NextCursor *string
-}
-
-type CursorProvider interface {
-	GetCursor(record interface{}) *string
-	CursorBuilder(cursor string) *QueryBuilder
-}`
+{{ end }}`
 
 const TransactionManagerTemplate = `
 // QueryExecer is an interface that can execute queries.
 type QueryExecer interface {
-	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+	driver.Conn
 }
 `
 

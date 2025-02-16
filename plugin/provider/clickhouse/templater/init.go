@@ -90,7 +90,6 @@ func (i *initTemplater) BuildTemplate() string {
 func (i *initTemplater) Imports() importpkg.ImportSet {
 	is := importpkg.ImportSet{}
 	is.Enable(
-		importpkg.ImportDb,
 		importpkg.ImportFMT,
 		importpkg.ImportErrors,
 		importpkg.ImportJson,

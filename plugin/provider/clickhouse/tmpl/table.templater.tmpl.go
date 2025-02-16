@@ -4,6 +4,7 @@ const TableTemplate = `
 {{ template "storage" . }}
 {{ template "structure" . }}
 {{ template "table_conditions" . }}
+{{ template "async_create_method" . }}
 {{ template "create_method" . }}
 {{ template "batch_create_method" . }}
 {{ template "update_method" . }}
@@ -264,52 +265,9 @@ const TableConditionFilters = `
 {{ end }}
 `
 
-const TableFindWithPaginationMethodTemplate = `
-// FindManyWithCursorPagination finds multiple {{ structureName }} using cursor-based pagination.
-func (t *{{ storageName | lowerCamelCase }}) FindManyWithCursorPagination(
-	ctx context.Context,
-	limit int,
-	cursor *string,
-	cursorProvider CursorProvider,
-	builders ...*QueryBuilder,
-) ([]*{{structureName}}, *CursorPaginator, error) {
-	if limit <= 0 {
-		limit = 10
-	}
+const TableFindWithPaginationMethodTemplate = ``
 
-	if cursorProvider == nil {
-		return nil, nil, errors.New("cursor provider is required")
-	}
-
-	if cursor != nil && *cursor != "" {
-		builders = append(builders, cursorProvider.CursorBuilder(*cursor))
-	}
-
-	builders = append(builders, LimitBuilder(uint64(limit+1)))
-	records, err := t.FindMany(ctx, builders...)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to find {{ structureName }}")
-	}
-
-	var nextCursor *string
-	if len(records) > limit {
-		lastRecord := records[limit]
-		records = records[:limit]
-		nextCursor = cursorProvider.GetCursor(lastRecord)
-	}
-
-	paginator := &CursorPaginator{
-		Limit:     limit,
-		NextCursor: nextCursor,
-	}
-
-	return records, paginator, nil
-}
-`
-
-const TableLockMethodTemplate = `
-// clickhouse does not support row-level locking.
-`
+const TableLockMethodTemplate = ``
 
 const TableCountMethodTemplate = `
 `
@@ -383,7 +341,7 @@ func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, build
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
+	rows, err := t.DB().Query(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to execute query")
 	}
@@ -410,42 +368,32 @@ func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, build
 }
 `
 
-const TableGetByIDMethodTemplate = `
-// FindBy{{ getPrimaryKey.GetName | camelCase }} retrieves a {{ structureName }} by its {{ getPrimaryKey.GetName }}.
-func (t *{{ storageName | lowerCamelCase }}) FindBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}, opts ...Option) (*{{ structureName }}, error) {
-	builder := NewQueryBuilder()
-	{
-		builder.WithFilter({{ messageName }}{{ getPrimaryKey.GetName | camelCase }}Eq(id))
-		builder.WithOptions(opts...)
-	}
-	
-	// Use FindOne to get a single result
-	model, err := t.FindOne(ctx, builder)
-	if err != nil {
-		return nil, errors.Wrap(err, "find one {{ structureName }}: ")
-	}
-
-	return model, nil
-}
-`
+const TableGetByIDMethodTemplate = ``
 
 const TableRawQueryMethodTemplate = `
-// Query executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *{{ storageName | lowerCamelCase }}) Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return t.DB().ExecContext(ctx, query, args...)
+// Select executes a raw query and returns the result.
+func (t *{{ storageName | lowerCamelCase }}) Select(ctx context.Context, query string, dest any, args ...any) error {
+	return t.DB().Select(ctx, dest, query, args...)
+}
+
+// Exec executes a raw query and returns the result.
+func (t *{{ storageName | lowerCamelCase }}) Exec(ctx context.Context, query string, args ...interface{}) error {
+	return t.DB().Exec(ctx, query, args...)
 }
 
 // QueryRow executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *{{ storageName | lowerCamelCase }}) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return t.DB().QueryRowContext(ctx, query, args...)
+func (t *{{ storageName | lowerCamelCase }}) QueryRow(ctx context.Context, query string, args ...interface{}) driver.Row {
+	return t.DB().QueryRow(ctx, query, args...)
 }
 
 // QueryRows executes a raw query and returns the result.
-// isWrite is used to determine if the query is a write operation.
-func (t *{{ storageName | lowerCamelCase }}) QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return t.DB().QueryContext(ctx, query, args...)
+func (t *{{ storageName | lowerCamelCase }}) QueryRows(ctx context.Context, query string, args ...interface{}) (driver.Rows, error) {
+	return t.DB().Query(ctx, query, args...)
+}
+
+// Conn returns the connection.
+func (t *{{ storageName | lowerCamelCase }}) Conn() driver.Conn {
+	return t.DB()
 }
 `
 
@@ -466,21 +414,31 @@ func (t *{{ structureName }}) TableName() string {
 }
 
 // ScanRow scans a row into a {{ structureName }}.
-func (t *{{ structureName }}) ScanRow(r *sql.Row) error {
-	return r.Scan({{ range $field := fields }} {{if not ($field | isRelation) }} &t.{{ $field | fieldName }}, {{ end }}{{ end }})
-}
-
-// ScanRows scans a single row into the {{ structureName }}.
-func (t *{{ structureName }}) ScanRows(r *sql.Rows) error {
-	return r.Scan(
-		{{- range $index, $field := fields }}
+func (t *{{ structureName }}) ScanRow(row driver.Row) error {
+	return row.Scan(
+		{{- range $field := fields }}
 		{{- if not ($field | isRelation) }}
 		&t.{{ $field | fieldName }},
-		{{- end}}
+		{{- end }}
 		{{- end }}
 	)
 }
-`
+
+// ScanRows scans multiple rows into the struct {{ structureName }}.
+func (t *{{ structureName }}) ScanRows(rows driver.Rows) error {
+	for rows.Next() {
+		if err := rows.Scan(
+			{{- range $field := fields }}
+			{{- if not ($field | isRelation) }}
+			&t.{{ $field | fieldName }},
+			{{- end }}
+			{{- end }}
+		); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}`
 
 const TableBatchCreateMethodTemplate = `
 // BatchCreate creates multiple {{ structureName }} records in a single batch.
@@ -498,7 +456,89 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 		return errors.New("relations are not supported in batch create")
 	}
 
-	query := t.queryBuilder.Insert(t.TableName()).
+	batch, err := t.DB().PrepareBatch(ctx, "INSERT INTO " + t.TableName())
+	if err != nil {
+		return errors.Wrap(err, "failed to prepare batch")
+	}
+
+	for _, model := range models {
+		if model == nil {
+			return errors.New("one of the models is nil")
+		}
+
+		{{- range $index, $field := fields }}
+		{{- if not ($field | isRelation) }}
+		{{- if ($field | isRepeated) }}
+		// Get value of {{ $field | fieldName | lowerCamelCase }}
+		{{ $field | fieldName | lowerCamelCase }}, err := model.{{ $field | fieldName }}.Value()
+		if err != nil {
+			return errors.Wrap(err, "failed to get value of {{ $field | fieldName }}")
+		}
+		{{- end}}
+		{{- end}}
+		{{- end}}
+
+		{{ if isHasRepeated }}err = batch.Append({{ else }}err := batch.Append({{ end }}
+			{{- range $index, $field := fields }}
+			{{- if not ($field | isRelation) }}
+			{{- if not ($field | isAutoIncrement ) }}
+			{{- if not ($field | isDefaultUUID ) }}
+
+			{{- if ($field | isRepeated) }}
+				{{ $field | fieldName | lowerCamelCase }},
+			{{- else }}
+			
+				{{- if (findPointer $field) }}
+				nullValue(model.{{ $field | fieldName }}),
+				{{- else }}
+				model.{{ $field | fieldName }},
+				{{- end }}
+
+			{{- end}}
+
+			{{- end}}
+			{{- end}}
+			{{- end}}
+			{{- end}}
+		)
+		if err != nil {
+			return errors.Wrap(err, "failed to append to batch")
+		}
+	}
+
+	if err := batch.Send(); err != nil {
+		return errors.Wrap(err, "failed to execute batch insert")
+	}
+
+	return nil
+}`
+
+const TableCreateAsyncMethodTemplate = `
+// AsyncCreate asynchronously inserts a new {{ structureName }}.
+func (t *{{ storageName | lowerCamelCase }}) AsyncCreate(ctx context.Context, model *{{structureName}}, opts ...Option) error { 
+	if model == nil {
+		return errors.New("model is nil")
+	}
+
+	// Set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	{{- range $index, $field := fields }}
+	{{- if not ($field | isRelation) }}
+	{{- if ($field | isRepeated) }}
+	// Get value of {{ $field | fieldName | lowerCamelCase }}
+	{{ $field | fieldName | lowerCamelCase }}, err := model.{{ $field | fieldName }}.Value()
+	if err != nil {
+		return errors.Wrap(err, "failed to get value of {{ $field | fieldName }}")
+	}
+	{{- end}}
+	{{- end}}
+	{{- end}}
+
+	query := t.queryBuilder.Insert("{{ tableName }}").
 		Columns(
 			{{- range $index, $field := fields }}
 			{{- if not ($field | isRelation) }}
@@ -509,26 +549,23 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 			{{- end}}
 			{{- end}}
 			{{- end}}
-		)
-
-	for _, model := range models {
-		if model == nil {
-			return errors.New("one of the models is nil")
-		}
-		query = query.Values(
+		).
+		Values(
 			{{- range $index, $field := fields }}
 			{{- if not ($field | isRelation) }}
 			{{- if not ($field | isAutoIncrement ) }}
 			{{- if not ($field | isDefaultUUID ) }}
-
+			
 			{{- if ($field | isRepeated) }}
 				{{ $field | fieldName | lowerCamelCase }},
 			{{- else }}
+			
 				{{- if (findPointer $field) }}
 				nullValue(model.{{ $field | fieldName }}),
 				{{- else }}
 				model.{{ $field | fieldName }},
 				{{- end }}
+
 			{{- end}}
 
 			{{- end}}
@@ -536,7 +573,6 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 			{{- end}}
 			{{- end}}
 		)
-	}
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -544,23 +580,40 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	rows, err := t.DB().QueryContext(ctx, sqlQuery, args...)
-	if err != nil {
-		return errors.Wrap(err, "failed to execute bulk insert")
+	if err := t.DB().AsyncInsert(ctx, sqlQuery, false, args...); err != nil {
+		return errors.Wrap(err, "failed to asynchronously create {{ structureName }}")
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			t.logError(ctx, err, "failed to close rows")
-		}
-	}()
 
-	if err := rows.Err(); err != nil {
-		return errors.Wrap(err, "rows iteration error")
-	}
+	{{- range $index, $field := fields }}
+	{{- if and ($field | isRelation) ($field | relationAllowSubCreating) }}
+	if options.relations && model.{{ $field | fieldName }} != nil { {{ if ($field | isRepeated) }}
+		for _, item := range model.{{ $field | fieldName }} {
+			s, err := New{{ $field | relationStorageName }}(t.config)
+			if err != nil {
+				return errors.Wrap(err, "failed to create {{ $field | fieldName }}")
+			}
+
+			err = s.AsyncCreate(ctx, item)
+			if err != nil {
+				return errors.Wrap(err, "failed to asynchronously create {{ $field | fieldName }}")
+			}
+		}
+	{{- else }}
+		s, err := New{{ $field | relationStorageName }}(t.config)
+		if err != nil {
+			return errors.Wrap(err, "failed to create {{ $field | fieldName }}")
+		}
+
+		err = s.AsyncCreate(ctx, model.{{ $field | fieldName }})
+		if err != nil {
+			return errors.Wrap(err, "failed to asynchronously create {{ $field | fieldName }}")
+		}
+	{{- end}}
+	} {{- end}}
+	{{- end}}
 
 	return nil
-}
-`
+}`
 
 const TableCreateMethodTemplate = `
 // Create creates a new {{ structureName }}.
@@ -629,7 +682,7 @@ func (t *{{ storageName | lowerCamelCase }}) Create(ctx context.Context, model *
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	_, err = t.DB().ExecContext(ctx, sqlQuery, args...)
+	err = t.DB().Exec(ctx, sqlQuery, args...)
 	if err != nil {
 		return errors.Wrap(err, "failed to create {{ structureName }}")
 	}
@@ -671,23 +724,11 @@ type {{ storageName | lowerCamelCase }} struct {
 	queryBuilder sq.StatementBuilderType
 }
 
-{{ if .CRUDSchemas }}
-// {{structureName}}TableManager is an interface for managing the {{ tableName }} table.
-type {{structureName}}TableManager interface {
-	CreateTable(ctx context.Context) error
-	DropTable(ctx context.Context) error
-	TruncateTable(ctx context.Context) error
-	UpgradeTable(ctx context.Context) error
-}
-{{ end }}
-
 // {{structureName}}CRUDOperations is an interface for managing the {{ tableName }} table.
 type {{structureName}}CRUDOperations interface {
 	Create(ctx context.Context, model *{{structureName}}, opts ...Option) error
+	AsyncCreate(ctx context.Context, model *{{structureName}}, opts ...Option) error
 	BatchCreate(ctx context.Context, models []*{{structureName}}, opts ...Option) error
-	{{- if (hasPrimaryKey) }}
-	FindBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}, opts ...Option) (*{{ structureName }}, error)
-	{{- end }}
 }
 
 // {{structureName}}SearchOperations is an interface for searching the {{ tableName }} table.
@@ -696,9 +737,10 @@ type {{structureName}}SearchOperations interface {
 	FindOne(ctx context.Context, builders ...*QueryBuilder) (*{{structureName}}, error)
 }
 
-// {{structureName}}PaginationOperations is an interface for pagination operations.
-type {{structureName}}PaginationOperations interface {
-	FindManyWithCursorPagination(ctx context.Context, limit int, cursor *string, cursorProvider CursorProvider, builders ...*QueryBuilder) ([]*{{structureName}}, *CursorPaginator, error)
+type {{structureName}}Settings interface {
+	Conn() driver.Conn
+	SetConfig(config *Config) {{ storageName }}
+	SetQueryBuilder(builder sq.StatementBuilderType) {{ storageName }}
 }
 
 // {{structureName}}RelationLoading is an interface for loading relations.
@@ -717,21 +759,19 @@ type {{structureName}}RelationLoading interface {
 
 // {{structureName}}RawQueryOperations is an interface for executing raw queries.
 type {{structureName}}RawQueryOperations interface {
-	Query(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
-	QueryRows(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	Select(ctx context.Context, query string, dest any, args ...any) error
+	Exec(ctx context.Context, query string, args ...interface{}) error
+	QueryRow(ctx context.Context, query string, args ...interface{}) driver.Row
+	QueryRows(ctx context.Context, query string, args ...interface{}) (driver.Rows, error)
 }
 
 // {{ storageName }} is a struct for the "{{ tableName }}" table.
 type {{ storageName }} interface {
-{{ if .CRUDSchemas }}
-    {{structureName}}TableManager
-{{ end }}
 	{{structureName}}CRUDOperations
 	{{structureName}}SearchOperations
-	{{structureName}}PaginationOperations
 	{{structureName}}RelationLoading
 	{{structureName}}RawQueryOperations
+	{{structureName}}Settings
 }
 
 // New{{ storageName }} returns a new {{ storageName | lowerCamelCase }}.
@@ -780,92 +820,15 @@ func (t *{{ storageName | lowerCamelCase }}) DB() QueryExecer {
 	return t.config.DB
 }
 
-{{ if .CRUDSchemas }}
-// createTable creates the table.
-func (t *{{ storageName | lowerCamelCase }}) CreateTable(ctx context.Context) error {
-	sqlQuery := ` + "`" + `
-		{{- range $index, $field := fields }}
-		{{- if ($field | isDefaultUUID ) }}
-		CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-		{{- end}}
-		{{- end}}
-		-- Table: {{ tableName }}
-		CREATE TABLE IF NOT EXISTS {{ tableName }} (
-		{{- range $index, $field := fields }}
-		{{- if not ($field | isRelation) }}
-		{{ $field | sourceName }} {{if ($field | isAutoIncrement) }} SERIAL{{else}}{{ $field | postgresType }}{{end}}{{if $field | isPrimaryKey }} PRIMARY KEY{{end}}{{ if and (isNotNull $field) (not (isAutoIncrement $field)) }} NOT NULL{{ end }}{{if ($field | getDefaultValue) }} DEFAULT {{$field | getDefaultValue}}{{end}}{{if not ( $field | isLastField )}},{{end}}
-		{{- end}}
-		{{- end}});
-		-- Other entities
-		{{- if (comment) }}
-		COMMENT ON TABLE {{ tableName }} IS '{{ comment }}';
-		{{- end}}
-		{{- range $index, $field := fields }}
-		{{- if ($field | hasUnique) }}
-		CREATE UNIQUE INDEX IF NOT EXISTS {{ tableName }}_{{ $field | sourceName }}_unique_idx ON {{ tableName }} USING btree ({{ $field | sourceName }});
-		{{- end}}
-		{{- end}}
-
-		{{- range $index, $fields := getStructureUniqueIndexes }}
-		CREATE UNIQUE INDEX IF NOT EXISTS {{ tableName }}_unique_idx_{{ $fields | sliceToString }} ON {{ tableName }} USING btree (
-        {{- $length := sub (len $fields) 1 }}
-        {{- range $i, $field := $fields }}
-            {{ $field | sourceName }}{{ if lt $i $length }}, {{ end }}
-        {{- end }}
-    	);
-		{{- end }}
-
-
-		{{- range $index, $field := fields }}
-		{{- if ($field | hasIndex) }}
-		CREATE INDEX IF NOT EXISTS {{ tableName }}_{{ $field | sourceName }}_idx ON {{ tableName }} USING btree ({{ $field | sourceName }});
-		{{- end}}
-		{{- end}}
-		{{- range $index, $field := fields }}
-		{{- if ($field | isRelation) }}
-		{{- if ($field | isForeign) }}
-		-- Foreign keys for {{ $field | relationTableName }}
-		ALTER TABLE {{ tableName }}
-		ADD FOREIGN KEY ({{ $field | getFieldSource }}) REFERENCES {{ $field | relationTableName }}({{ $field | getRefSource }})
-		{{- if ($field | isCascade) }}
-		ON DELETE CASCADE;
-		{{- else }}; 
-        {{- end}}
-		{{- end}}
-		{{- end}}
-		{{- end }}
-	` + "`" + `
-
-	_, err := t.DB().ExecContext(ctx,sqlQuery)
-	return err
+func (t *{{ storageName | lowerCamelCase }}) SetConfig(config *Config) {{ storageName }} {
+	t.config = config
+	return t
 }
 
-// DropTable drops the table.
-func (t *{{ storageName | lowerCamelCase }}) DropTable(ctx context.Context) error {
-	sqlQuery := ` + "`" + `
-		DROP TABLE IF EXISTS {{ tableName }};
-	` + "`" + `
-
-	_, err := t.DB().ExecContext(ctx,sqlQuery)
-	return err
+func (t *{{ storageName | lowerCamelCase }}) SetQueryBuilder(builder sq.StatementBuilderType) {{ storageName }} {
+	t.queryBuilder = builder
+	return t
 }
-
-// TruncateTable truncates the table.
-func (t *{{ storageName | lowerCamelCase }}) TruncateTable(ctx context.Context) error {
-	sqlQuery := ` + "`" + `
-		TRUNCATE TABLE {{ tableName }};
-	` + "`" + `
-
-	_, err := t.DB().ExecContext(ctx,sqlQuery)
-	return err
-}
-
-// UpgradeTable upgrades the table.
-// todo: delete this method 
-func (t *{{ storageName | lowerCamelCase }}) UpgradeTable(ctx context.Context) error {
-	return nil
-}
-{{ end }}
 
 {{- range $index, $field := fields }}
 {{- if and ($field | isRelation) }}
