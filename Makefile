@@ -9,7 +9,7 @@ LDFLAGS          = -ldflags "-X 'github.com/cjp2600/protoc-gen-structify/plugin/
                              -X 'github.com/cjp2600/protoc-gen-structify/plugin/pkg/version.Branch=$(GIT_BRANCH)' \
                              -X 'github.com/cjp2600/protoc-gen-structify/plugin/pkg/version.BuildDate=$(DATE)'"
 
-PROTOC_VER := 3.15.8
+PROTOC_VER := 3.16.0
 PROTOC_ZIP := protoc-$(PROTOC_VER)-osx-x86_64.zip
 PROTOC := $(GOBIN)/bin/protoc
 DB_DIR := ./example/case_one/db
@@ -39,6 +39,17 @@ endif
 	--structify_out=. --structify_opt=paths=source_relative,include_connection=true \
 	$(f)
 
+.PHONY: build-example-clickhouse
+build-example-clickhouse: build ## Build example: make build-example f=example/blog.proto
+ifndef f
+f = example/case_click/db/blog.proto
+endif
+	@$(PROTOC) -I/usr/local/include -I.  \
+	-I$(DB_DIR)/proto \
+	--plugin=protoc-gen-structify=$(GOBIN)/structify \
+	--structify_out=. --structify_opt=paths=source_relative,include_connection=true \
+	$(f)
+
 .PHONY: install-protoc
 install-protoc: $(GOBIN) ## Install protocol buffer compiler
 	@if [ ! -f $(PROTOC) ]; then \
@@ -51,7 +62,7 @@ install-protoc: $(GOBIN) ## Install protocol buffer compiler
 
 .PHONY: install-protoc-gen-go
 install-protoc-gen-go: $(GOBIN) ## Install protoc-gen-go plugin
-	@GOBIN=$(GOBIN) $(GO) install github.com/golang/protobuf/protoc-gen-go@v1.5.3
+	@GOBIN=$(GOBIN) $(GO) install github.com/golang/protobuf/protoc-gen-go@v1.5.4
 
 .PHONY: build-options
 build-options: install-tools ## Build options plugin

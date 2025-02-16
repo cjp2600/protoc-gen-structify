@@ -2,6 +2,7 @@ package provider
 
 import (
 	"errors"
+	"github.com/cjp2600/protoc-gen-structify/plugin/provider/clickhouse"
 
 	plugingo "github.com/golang/protobuf/protoc-gen-go/plugin"
 
@@ -32,6 +33,8 @@ func GetTemplateBuilder(request *plugingo.CodeGeneratorRequest) (TemplateBuilder
 			return &postgres.Postgres{}, nil
 		case Sqlite:
 			return &sqlite.Sqlite{}, nil
+		case Clickhouse:
+			return &clickhouse.Clickhouse{}, nil
 		}
 	}
 	return nil, ErrUnsupportedProvider
@@ -49,6 +52,8 @@ func ParseFromString(provider string) Provider {
 		return Postgres
 	case "sqlite":
 		return Sqlite
+	case "clickhouse":
+		return Clickhouse
 	default:
 		// Default to Postgres
 		return Postgres
@@ -62,9 +67,10 @@ func (p Provider) String() string {
 
 // Available providers.
 var (
-	Mysql    Provider = "mysql"
-	Postgres Provider = "postgres"
-	Sqlite   Provider = "sqlite"
+	Mysql      Provider = "mysql"
+	Postgres   Provider = "postgres"
+	Sqlite     Provider = "sqlite"
+	Clickhouse Provider = "clickhouse"
 )
 
 // ErrUnsupportedProvider is returned when the provider is not supported.
