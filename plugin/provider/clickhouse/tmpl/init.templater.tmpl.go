@@ -104,6 +104,8 @@ type QueryBuilder struct {
 		filter CustomFilter
 		params any
 	}
+	// customTableName is the custom table name.
+	customTableName string
 }
 
 // NewQueryBuilder returns a new query builder.
@@ -129,12 +131,26 @@ func (qb *QueryBuilder) WithCustomFilter(filter CustomFilter, params any) *Query
 	return qb
 }
 
+// WithCustomTableName sets a custom table name for the query.
+func (qb *QueryBuilder) WithCustomTableName(tableName string) *QueryBuilder {
+	qb.customTableName = tableName
+	return qb
+}
+
 // nullValue returns the null value.
 func nullValue[T any](v *T) interface{} {
 	if v == nil {
 		return nil
 	}
 	return *v
+}
+
+// Apply customTableName to the query.
+func (qb *QueryBuilder) ApplyCustomTableName(query sq.SelectBuilder) sq.SelectBuilder {
+	if qb.customTableName != "" {
+		query = query.From(qb.customTableName)
+	}
+	return query
 }
 
 // ApplyCustomFilters applies the custom filters to the query.

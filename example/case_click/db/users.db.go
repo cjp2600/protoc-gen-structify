@@ -951,6 +951,9 @@ func (t *userStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 			continue
 		}
 
+		// apply custom table name
+		query = builder.ApplyCustomTableName(query)
+
 		// apply filter options
 		for _, option := range builder.filterOptions {
 			query = option.Apply(query)
