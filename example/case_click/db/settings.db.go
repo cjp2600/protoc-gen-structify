@@ -405,7 +405,7 @@ func (t *settingStorage) BatchCreate(ctx context.Context, models []*Setting, opt
 		return errors.New("relations are not supported in batch create")
 	}
 
-	batch, err := t.DB().PrepareBatch(ctx, "INSERT INTO "+t.TableName())
+	batch, err := t.DB().PrepareBatch(ctx, "INSERT INTO "+t.TableName(), driver.WithReleaseConnection())
 	if err != nil {
 		return errors.Wrap(err, "failed to prepare batch")
 	}
