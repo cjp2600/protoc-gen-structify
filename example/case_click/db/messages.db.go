@@ -18,6 +18,7 @@ type MessageCRUDOperations interface {
 	Create(ctx context.Context, model *Message, opts ...Option) error
 	AsyncCreate(ctx context.Context, model *Message, opts ...Option) error
 	BatchCreate(ctx context.Context, models []*Message, opts ...Option) error
+	OriginalBatchCreate(ctx context.Context, models []*Message, opts ...Option) error
 }
 
 // MessageSearchOperations is an interface for searching the messages table.
@@ -659,6 +660,62 @@ func (t *messageStorage) BatchCreate(ctx context.Context, models []*Message, opt
 
 	if err := batch.Send(); err != nil {
 		return errors.Wrap(err, "failed to execute batch insert")
+	}
+
+	return nil
+}
+
+// OriginalBatchCreate creates multiple Message records in a single batch.
+func (t *messageStorage) OriginalBatchCreate(ctx context.Context, models []*Message, opts ...Option) error {
+	if len(models) == 0 {
+		return errors.New("no models to insert")
+	}
+
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	if options.relations {
+		return errors.New("relations are not supported in batch create")
+	}
+
+	query := t.queryBuilder.Insert(t.TableName()).
+		Columns(
+			"from_user_id",
+			"to_user_id",
+			"bot_id",
+		)
+
+	for _, model := range models {
+		if model == nil {
+			return errors.New("one of the models is nil")
+		}
+		query = query.Values(
+			model.FromUserId,
+			model.ToUserId,
+			nullValue(model.BotId),
+		)
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return errors.Wrap(err, "failed to build query")
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	rows, err := t.DB().Query(ctx, sqlQuery, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to execute bulk insert")
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.logError(ctx, err, "failed to close rows")
+		}
+	}()
+
+	if err := rows.Err(); err != nil {
+		return errors.Wrap(err, "rows iteration error")
 	}
 
 	return nil

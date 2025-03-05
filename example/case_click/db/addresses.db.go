@@ -19,6 +19,7 @@ type AddressCRUDOperations interface {
 	Create(ctx context.Context, model *Address, opts ...Option) error
 	AsyncCreate(ctx context.Context, model *Address, opts ...Option) error
 	BatchCreate(ctx context.Context, models []*Address, opts ...Option) error
+	OriginalBatchCreate(ctx context.Context, models []*Address, opts ...Option) error
 }
 
 // AddressSearchOperations is an interface for searching the addresses table.
@@ -471,6 +472,70 @@ func (t *addressStorage) BatchCreate(ctx context.Context, models []*Address, opt
 
 	if err := batch.Send(); err != nil {
 		return errors.Wrap(err, "failed to execute batch insert")
+	}
+
+	return nil
+}
+
+// OriginalBatchCreate creates multiple Address records in a single batch.
+func (t *addressStorage) OriginalBatchCreate(ctx context.Context, models []*Address, opts ...Option) error {
+	if len(models) == 0 {
+		return errors.New("no models to insert")
+	}
+
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	if options.relations {
+		return errors.New("relations are not supported in batch create")
+	}
+
+	query := t.queryBuilder.Insert(t.TableName()).
+		Columns(
+			"street",
+			"city",
+			"state",
+			"zip",
+			"user_id",
+			"created_at",
+			"updated_at",
+		)
+
+	for _, model := range models {
+		if model == nil {
+			return errors.New("one of the models is nil")
+		}
+		query = query.Values(
+			model.Street,
+			model.City,
+			model.State,
+			model.Zip,
+			model.UserId,
+			model.CreatedAt,
+			nullValue(model.UpdatedAt),
+		)
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return errors.Wrap(err, "failed to build query")
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	rows, err := t.DB().Query(ctx, sqlQuery, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to execute bulk insert")
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.logError(ctx, err, "failed to close rows")
+		}
+	}()
+
+	if err := rows.Err(); err != nil {
+		return errors.Wrap(err, "rows iteration error")
 	}
 
 	return nil

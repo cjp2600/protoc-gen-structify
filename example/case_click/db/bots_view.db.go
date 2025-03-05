@@ -19,6 +19,7 @@ type BotViewCRUDOperations interface {
 	Create(ctx context.Context, model *BotView, opts ...Option) error
 	AsyncCreate(ctx context.Context, model *BotView, opts ...Option) error
 	BatchCreate(ctx context.Context, models []*BotView, opts ...Option) error
+	OriginalBatchCreate(ctx context.Context, models []*BotView, opts ...Option) error
 }
 
 // BotViewSearchOperations is an interface for searching the bots_view table.
@@ -522,6 +523,70 @@ func (t *botViewStorage) BatchCreate(ctx context.Context, models []*BotView, opt
 
 	if err := batch.Send(); err != nil {
 		return errors.Wrap(err, "failed to execute batch insert")
+	}
+
+	return nil
+}
+
+// OriginalBatchCreate creates multiple BotView records in a single batch.
+func (t *botViewStorage) OriginalBatchCreate(ctx context.Context, models []*BotView, opts ...Option) error {
+	if len(models) == 0 {
+		return errors.New("no models to insert")
+	}
+
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	if options.relations {
+		return errors.New("relations are not supported in batch create")
+	}
+
+	query := t.queryBuilder.Insert(t.TableName()).
+		Columns(
+			"user_id",
+			"name",
+			"token",
+			"is_publish",
+			"created_at",
+			"updated_at",
+			"deleted_at",
+		)
+
+	for _, model := range models {
+		if model == nil {
+			return errors.New("one of the models is nil")
+		}
+		query = query.Values(
+			model.UserId,
+			model.Name,
+			model.Token,
+			model.IsPublish,
+			model.CreatedAt,
+			model.UpdatedAt,
+			nullValue(model.DeletedAt),
+		)
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return errors.Wrap(err, "failed to build query")
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	rows, err := t.DB().Query(ctx, sqlQuery, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to execute bulk insert")
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.logError(ctx, err, "failed to close rows")
+		}
+	}()
+
+	if err := rows.Err(); err != nil {
+		return errors.Wrap(err, "rows iteration error")
 	}
 
 	return nil

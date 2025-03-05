@@ -7,6 +7,7 @@ const TableTemplate = `
 {{ template "async_create_method" . }}
 {{ template "create_method" . }}
 {{ template "batch_create_method" . }}
+{{ template "original_batch_create_method" . }}
 {{ template "update_method" . }}
 {{ template "delete_method" . }}
 {{- if (hasPrimaryKey) }}
@@ -427,6 +428,88 @@ func (t *{{ structureName }}) ScanRow(row driver.Row) error {
 	)
 }`
 
+const TableOriginalBatchCreateMethodTemplate = `
+// OriginalBatchCreate creates multiple {{ structureName }} records in a single batch.
+func (t *{{ storageName | lowerCamelCase }}) OriginalBatchCreate(ctx context.Context, models []*{{structureName}}, opts ...Option) error {
+	if len(models) == 0 {
+		return errors.New("no models to insert")
+	}
+
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	if options.relations {
+		return errors.New("relations are not supported in batch create")
+	}
+
+	query := t.queryBuilder.Insert(t.TableName()).
+		Columns(
+			{{- range $index, $field := fields }}
+			{{- if not ($field | isRelation) }}
+			{{- if not ($field | isAutoIncrement ) }}
+			{{- if not ($field | isDefaultUUID ) }}
+			"{{ $field | sourceName }}",
+			{{- end}}
+			{{- end}}
+			{{- end}}
+			{{- end}}
+		)
+
+	for _, model := range models {
+		if model == nil {
+			return errors.New("one of the models is nil")
+		}
+		query = query.Values(
+			{{- range $index, $field := fields }}
+			{{- if not ($field | isRelation) }}
+			{{- if not ($field | isAutoIncrement ) }}
+			{{- if not ($field | isDefaultUUID ) }}
+
+			{{- if ($field | isRepeated) }}
+				{{ $field | fieldName | lowerCamelCase }},
+			{{- else }}
+			
+				{{- if (findPointer $field) }}
+				nullValue(model.{{ $field | fieldName }}),
+				{{- else }}
+				model.{{ $field | fieldName }},
+				{{- end }}
+
+			{{- end}}
+
+			{{- end}}
+			{{- end}}
+			{{- end}}
+			{{- end}}
+		)
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return errors.Wrap(err, "failed to build query")
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	rows, err := t.DB().Query(ctx, sqlQuery, args...)
+	if err != nil {
+		return errors.Wrap(err, "failed to execute bulk insert")
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.logError(ctx, err, "failed to close rows")
+		}
+	}()
+
+	if err := rows.Err(); err != nil {
+		return errors.Wrap(err, "rows iteration error")
+	}
+
+	return nil 
+}
+`
+
 const TableBatchCreateMethodTemplate = `
 // BatchCreate creates multiple {{ structureName }} records in a single batch.
 func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, models []*{{structureName}}, opts ...Option) error {
@@ -716,6 +799,7 @@ type {{structureName}}CRUDOperations interface {
 	Create(ctx context.Context, model *{{structureName}}, opts ...Option) error
 	AsyncCreate(ctx context.Context, model *{{structureName}}, opts ...Option) error
 	BatchCreate(ctx context.Context, models []*{{structureName}}, opts ...Option) error
+	OriginalBatchCreate(ctx context.Context, models []*{{structureName}}, opts ...Option) error
 }
 
 // {{structureName}}SearchOperations is an interface for searching the {{ tableName }} table.
