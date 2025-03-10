@@ -30,8 +30,11 @@ type UserSearchOperations interface {
 
 type UserSettings interface {
 	Conn() driver.Conn
+	TableName() string
 	SetConfig(config *Config) UserStorage
 	SetQueryBuilder(builder sq.StatementBuilderType) UserStorage
+	Columns() []string
+	GetQueryBuilder() sq.StatementBuilderType
 }
 
 // UserRelationLoading is an interface for loading relations.
@@ -95,6 +98,11 @@ func (t *userStorage) logError(ctx context.Context, err error, message string) {
 // TableName returns the table name.
 func (t *userStorage) TableName() string {
 	return "users"
+}
+
+// GetQueryBuilder returns the query builder.
+func (t *userStorage) GetQueryBuilder() sq.StatementBuilderType {
+	return t.queryBuilder
 }
 
 // Columns returns the columns for the table.

@@ -30,8 +30,11 @@ type BotSearchOperations interface {
 
 type BotSettings interface {
 	Conn() driver.Conn
+	TableName() string
 	SetConfig(config *Config) BotStorage
 	SetQueryBuilder(builder sq.StatementBuilderType) BotStorage
+	Columns() []string
+	GetQueryBuilder() sq.StatementBuilderType
 }
 
 // BotRelationLoading is an interface for loading relations.
@@ -89,6 +92,11 @@ func (t *botStorage) logError(ctx context.Context, err error, message string) {
 // TableName returns the table name.
 func (t *botStorage) TableName() string {
 	return "bots"
+}
+
+// GetQueryBuilder returns the query builder.
+func (t *botStorage) GetQueryBuilder() sq.StatementBuilderType {
+	return t.queryBuilder
 }
 
 // Columns returns the columns for the table.

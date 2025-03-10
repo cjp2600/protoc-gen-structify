@@ -810,8 +810,11 @@ type {{structureName}}SearchOperations interface {
 
 type {{structureName}}Settings interface {
 	Conn() driver.Conn
+	TableName() string
 	SetConfig(config *Config) {{ storageName }}
 	SetQueryBuilder(builder sq.StatementBuilderType) {{ storageName }}
+	Columns() []string
+	GetQueryBuilder() sq.StatementBuilderType
 }
 
 // {{structureName}}RelationLoading is an interface for loading relations.
@@ -877,6 +880,11 @@ func (t *{{ storageName | lowerCamelCase }}) logError(ctx context.Context, err e
 // TableName returns the table name.
 func (t *{{ storageName | lowerCamelCase }}) TableName() string {
 	return "{{ tableName }}"
+}
+
+// GetQueryBuilder returns the query builder.
+func (t *{{ storageName | lowerCamelCase }}) GetQueryBuilder() sq.StatementBuilderType {
+	return t.queryBuilder
 }
 
 // Columns returns the columns for the table.

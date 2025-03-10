@@ -29,8 +29,11 @@ type SettingSearchOperations interface {
 
 type SettingSettings interface {
 	Conn() driver.Conn
+	TableName() string
 	SetConfig(config *Config) SettingStorage
 	SetQueryBuilder(builder sq.StatementBuilderType) SettingStorage
+	Columns() []string
+	GetQueryBuilder() sq.StatementBuilderType
 }
 
 // SettingRelationLoading is an interface for loading relations.
@@ -88,6 +91,11 @@ func (t *settingStorage) logError(ctx context.Context, err error, message string
 // TableName returns the table name.
 func (t *settingStorage) TableName() string {
 	return "settings"
+}
+
+// GetQueryBuilder returns the query builder.
+func (t *settingStorage) GetQueryBuilder() sq.StatementBuilderType {
+	return t.queryBuilder
 }
 
 // Columns returns the columns for the table.

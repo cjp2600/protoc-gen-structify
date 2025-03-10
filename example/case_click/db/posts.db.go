@@ -29,8 +29,11 @@ type PostSearchOperations interface {
 
 type PostSettings interface {
 	Conn() driver.Conn
+	TableName() string
 	SetConfig(config *Config) PostStorage
 	SetQueryBuilder(builder sq.StatementBuilderType) PostStorage
+	Columns() []string
+	GetQueryBuilder() sq.StatementBuilderType
 }
 
 // PostRelationLoading is an interface for loading relations.
@@ -88,6 +91,11 @@ func (t *postStorage) logError(ctx context.Context, err error, message string) {
 // TableName returns the table name.
 func (t *postStorage) TableName() string {
 	return "posts"
+}
+
+// GetQueryBuilder returns the query builder.
+func (t *postStorage) GetQueryBuilder() sq.StatementBuilderType {
+	return t.queryBuilder
 }
 
 // Columns returns the columns for the table.

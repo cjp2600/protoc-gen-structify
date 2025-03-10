@@ -29,8 +29,11 @@ type DeviceSearchOperations interface {
 
 type DeviceSettings interface {
 	Conn() driver.Conn
+	TableName() string
 	SetConfig(config *Config) DeviceStorage
 	SetQueryBuilder(builder sq.StatementBuilderType) DeviceStorage
+	Columns() []string
+	GetQueryBuilder() sq.StatementBuilderType
 }
 
 // DeviceRelationLoading is an interface for loading relations.
@@ -86,6 +89,11 @@ func (t *deviceStorage) logError(ctx context.Context, err error, message string)
 // TableName returns the table name.
 func (t *deviceStorage) TableName() string {
 	return "devices"
+}
+
+// GetQueryBuilder returns the query builder.
+func (t *deviceStorage) GetQueryBuilder() sq.StatementBuilderType {
+	return t.queryBuilder
 }
 
 // Columns returns the columns for the table.

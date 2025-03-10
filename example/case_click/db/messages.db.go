@@ -29,8 +29,11 @@ type MessageSearchOperations interface {
 
 type MessageSettings interface {
 	Conn() driver.Conn
+	TableName() string
 	SetConfig(config *Config) MessageStorage
 	SetQueryBuilder(builder sq.StatementBuilderType) MessageStorage
+	Columns() []string
+	GetQueryBuilder() sq.StatementBuilderType
 }
 
 // MessageRelationLoading is an interface for loading relations.
@@ -92,6 +95,11 @@ func (t *messageStorage) logError(ctx context.Context, err error, message string
 // TableName returns the table name.
 func (t *messageStorage) TableName() string {
 	return "messages"
+}
+
+// GetQueryBuilder returns the query builder.
+func (t *messageStorage) GetQueryBuilder() sq.StatementBuilderType {
+	return t.queryBuilder
 }
 
 // Columns returns the columns for the table.

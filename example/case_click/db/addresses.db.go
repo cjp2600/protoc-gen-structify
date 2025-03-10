@@ -30,8 +30,11 @@ type AddressSearchOperations interface {
 
 type AddressSettings interface {
 	Conn() driver.Conn
+	TableName() string
 	SetConfig(config *Config) AddressStorage
 	SetQueryBuilder(builder sq.StatementBuilderType) AddressStorage
+	Columns() []string
+	GetQueryBuilder() sq.StatementBuilderType
 }
 
 // AddressRelationLoading is an interface for loading relations.
@@ -89,6 +92,11 @@ func (t *addressStorage) logError(ctx context.Context, err error, message string
 // TableName returns the table name.
 func (t *addressStorage) TableName() string {
 	return "addresses"
+}
+
+// GetQueryBuilder returns the query builder.
+func (t *addressStorage) GetQueryBuilder() sq.StatementBuilderType {
+	return t.queryBuilder
 }
 
 // Columns returns the columns for the table.
