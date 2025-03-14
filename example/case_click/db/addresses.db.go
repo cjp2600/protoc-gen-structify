@@ -386,7 +386,7 @@ func (t *addressStorage) AsyncCreate(ctx context.Context, model *Address, opts .
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	if err := t.DB().AsyncInsert(ctx, sqlQuery, false, args...); err != nil {
+	if err := t.DB().AsyncInsert(ctx, sqlQuery, options.waitAsyncInsert, args...); err != nil {
 		return errors.Wrap(err, "failed to asynchronously create Address")
 	}
 

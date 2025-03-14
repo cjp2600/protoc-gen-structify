@@ -61,6 +61,15 @@ type Options struct {
 	relations bool
 	// uniqField is the unique field.
 	uniqField string
+	// waitAsyncInsert is the wait flag. wait_for_async_insert = 1
+	waitAsyncInsert bool
+}
+
+// WithWaitAsyncInsert sets the waitAsyncInsert flag.
+func WithWaitAsyncInsert() Option {
+	return func(o *Options) {
+		o.waitAsyncInsert = true
+	}
 }
 
 // WithRelations sets the relations flag.

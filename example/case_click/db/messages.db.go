@@ -586,7 +586,7 @@ func (t *messageStorage) AsyncCreate(ctx context.Context, model *Message, opts .
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	if err := t.DB().AsyncInsert(ctx, sqlQuery, false, args...); err != nil {
+	if err := t.DB().AsyncInsert(ctx, sqlQuery, options.waitAsyncInsert, args...); err != nil {
 		return errors.Wrap(err, "failed to asynchronously create Message")
 	}
 

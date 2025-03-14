@@ -725,7 +725,7 @@ func (t *userStorage) AsyncCreate(ctx context.Context, model *User, opts ...Opti
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	if err := t.DB().AsyncInsert(ctx, sqlQuery, false, args...); err != nil {
+	if err := t.DB().AsyncInsert(ctx, sqlQuery, options.waitAsyncInsert, args...); err != nil {
 		return errors.Wrap(err, "failed to asynchronously create User")
 	}
 	if options.relations && model.Device != nil {
