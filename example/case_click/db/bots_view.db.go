@@ -697,21 +697,25 @@ func (t *botViewStorage) FindOne(ctx context.Context, builders ...*QueryBuilder)
 
 // Select executes a raw query and returns the result.
 func (t *botViewStorage) Select(ctx context.Context, query string, dest any, args ...any) error {
+	t.logQuery(ctx, query, args...)
 	return t.DB().Select(ctx, dest, query, args...)
 }
 
 // Exec executes a raw query and returns the result.
 func (t *botViewStorage) Exec(ctx context.Context, query string, args ...interface{}) error {
+	t.logQuery(ctx, query, args...)
 	return t.DB().Exec(ctx, query, args...)
 }
 
 // QueryRow executes a raw query and returns the result.
 func (t *botViewStorage) QueryRow(ctx context.Context, query string, args ...interface{}) driver.Row {
+	t.logQuery(ctx, query, args...)
 	return t.DB().QueryRow(ctx, query, args...)
 }
 
 // QueryRows executes a raw query and returns the result.
 func (t *botViewStorage) QueryRows(ctx context.Context, query string, args ...interface{}) (driver.Rows, error) {
+	t.logQuery(ctx, query, args...)
 	return t.DB().Query(ctx, query, args...)
 }
 
