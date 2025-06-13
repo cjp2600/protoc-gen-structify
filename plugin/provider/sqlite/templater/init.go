@@ -84,8 +84,8 @@ func (i *initTemplater) BuildTemplate() string {
 }
 
 // Imports returns the imports.
-func (i *initTemplater) Imports() importpkg.ImportSet {
-	is := importpkg.ImportSet{}
+func (i *initTemplater) Imports() *importpkg.ImportSet {
+	is := importpkg.NewImportSet()
 	is.Enable(
 		importpkg.ImportDb,
 		importpkg.ImportLibSqlite3,

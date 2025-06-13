@@ -2,6 +2,8 @@ package provider
 
 import (
 	"errors"
+	"strings"
+
 	"github.com/cjp2600/protoc-gen-structify/plugin/provider/clickhouse"
 
 	plugingo "github.com/golang/protobuf/protoc-gen-go/plugin"
@@ -25,19 +27,33 @@ type TemplateBuilder interface {
 
 // GetTemplateBuilder returns the TemplateBuilder for the given provider.
 func GetTemplateBuilder(request *plugingo.CodeGeneratorRequest) (TemplateBuilder, error) {
-	protoFile := helperpkg.GetUserProtoFile(request)
-	opts := helperpkg.GetDBOptions(protoFile)
-	if opts != nil {
-		switch ParseFromString(opts.GetProvider()) {
-		case Postgres:
-			return &postgres.Postgres{}, nil
-		case Sqlite:
-			return &sqlite.Sqlite{}, nil
-		case Clickhouse:
-			return &clickhouse.Clickhouse{}, nil
-		}
+	if request == nil {
+		return nil, ErrUnsupportedProvider
 	}
-	return nil, ErrUnsupportedProvider
+
+	protoFile := helperpkg.GetUserProtoFile(request)
+	if protoFile == nil {
+		return nil, ErrUnsupportedProvider
+	}
+
+	opts := helperpkg.GetDBOptions(protoFile)
+	if opts == nil {
+		return nil, ErrUnsupportedProvider
+	}
+
+	provider := strings.TrimSpace(opts.GetProvider())
+	println("Debug: Provider value:", provider)
+
+	switch provider {
+	case "postgres":
+		return &postgres.Postgres{}, nil
+	case "sqlite":
+		return &sqlite.Sqlite{}, nil
+	case "clickhouse":
+		return &clickhouse.Clickhouse{}, nil
+	default:
+		return nil, ErrUnsupportedProvider
+	}
 }
 
 // Provider represents the database provider.

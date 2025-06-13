@@ -26,10 +26,10 @@ type State struct {
 	IncludeConnection bool   // IncludeConnection is the flag to include connection in the generated code.
 	CRUDSchemas       bool
 
-	Imports        importpkg.ImportSet // Imports is the set of Imports.
-	Relations      Relations           // Relations is the set of Relations Messages.
-	Messages       Messages            // Messages is the set of root Messages.
-	NestedMessages NestedMessages      // NestedMessages is the set of nested Messages.
+	Imports        *importpkg.ImportSet // Imports is the set of Imports.
+	Relations      Relations            // Relations is the set of Relations Messages.
+	Messages       Messages             // Messages is the set of root Messages.
+	NestedMessages NestedMessages       // NestedMessages is the set of nested Messages.
 
 	// SingleTypes is the set of single types. example: type UserNames []string
 	// used for generating json statements.
@@ -76,8 +76,8 @@ func getProvider(request *plugingo.CodeGeneratorRequest) string {
 }
 
 // defaultImports returns the default Imports.
-func defaultImports(request *plugingo.CodeGeneratorRequest) importpkg.ImportSet {
-	var imports = make(importpkg.ImportSet)
+func defaultImports(request *plugingo.CodeGeneratorRequest) *importpkg.ImportSet {
+	imports := importpkg.NewImportSet()
 
 	/*	protoFile := helperpkg.GetUserProtoFile(request)
 		for _, m := range protoFile.GetMessageType() {
@@ -691,17 +691,19 @@ func (s *State) String() string {
 		"}"
 }
 
-// ImportsFromTable Imports the given table.
+// ImportsFromTable adds imports from the given tables.
 func (s *State) ImportsFromTable(tables []Templater) {
 	for _, t := range tables {
 		if t == nil {
 			continue
 		}
-
-		for i, v := range t.Imports() {
-			if v {
-				s.Imports[i] = v
-			}
+		imports := t.Imports()
+		if imports == nil {
+			continue
+		}
+		// Add all imports from the template
+		for _, imp := range imports.GetImports() {
+			s.Imports.Add(imp)
 		}
 	}
 }
@@ -829,5 +831,5 @@ type MessageDescriptor struct {
 type Templater interface {
 	TemplateName() string
 	BuildTemplate() string
-	Imports() importpkg.ImportSet
+	Imports() *importpkg.ImportSet
 }

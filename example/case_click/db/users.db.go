@@ -2,10 +2,11 @@ package db
 
 import (
 	"context"
+	"time"
+
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	sq "github.com/Masterminds/squirrel"
 	"github.com/pkg/errors"
-	"time"
 )
 
 // userStorage is a struct for the "users" table.
@@ -988,10 +989,10 @@ func (t *userStorage) OriginalBatchCreate(ctx context.Context, models []*User, o
 			model.CreatedAt,
 			nullValue(model.UpdatedAt),
 			nullValue(model.NotificationSettings),
-			phones,
-			balls,
-			numrs,
-			comments,
+			model.Phones,
+			model.Balls,
+			model.Numrs,
+			model.Comments,
 		)
 	}
 

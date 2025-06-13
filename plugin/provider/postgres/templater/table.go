@@ -2,10 +2,11 @@ package templater
 
 import (
 	"fmt"
-	"google.golang.org/protobuf/types/descriptorpb"
 	"log"
 	"strings"
 	"text/template"
+
+	"google.golang.org/protobuf/types/descriptorpb"
 
 	importpkg "github.com/cjp2600/protoc-gen-structify/plugin/import"
 	helperpkg "github.com/cjp2600/protoc-gen-structify/plugin/pkg/helper"
@@ -114,8 +115,8 @@ func (t *tableTemplater) TemplateName() string {
 }
 
 // Imports returns the imports.
-func (t *tableTemplater) Imports() importpkg.ImportSet {
-	is := importpkg.ImportSet{}
+func (t *tableTemplater) Imports() *importpkg.ImportSet {
+	is := importpkg.NewImportSet()
 	is.Enable(
 		importpkg.ImportContext,
 		importpkg.ImportDb,

@@ -6,41 +6,56 @@ import (
 )
 
 // ImportSet is a set of imports.
-type ImportSet map[Import]bool
+type ImportSet struct {
+	imports map[Import]bool
+	order   []Import
+}
+
+// NewImportSet creates a new ImportSet.
+func NewImportSet() *ImportSet {
+	return &ImportSet{
+		imports: make(map[Import]bool),
+		order:   make([]Import, 0),
+	}
+}
 
 // String returns a string representation of the ImportSet.
-func (i ImportSet) String() string {
-	if len(i) > 0 {
+func (i *ImportSet) String() string {
+	if len(i.imports) > 0 {
 		builder := &strings.Builder{}
 
 		builder.WriteString("import (\n")
-		for k := range i {
-			builder.WriteString(strings.ReplaceAll(k.String(), "import", ""))
+		for _, imp := range i.order {
+			builder.WriteString("  ")
+			importStr := strings.TrimSpace(strings.ReplaceAll(imp.String(), "import", ""))
+			builder.WriteString(importStr)
+			builder.WriteString("\n")
 		}
 		builder.WriteString(")\n")
 
 		return builder.String()
 	}
 
-	var out string
-	for k := range i {
-		out += k.String()
-	}
-
-	return out
+	return ""
 }
 
 // Add adds imports to the ImportSet.
-func (i ImportSet) Add(imports ...Import) {
+func (i *ImportSet) Add(imports ...Import) {
 	for _, v := range imports {
-		i[v] = true
+		if !i.imports[v] {
+			i.imports[v] = true
+			i.order = append(i.order, v)
+		}
 	}
 }
 
 // Enable enables imports in the ImportSet.
-func (i ImportSet) Enable(imports ...Import) {
+func (i *ImportSet) Enable(imports ...Import) {
 	for _, v := range imports {
-		i[v] = true
+		if !i.imports[v] {
+			i.imports[v] = true
+			i.order = append(i.order, v)
+		}
 	}
 }
 
@@ -82,3 +97,8 @@ var (
 	ImportClickhouse        = Import{"github.com/ClickHouse/clickhouse-go/v2", ""}
 	ImportClickhouseDriver  = Import{"github.com/ClickHouse/clickhouse-go/v2/lib/driver", ""}
 )
+
+// GetImports returns a slice of all imports in the ImportSet.
+func (i *ImportSet) GetImports() []Import {
+	return i.order
+}

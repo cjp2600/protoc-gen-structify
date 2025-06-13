@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/jinzhu/copier"
 	"go/format"
 	"log"
 	"reflect"
 	"strings"
 	"text/template"
 	"unicode"
+
+	"github.com/jinzhu/copier"
 
 	"github.com/gertd/go-pluralize"
 	"github.com/golang/protobuf/proto"
@@ -80,14 +81,26 @@ func GetMessageOptions(d *descriptorpb.DescriptorProto) *structify.StructifyMess
 // GetDBOptions returns the custom options for a file.
 func GetDBOptions(f *descriptorpb.FileDescriptorProto) *structify.StructifyDBOptions {
 	opts := f.GetOptions()
-	if opts != nil {
-		ext, err := proto.GetExtension(opts, structify.E_Db)
-		if err == nil && ext != nil {
-			if customOpts, ok := ext.(*structify.StructifyDBOptions); ok {
-				return customOpts
-			}
-		}
+	if opts == nil {
+		println("Debug: File options is nil")
+		return nil
 	}
+
+	ext, err := proto.GetExtension(opts, structify.E_Db)
+	if err != nil {
+		println("Debug: Error getting extension:", err.Error())
+		return nil
+	}
+	if ext == nil {
+		println("Debug: Extension is nil")
+		return nil
+	}
+
+	if customOpts, ok := ext.(*structify.StructifyDBOptions); ok {
+		println("Debug: Found DB options, provider:", customOpts.GetProvider())
+		return customOpts
+	}
+	println("Debug: Failed to convert extension to StructifyDBOptions")
 	return nil
 }
 
@@ -560,19 +573,23 @@ func DumpPrint(values ...interface{}) {
 
 // GetUserProtoFiles returns the user proto files.
 func GetUserProtoFiles(req *plugingo.CodeGeneratorRequest) []*descriptorpb.FileDescriptorProto {
-	var userProtoFiles []*descriptorpb.FileDescriptorProto
-	filesToGenerate := make(map[string]bool)
-	for _, fileName := range req.GetFileToGenerate() {
-		filesToGenerate[fileName] = true
+	println("Debug: GetUserProtoFiles - request is nil:", req == nil)
+	if req == nil {
+		return nil
 	}
 
-	for _, protoFile := range req.GetProtoFile() {
-		if _, ok := filesToGenerate[*protoFile.Name]; ok {
-			userProtoFiles = append(userProtoFiles, protoFile)
+	var userFiles []*descriptorpb.FileDescriptorProto
+	for _, file := range req.ProtoFile {
+		println("Debug: GetUserProtoFiles - checking file:", file.GetName(), "package:", file.GetPackage())
+		if file.GetPackage() != "google.protobuf" && file.GetPackage() != "structify" {
+			println("Debug: GetUserProtoFiles - adding user file:", file.GetName())
+			userFiles = append(userFiles, file)
+		} else {
+			println("Debug: GetUserProtoFiles - skipping system file:", file.GetName())
 		}
 	}
-
-	return userProtoFiles
+	println("Debug: GetUserProtoFiles - found", len(userFiles), "user files")
+	return userFiles
 }
 
 // IsContainsStar returns true if the string contains a star.
@@ -582,7 +599,22 @@ func IsContainsStar(s string) bool {
 
 // GetUserProtoFile returns the first user proto file.
 func GetUserProtoFile(req *plugingo.CodeGeneratorRequest) *descriptorpb.FileDescriptorProto {
-	return GetUserProtoFiles(req)[0]
+	println("Debug: GetUserProtoFile - request is nil:", req == nil)
+	if req == nil {
+		return nil
+	}
+
+	println("Debug: GetUserProtoFile - number of proto files:", len(req.ProtoFile))
+	for i, file := range req.ProtoFile {
+		println("Debug: GetUserProtoFile - file", i, "name:", file.GetName(), "package:", file.GetPackage())
+	}
+
+	files := GetUserProtoFiles(req)
+	println("Debug: GetUserProtoFile - number of user proto files:", len(files))
+	if len(files) == 0 {
+		return nil
+	}
+	return files[0]
 }
 
 // DetectMany returns true if the field is a many relation.

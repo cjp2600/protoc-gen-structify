@@ -123,8 +123,8 @@ func (t *tableTemplater) TemplateName() string {
 }
 
 // Imports returns the imports.
-func (t *tableTemplater) Imports() importpkg.ImportSet {
-	is := importpkg.ImportSet{}
+func (t *tableTemplater) Imports() *importpkg.ImportSet {
+	is := importpkg.NewImportSet()
 	is.Enable(
 		importpkg.ImportContext,
 		importpkg.ImportErrors,
