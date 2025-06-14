@@ -193,42 +193,140 @@ The plugin generates the following components:
 
 ## Filtering System
 
-The generated code provides convenient, type-safe filter helpers for each field. **You do not need to specify field names as strings!**
+The generated code provides both convenient, type-safe filter helpers for each field and generic helpers for dynamic cases.
 
 **How to use:**
-- Use the generated wrappers for each field and filter type (e.g., `UserAgeEq`, `UserEmailLike`, etc.).
-- Always wrap your filter with `FilterBuilder(...)` when passing to query methods.
+- Use the generated wrappers for each field and filter type (e.g., `db.UserAgeEq`, `db.UserEmailLike`, etc.).
+- For custom or dynamic cases, use generic helpers like `db.Eq("field", value)`.
+- Always wrap your filter (or filter composition) with `db.FilterBuilder(...)` when passing to query methods.
+- Combine filters with `db.And(...)`, `db.Or(...)`, etc.
 
 **Example:**
 ```go
-// Find users with age = 18 and email like gmail
-users, err := userStorage.FindMany(ctx,
-    FilterBuilder(UserAgeEq(18)),
-    FilterBuilder(UserEmailLike("%@gmail.com")),
+// Get users with pagination and complex filter
+users, paginator, err := userStorage.FindManyWithPagination(
+    ctx,
+    10, // limit
+    1,  // page
+    db.FilterBuilder(
+        db.And(
+            db.Eq("status", "active"),
+            db.UserAgeEq(12),
+        ),
+    ),
 )
 ```
 
 **Available filter helpers for each field:**
-- `UserAgeEq(value int32)`
-- `UserAgeGT(value int32)`
-- `UserAgeBetween(min, max int32)`
-- `UserAgeIn(values ...int32)`
-- `UserAgeNotEq(value int32)`
-- `UserAgeNotIn(values ...int32)`
-- `UserAgeOrderBy(asc bool)`
+- `db.UserAgeEq(value int32)`
+- `db.UserAgeGT(value int32)`
+- `db.UserAgeBetween(min, max int32)`
 - ...and so on for every field in your struct
 
-**Custom filter example:**
+**Generic filter helpers:**
+- `db.Eq("field", value)`
+- `db.NotEq("field", value)`
+- `db.In("field", values...)`
+- `db.Like("field", pattern)`
+- etc.
+
+**Logical composition:**
+- `db.And(filter1, filter2, ...)`
+- `db.Or(filter1, filter2, ...)`
+
+**Note:**
+- Always use `db.FilterBuilder(...)` to pass filters to search/query methods.
+- You can mix generic and generated filters inside logical compositions.
+
+## Filtering System — Practical Examples
+
+### 1. Using Generated Field Filters
+
+For each struct field, filter functions are generated, for example:
+- `UserAgeEq(value int32)`
+- `UserEmailLike(value string)`
+- `BotUserIdEq(value string)`
+- etc.
+
+**Example:**
 ```go
 users, err := userStorage.FindMany(ctx,
-    FilterBuilder(UserAgeGT(21)),
-    FilterBuilder(UserEmailLike("%@company.com")),
+    db.FilterBuilder(db.UserAgeEq(25)),
+    db.FilterBuilder(db.UserEmailLike("%@gmail.com")),
 )
 ```
 
-**Note:**
-- Always use `FilterBuilder(...)` to pass filters to search/query methods.
-- Do not use string field names directly—use only the generated wrapper functions for each field.
+### 2. Using Generic Filters
+
+You can use generic filters for dynamic scenarios:
+```go
+users, err := userStorage.FindMany(ctx,
+    db.FilterBuilder(db.Eq("status", "active")),
+    db.FilterBuilder(db.Like("email", "%@gmail.com")),
+)
+```
+
+### 3. Composing Filters
+
+For complex conditions, use composition:
+```go
+users, paginator, err := userStorage.FindManyWithPagination(
+    ctx,
+    10, // limit
+    1,  // page
+    db.FilterBuilder(
+        db.And(
+            db.Eq("status", "active"),
+            db.UserAgeEq(12),
+            db.Or(
+                db.UserEmailLike("%@gmail.com"),
+                db.UserEmailLike("%@yahoo.com"),
+            ),
+        ),
+    ),
+)
+```
+
+### 4. Filters for Related Entities
+
+To filter by relations, use the corresponding filters:
+```go
+bots, err := botStorage.FindMany(ctx,
+    db.FilterBuilder(db.BotUserIdEq("user-123")),
+)
+```
+Or for date range:
+```go
+bots, err := botStorage.FindMany(ctx,
+    db.FilterBuilder(db.BotCreatedAtBetween(time1, time2)),
+)
+```
+
+### 5. Batch Filters
+
+```go
+bots, err := botStorage.FindMany(ctx,
+    db.FilterBuilder(db.BotUserIdIn("user-1", "user-2", "user-3")),
+)
+```
+
+### 6. Sorting
+
+```go
+users, err := userStorage.FindMany(ctx,
+    db.FilterBuilder(db.UserAgeOrderBy(true)), // true = ASC, false = DESC
+)
+```
+
+---
+
+## Summary
+
+- **Always use `db.FilterBuilder(...)`** to pass filters to query methods.
+- You can combine generic filters (`db.Eq`, `db.Like`, ...) and generated filters (`db.UserAgeEq`, `db.BotUserIdEq`, ...).
+- For complex conditions, use composition with `db.And`, `db.Or`.
+- For batch operations, use filters like `FieldIn`, `FieldNotIn`.
+- For sorting, use `FieldOrderBy`.
 
 ## Join Operations
 
