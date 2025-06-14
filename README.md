@@ -193,82 +193,42 @@ The plugin generates the following components:
 
 ## Filtering System
 
-The generated code includes a powerful filtering system that supports various operations:
+The generated code provides convenient, type-safe filter helpers for each field. **You do not need to specify field names as strings!**
 
-### Basic Operators
+**How to use:**
+- Use the generated wrappers for each field and filter type (e.g., `UserAgeEq`, `UserEmailLike`, etc.).
+- Always wrap your filter with `FilterBuilder(...)` when passing to query methods.
 
+**Example:**
 ```go
-// Equality
-filter := Eq("name", "test")
-
-// Inequality
-filter := NotEq("age", 18)
-
-// Comparison
-filter := Gt("age", 18)  // Greater than
-filter := Lt("age", 30)  // Less than
-filter := Gte("age", 18) // Greater than or equal
-filter := Lte("age", 30) // Less than or equal
-
-// Range
-filter := Between("age", 18, 30)
-
-// List operations
-filter := In("status", []string{"active", "pending"})
-filter := NotIn("status", []string{"inactive"})
-
-// Pattern matching
-filter := Like("name", "John%")
-filter := NotLike("name", "John%")
-
-// Null checks
-filter := IsNull("deleted_at")
-filter := IsNotNull("updated_at")
-```
-
-### Logical Operators
-
-```go
-// AND condition
-filter := And(
-    Eq("status", "active"),
-    Gt("age", 18),
-    Like("name", "John%")
-)
-
-// OR condition
-filter := Or(
-    Eq("status", "active"),
-    Eq("status", "pending")
+// Find users with age = 18 and email like gmail
+users, err := userStorage.FindMany(ctx,
+    FilterBuilder(UserAgeEq(18)),
+    FilterBuilder(UserEmailLike("%@gmail.com")),
 )
 ```
 
-### Custom Filters
+**Available filter helpers for each field:**
+- `UserAgeEq(value int32)`
+- `UserAgeGT(value int32)`
+- `UserAgeBetween(min, max int32)`
+- `UserAgeIn(values ...int32)`
+- `UserAgeNotEq(value int32)`
+- `UserAgeNotIn(values ...int32)`
+- `UserAgeOrderBy(asc bool)`
+- ...and so on for every field in your struct
 
-You can create custom filters by implementing the `FilterApplier` interface:
-
+**Custom filter example:**
 ```go
-type DateRangeFilter struct {
-    StartDate time.Time
-    EndDate   time.Time
-}
-
-func (f DateRangeFilter) Apply(query sq.SelectBuilder) sq.SelectBuilder {
-    return query.Where(sq.Expr(
-        "created_at BETWEEN ? AND ?",
-        f.StartDate,
-        f.EndDate,
-    ))
-}
-
-func (f DateRangeFilter) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
-    return query.Where(sq.Expr(
-        "created_at BETWEEN ? AND ?",
-        f.StartDate,
-        f.EndDate,
-    ))
-}
+users, err := userStorage.FindMany(ctx,
+    FilterBuilder(UserAgeGT(21)),
+    FilterBuilder(UserEmailLike("%@company.com")),
+)
 ```
+
+**Note:**
+- Always use `FilterBuilder(...)` to pass filters to search/query methods.
+- Do not use string field names directly—use only the generated wrapper functions for each field.
 
 ## Join Operations
 
