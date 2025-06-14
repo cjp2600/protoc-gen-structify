@@ -13,6 +13,8 @@
 - **Customizable**: Supports custom options for table names, field names, and more
 - **Transaction Support**: Built-in transaction management
 - **Query Builder**: Integrated with Squirrel query builder for complex queries
+- **Filtering System**: Built-in filtering and querying capabilities
+- **Relation Handling**: Handles various types of relations
 
 ## Installation
 
@@ -188,6 +190,210 @@ The plugin generates the following components:
 3. **Conditions**: Query builder for complex queries
 4. **Types**: Go structs matching your protobuf messages
 5. **Constants**: Generated constants for field names and table names
+
+## Filtering System
+
+The generated code includes a powerful filtering system that supports various operations:
+
+### Basic Operators
+
+```go
+// Equality
+filter := Eq("name", "test")
+
+// Inequality
+filter := NotEq("age", 18)
+
+// Comparison
+filter := Gt("age", 18)  // Greater than
+filter := Lt("age", 30)  // Less than
+filter := Gte("age", 18) // Greater than or equal
+filter := Lte("age", 30) // Less than or equal
+
+// Range
+filter := Between("age", 18, 30)
+
+// List operations
+filter := In("status", []string{"active", "pending"})
+filter := NotIn("status", []string{"inactive"})
+
+// Pattern matching
+filter := Like("name", "John%")
+filter := NotLike("name", "John%")
+
+// Null checks
+filter := IsNull("deleted_at")
+filter := IsNotNull("updated_at")
+```
+
+### Logical Operators
+
+```go
+// AND condition
+filter := And(
+    Eq("status", "active"),
+    Gt("age", 18),
+    Like("name", "John%")
+)
+
+// OR condition
+filter := Or(
+    Eq("status", "active"),
+    Eq("status", "pending")
+)
+```
+
+### Custom Filters
+
+You can create custom filters by implementing the `FilterApplier` interface:
+
+```go
+type DateRangeFilter struct {
+    StartDate time.Time
+    EndDate   time.Time
+}
+
+func (f DateRangeFilter) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+    return query.Where(sq.Expr(
+        "created_at BETWEEN ? AND ?",
+        f.StartDate,
+        f.EndDate,
+    ))
+}
+
+func (f DateRangeFilter) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+    return query.Where(sq.Expr(
+        "created_at BETWEEN ? AND ?",
+        f.StartDate,
+        f.EndDate,
+    ))
+}
+```
+
+## Join Operations
+
+The system supports various types of joins:
+
+```go
+type JoinType string
+
+const (
+    LeftJoin  JoinType = "LEFT"
+    InnerJoin JoinType = "INNER"
+    RightJoin JoinType = "RIGHT"
+)
+
+// Example join
+join := Join(
+    InnerJoin,
+    userTable,
+    Eq("users.id", "posts.user_id")
+)
+```
+
+## Transactions
+
+The generated code includes transaction support:
+
+```go
+// Start transaction
+tx, err := db.Begin()
+if err != nil {
+    return err
+}
+defer tx.Rollback()
+
+// Use transaction in context
+ctx := WithTx(ctx, tx)
+
+// Perform operations
+err = userStorage.Create(ctx, user)
+if err != nil {
+    return err
+}
+
+// Commit transaction
+err = tx.Commit()
+```
+
+## Error Handling
+
+The generated code uses `fmt.Errorf` for error wrapping:
+
+```go
+if err != nil {
+    return fmt.Errorf("failed to create user: %w", err)
+}
+```
+
+## Relations
+
+Define relations in your protobuf messages:
+
+```protobuf
+message Post {
+  string id = 1 [(structify.field) = {primary_key: true}];
+  string title = 2;
+  string content = 3;
+  string user_id = 4 [(structify.field) = {index: true}];
+  User author = 5 [(structify.field) = {relation: { field: "user_id", reference: "id" }}];
+}
+```
+
+## Examples
+
+### Basic CRUD Operations
+
+```go
+// Create
+user := &User{
+    Name: "John Doe",
+    Age: 30,
+    Email: "john@example.com",
+}
+id, err := userStorage.Create(ctx, user)
+
+// Read
+user, err := userStorage.FindByID(ctx, id)
+
+// Update
+update := &UserUpdate{
+    Name: "John Smith",
+}
+err = userStorage.Update(ctx, id, update)
+
+// Delete
+err = userStorage.DeleteByID(ctx, id)
+```
+
+### Querying with Filters
+
+```go
+// Find users with age > 18 and active status
+users, err := userStorage.FindMany(ctx,
+    And(
+        Gt("age", 18),
+        Eq("status", "active"),
+    ),
+)
+
+// Find one user by email
+user, err := userStorage.FindOne(ctx,
+    Eq("email", "john@example.com"),
+)
+```
+
+### Pagination
+
+```go
+// Get users with pagination
+users, paginator, err := userStorage.FindManyWithPagination(
+    ctx,
+    10,  // limit
+    1,   // page
+    Eq("status", "active"),
+)
+```
 
 ## Contributing
 

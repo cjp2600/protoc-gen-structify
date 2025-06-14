@@ -87,16 +87,10 @@ func (i *initTemplater) BuildTemplate() string {
 func (i *initTemplater) Imports() *importpkg.ImportSet {
 	is := importpkg.NewImportSet()
 	is.Enable(
-		importpkg.ImportDb,
-		importpkg.ImportLibSqlite3,
-		importpkg.ImportStrconv,
-		importpkg.ImportFMT,
-		importpkg.ImportErrors,
-		importpkg.ImportJson,
-		importpkg.ImportSQLDriver,
-		importpkg.ImportStrings,
 		importpkg.ImportContext,
+		importpkg.ImportFMT,
 		importpkg.ImportSquirrel,
+		importpkg.ImportLibSqlite3,
 	)
 
 	return is

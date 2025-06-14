@@ -119,11 +119,9 @@ func (t *tableTemplater) Imports() *importpkg.ImportSet {
 	is := importpkg.NewImportSet()
 	is.Enable(
 		importpkg.ImportContext,
-		importpkg.ImportDb,
-		importpkg.ImportLibPQ,
-		importpkg.ImportErrors,
+		importpkg.ImportFMT,
 		importpkg.ImportSquirrel,
-		importpkg.ImportMath,
+		importpkg.ImportLibPQ,
 	)
 
 	tmp := t.BuildTemplate()

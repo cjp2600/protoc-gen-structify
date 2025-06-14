@@ -2,9 +2,9 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	sq "github.com/Masterminds/squirrel"
-	"github.com/pkg/errors"
 )
 
 // deviceStorage is a struct for the "devices" table.
@@ -60,10 +60,10 @@ type DeviceStorage interface {
 // NewDeviceStorage returns a new deviceStorage.
 func NewDeviceStorage(config *Config) (DeviceStorage, error) {
 	if config == nil {
-		return nil, errors.New("config is nil")
+		return nil, fmt.Errorf("config is nil")
 	}
 	if config.DB == nil {
-		return nil, errors.New("config.DB connection is nil")
+		return nil, fmt.Errorf("config.DB connection is nil")
 	}
 
 	return &deviceStorage{
@@ -212,7 +212,7 @@ func DeviceUserIdOrderBy(asc bool) FilterApplier {
 // AsyncCreate asynchronously inserts a new Device.
 func (t *deviceStorage) AsyncCreate(ctx context.Context, model *Device, opts ...Option) error {
 	if model == nil {
-		return errors.New("model is nil")
+		return fmt.Errorf("model is nil")
 	}
 
 	// Set default options
@@ -235,12 +235,12 @@ func (t *deviceStorage) AsyncCreate(ctx context.Context, model *Device, opts ...
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	if err := t.DB().AsyncInsert(ctx, sqlQuery, options.waitAsyncInsert, args...); err != nil {
-		return errors.Wrap(err, "failed to asynchronously create Device")
+		return fmt.Errorf("failed to asynchronously create Device: %w", err)
 	}
 
 	return nil
@@ -249,7 +249,7 @@ func (t *deviceStorage) AsyncCreate(ctx context.Context, model *Device, opts ...
 // Create creates a new Device.
 func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Option) error {
 	if model == nil {
-		return errors.New("model is nil")
+		return fmt.Errorf("model is nil")
 	}
 
 	// set default options
@@ -272,13 +272,13 @@ func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Optio
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	err = t.DB().Exec(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to create Device")
+		return fmt.Errorf("failed to create Device: %w", err)
 	}
 
 	return nil
@@ -287,7 +287,7 @@ func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Optio
 // BatchCreate creates multiple Device records in a single batch.
 func (t *deviceStorage) BatchCreate(ctx context.Context, models []*Device, opts ...Option) error {
 	if len(models) == 0 {
-		return errors.New("no models to insert")
+		return fmt.Errorf("no models to insert")
 	}
 
 	options := &Options{}
@@ -296,17 +296,17 @@ func (t *deviceStorage) BatchCreate(ctx context.Context, models []*Device, opts 
 	}
 
 	if options.relations {
-		return errors.New("relations are not supported in batch create")
+		return fmt.Errorf("relations are not supported in batch create")
 	}
 
 	batch, err := t.DB().PrepareBatch(ctx, "INSERT INTO "+t.TableName(), driver.WithReleaseConnection())
 	if err != nil {
-		return errors.Wrap(err, "failed to prepare batch")
+		return fmt.Errorf("failed to prepare batch: %w", err)
 	}
 
 	for _, model := range models {
 		if model == nil {
-			return errors.New("one of the models is nil")
+			return fmt.Errorf("one of the models is nil")
 		}
 
 		err := batch.Append(
@@ -315,12 +315,12 @@ func (t *deviceStorage) BatchCreate(ctx context.Context, models []*Device, opts 
 			model.UserId,
 		)
 		if err != nil {
-			return errors.Wrap(err, "failed to append to batch")
+			return fmt.Errorf("failed to append to batch: %w", err)
 		}
 	}
 
 	if err := batch.Send(); err != nil {
-		return errors.Wrap(err, "failed to execute batch insert")
+		return fmt.Errorf("failed to execute batch insert: %w", err)
 	}
 
 	return nil
@@ -329,7 +329,7 @@ func (t *deviceStorage) BatchCreate(ctx context.Context, models []*Device, opts 
 // OriginalBatchCreate creates multiple Device records in a single batch.
 func (t *deviceStorage) OriginalBatchCreate(ctx context.Context, models []*Device, opts ...Option) error {
 	if len(models) == 0 {
-		return errors.New("no models to insert")
+		return fmt.Errorf("no models to insert")
 	}
 
 	options := &Options{}
@@ -338,7 +338,7 @@ func (t *deviceStorage) OriginalBatchCreate(ctx context.Context, models []*Devic
 	}
 
 	if options.relations {
-		return errors.New("relations are not supported in batch create")
+		return fmt.Errorf("relations are not supported in batch create")
 	}
 
 	query := t.queryBuilder.Insert(t.TableName()).
@@ -350,8 +350,9 @@ func (t *deviceStorage) OriginalBatchCreate(ctx context.Context, models []*Devic
 
 	for _, model := range models {
 		if model == nil {
-			return errors.New("one of the models is nil")
+			return fmt.Errorf("model is nil: %w", ErrModelIsNil)
 		}
+
 		query = query.Values(
 			model.Name,
 			model.Value,
@@ -361,13 +362,13 @@ func (t *deviceStorage) OriginalBatchCreate(ctx context.Context, models []*Devic
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB().Query(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to execute bulk insert")
+		return fmt.Errorf("failed to execute bulk insert: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -376,7 +377,7 @@ func (t *deviceStorage) OriginalBatchCreate(ctx context.Context, models []*Devic
 	}()
 
 	if err := rows.Err(); err != nil {
-		return errors.Wrap(err, "rows iteration error")
+		return fmt.Errorf("rows iteration error: %w", err)
 	}
 
 	return nil
@@ -431,13 +432,13 @@ func (t *deviceStorage) FindMany(ctx context.Context, builders ...*QueryBuilder)
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB().Query(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to execute query")
+		return nil, fmt.Errorf("failed to execute query: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -449,13 +450,13 @@ func (t *deviceStorage) FindMany(ctx context.Context, builders ...*QueryBuilder)
 	for rows.Next() {
 		model := &Device{}
 		if err := model.ScanRow(rows); err != nil { // Используем ScanRow вместо ScanRows
-			return nil, errors.Wrap(err, "failed to scan Device")
+			return nil, fmt.Errorf("failed to scan Device: %w", err)
 		}
 		results = append(results, model)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "failed to iterate over rows")
+		return nil, fmt.Errorf("failed to iterate over rows: %w", err)
 	}
 
 	return results, nil
@@ -467,7 +468,7 @@ func (t *deviceStorage) FindOne(ctx context.Context, builders ...*QueryBuilder) 
 	builders = append(builders, LimitBuilder(1))
 	results, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to findOne Device")
+		return nil, fmt.Errorf("failed to findOne Device: %w", err)
 	}
 
 	if len(results) == 0 {

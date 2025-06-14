@@ -110,21 +110,17 @@ func (t *tableTemplater) Imports() *importpkg.ImportSet {
 	is := importpkg.NewImportSet()
 	is.Enable(
 		importpkg.ImportContext,
-		importpkg.ImportDb,
-		importpkg.ImportLibPQ,
 		importpkg.ImportFMT,
-		importpkg.ImportErrors,
 		importpkg.ImportSquirrel,
-		importpkg.ImportMath,
+		importpkg.ImportLibSqlite3,
 	)
 
 	tmp := t.BuildTemplate()
 	if strings.Contains(tmp, "time.Time") {
 		is.Add(importpkg.ImportTime)
 	}
-
-	if strings.Contains(tmp, "uuid.NewUUID()") {
-		is.Add(importpkg.ImportGoogleUUID)
+	if strings.Contains(tmp, "null.") {
+		is.Add(importpkg.ImportNull)
 	}
 
 	return is

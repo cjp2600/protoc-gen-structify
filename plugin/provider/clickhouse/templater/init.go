@@ -92,7 +92,6 @@ func (i *initTemplater) Imports() *importpkg.ImportSet {
 	is := importpkg.NewImportSet()
 	is.Enable(
 		importpkg.ImportFMT,
-		importpkg.ImportErrors,
 		importpkg.ImportJson,
 		importpkg.ImportStrings,
 		importpkg.ImportContext,

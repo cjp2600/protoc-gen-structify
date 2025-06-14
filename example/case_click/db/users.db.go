@@ -2,11 +2,10 @@ package db
 
 import (
 	"context"
-	"time"
-
+	"fmt"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	sq "github.com/Masterminds/squirrel"
-	"github.com/pkg/errors"
+	"time"
 )
 
 // userStorage is a struct for the "users" table.
@@ -70,10 +69,10 @@ type UserStorage interface {
 // NewUserStorage returns a new userStorage.
 func NewUserStorage(config *Config) (UserStorage, error) {
 	if config == nil {
-		return nil, errors.New("config is nil")
+		return nil, fmt.Errorf("config is nil")
 	}
 	if config.DB == nil {
-		return nil, errors.New("config.DB connection is nil")
+		return nil, fmt.Errorf("config.DB connection is nil")
 	}
 
 	return &userStorage{
@@ -131,19 +130,19 @@ func (t *userStorage) SetQueryBuilder(builder sq.StatementBuilderType) UserStora
 // LoadDevice loads the Device relation.
 func (t *userStorage) LoadDevice(ctx context.Context, model *User, builders ...*QueryBuilder) error {
 	if model == nil {
-		return errors.Wrap(ErrModelIsNil, "User is nil")
+		return fmt.Errorf("model is nil: %w", ErrModelIsNil)
 	}
 
 	// NewDeviceStorage creates a new DeviceStorage.
 	s, err := NewDeviceStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create DeviceStorage")
+		return fmt.Errorf("failed to create DeviceStorage: %w", err)
 	}
 	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(DeviceUserIdEq(model.Id)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find one DeviceStorage")
+		return fmt.Errorf("failed to find one DeviceStorage: %w", err)
 	}
 
 	model.Device = relationModel
@@ -153,19 +152,19 @@ func (t *userStorage) LoadDevice(ctx context.Context, model *User, builders ...*
 // LoadSettings loads the Settings relation.
 func (t *userStorage) LoadSettings(ctx context.Context, model *User, builders ...*QueryBuilder) error {
 	if model == nil {
-		return errors.Wrap(ErrModelIsNil, "User is nil")
+		return fmt.Errorf("model is nil: %w", ErrModelIsNil)
 	}
 
 	// NewSettingStorage creates a new SettingStorage.
 	s, err := NewSettingStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create SettingStorage")
+		return fmt.Errorf("failed to create SettingStorage: %w", err)
 	}
 	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(SettingUserIdEq(model.Id)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find one SettingStorage")
+		return fmt.Errorf("failed to find one SettingStorage: %w", err)
 	}
 
 	model.Settings = relationModel
@@ -175,19 +174,19 @@ func (t *userStorage) LoadSettings(ctx context.Context, model *User, builders ..
 // LoadAddresses loads the Addresses relation.
 func (t *userStorage) LoadAddresses(ctx context.Context, model *User, builders ...*QueryBuilder) error {
 	if model == nil {
-		return errors.Wrap(ErrModelIsNil, "User is nil")
+		return fmt.Errorf("model is nil: %w", ErrModelIsNil)
 	}
 
 	// NewAddressStorage creates a new AddressStorage.
 	s, err := NewAddressStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create AddressStorage")
+		return fmt.Errorf("failed to create AddressStorage: %w", err)
 	}
 	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(AddressUserIdEq(model.Id)))
 	relationModels, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find many AddressStorage")
+		return fmt.Errorf("failed to find many AddressStorage: %w", err)
 	}
 
 	model.Addresses = relationModels
@@ -197,19 +196,19 @@ func (t *userStorage) LoadAddresses(ctx context.Context, model *User, builders .
 // LoadPosts loads the Posts relation.
 func (t *userStorage) LoadPosts(ctx context.Context, model *User, builders ...*QueryBuilder) error {
 	if model == nil {
-		return errors.Wrap(ErrModelIsNil, "User is nil")
+		return fmt.Errorf("model is nil: %w", ErrModelIsNil)
 	}
 
 	// NewPostStorage creates a new PostStorage.
 	s, err := NewPostStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create PostStorage")
+		return fmt.Errorf("failed to create PostStorage: %w", err)
 	}
 	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(PostAuthorIdEq(model.Id)))
 	relationModels, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find many PostStorage")
+		return fmt.Errorf("failed to find many PostStorage: %w", err)
 	}
 
 	model.Posts = relationModels
@@ -227,7 +226,7 @@ func (t *userStorage) LoadBatchDevice(ctx context.Context, items []*User, builde
 	// NewDeviceStorage creates a new DeviceStorage.
 	s, err := NewDeviceStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create DeviceStorage")
+		return fmt.Errorf("failed to create DeviceStorage: %w", err)
 	}
 
 	// Add the filter for the relation
@@ -235,7 +234,7 @@ func (t *userStorage) LoadBatchDevice(ctx context.Context, items []*User, builde
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find many DeviceStorage")
+		return fmt.Errorf("failed to find many DeviceStorage: %w", err)
 	}
 	resultMap := make(map[interface{}]*Device)
 	for _, result := range results {
@@ -264,7 +263,7 @@ func (t *userStorage) LoadBatchSettings(ctx context.Context, items []*User, buil
 	// NewSettingStorage creates a new SettingStorage.
 	s, err := NewSettingStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create SettingStorage")
+		return fmt.Errorf("failed to create SettingStorage: %w", err)
 	}
 
 	// Add the filter for the relation
@@ -272,7 +271,7 @@ func (t *userStorage) LoadBatchSettings(ctx context.Context, items []*User, buil
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find many SettingStorage")
+		return fmt.Errorf("failed to find many SettingStorage: %w", err)
 	}
 	resultMap := make(map[interface{}]*Setting)
 	for _, result := range results {
@@ -301,7 +300,7 @@ func (t *userStorage) LoadBatchAddresses(ctx context.Context, items []*User, bui
 	// NewAddressStorage creates a new AddressStorage.
 	s, err := NewAddressStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create AddressStorage")
+		return fmt.Errorf("failed to create AddressStorage: %w", err)
 	}
 
 	// Add the filter for the relation
@@ -309,7 +308,7 @@ func (t *userStorage) LoadBatchAddresses(ctx context.Context, items []*User, bui
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find many AddressStorage")
+		return fmt.Errorf("failed to find many AddressStorage: %w", err)
 	}
 	resultMap := make(map[interface{}][]*Address)
 	for _, result := range results {
@@ -338,7 +337,7 @@ func (t *userStorage) LoadBatchPosts(ctx context.Context, items []*User, builder
 	// NewPostStorage creates a new PostStorage.
 	s, err := NewPostStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create PostStorage")
+		return fmt.Errorf("failed to create PostStorage: %w", err)
 	}
 
 	// Add the filter for the relation
@@ -346,7 +345,7 @@ func (t *userStorage) LoadBatchPosts(ctx context.Context, items []*User, builder
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find many PostStorage")
+		return fmt.Errorf("failed to find many PostStorage: %w", err)
 	}
 	resultMap := make(map[interface{}][]*Post)
 	for _, result := range results {
@@ -663,7 +662,7 @@ func UserEmailOrderBy(asc bool) FilterApplier {
 // AsyncCreate asynchronously inserts a new User.
 func (t *userStorage) AsyncCreate(ctx context.Context, model *User, opts ...Option) error {
 	if model == nil {
-		return errors.New("model is nil")
+		return fmt.Errorf("model is nil")
 	}
 
 	// Set default options
@@ -674,22 +673,22 @@ func (t *userStorage) AsyncCreate(ctx context.Context, model *User, opts ...Opti
 	// Get value of phones
 	phones, err := model.Phones.Value()
 	if err != nil {
-		return errors.Wrap(err, "failed to get value of Phones")
+		return fmt.Errorf("failed to get value of Phones: %w", err)
 	}
 	// Get value of balls
 	balls, err := model.Balls.Value()
 	if err != nil {
-		return errors.Wrap(err, "failed to get value of Balls")
+		return fmt.Errorf("failed to get value of Balls: %w", err)
 	}
 	// Get value of numrs
 	numrs, err := model.Numrs.Value()
 	if err != nil {
-		return errors.Wrap(err, "failed to get value of Numrs")
+		return fmt.Errorf("failed to get value of Numrs: %w", err)
 	}
 	// Get value of comments
 	comments, err := model.Comments.Value()
 	if err != nil {
-		return errors.Wrap(err, "failed to get value of Comments")
+		return fmt.Errorf("failed to get value of Comments: %w", err)
 	}
 
 	query := t.queryBuilder.Insert("users").
@@ -722,45 +721,45 @@ func (t *userStorage) AsyncCreate(ctx context.Context, model *User, opts ...Opti
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	if err := t.DB().AsyncInsert(ctx, sqlQuery, options.waitAsyncInsert, args...); err != nil {
-		return errors.Wrap(err, "failed to asynchronously create User")
+		return fmt.Errorf("failed to asynchronously create User: %w", err)
 	}
 	if options.relations && model.Device != nil {
 		s, err := NewDeviceStorage(t.config)
 		if err != nil {
-			return errors.Wrap(err, "failed to create Device")
+			return fmt.Errorf("failed to create Device: %w", err)
 		}
 
 		err = s.AsyncCreate(ctx, model.Device)
 		if err != nil {
-			return errors.Wrap(err, "failed to asynchronously create Device")
+			return fmt.Errorf("failed to asynchronously create Device: %w", err)
 		}
 	}
 	if options.relations && model.Settings != nil {
 		s, err := NewSettingStorage(t.config)
 		if err != nil {
-			return errors.Wrap(err, "failed to create Settings")
+			return fmt.Errorf("failed to create Settings: %w", err)
 		}
 
 		err = s.AsyncCreate(ctx, model.Settings)
 		if err != nil {
-			return errors.Wrap(err, "failed to asynchronously create Settings")
+			return fmt.Errorf("failed to asynchronously create Settings: %w", err)
 		}
 	}
 	if options.relations && model.Addresses != nil {
 		for _, item := range model.Addresses {
 			s, err := NewAddressStorage(t.config)
 			if err != nil {
-				return errors.Wrap(err, "failed to create Addresses")
+				return fmt.Errorf("failed to create Addresses: %w", err)
 			}
 
 			err = s.AsyncCreate(ctx, item)
 			if err != nil {
-				return errors.Wrap(err, "failed to asynchronously create Addresses")
+				return fmt.Errorf("failed to asynchronously create Addresses: %w", err)
 			}
 		}
 	}
@@ -771,7 +770,7 @@ func (t *userStorage) AsyncCreate(ctx context.Context, model *User, opts ...Opti
 // Create creates a new User.
 func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) error {
 	if model == nil {
-		return errors.New("model is nil")
+		return fmt.Errorf("model is nil")
 	}
 
 	// set default options
@@ -782,22 +781,22 @@ func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) e
 	// get value of phones
 	phones, err := model.Phones.Value()
 	if err != nil {
-		return errors.Wrap(err, "failed to get value of Phones")
+		return fmt.Errorf("failed to get value of Phones: %w", err)
 	}
 	// get value of balls
 	balls, err := model.Balls.Value()
 	if err != nil {
-		return errors.Wrap(err, "failed to get value of Balls")
+		return fmt.Errorf("failed to get value of Balls: %w", err)
 	}
 	// get value of numrs
 	numrs, err := model.Numrs.Value()
 	if err != nil {
-		return errors.Wrap(err, "failed to get value of Numrs")
+		return fmt.Errorf("failed to get value of Numrs: %w", err)
 	}
 	// get value of comments
 	comments, err := model.Comments.Value()
 	if err != nil {
-		return errors.Wrap(err, "failed to get value of Comments")
+		return fmt.Errorf("failed to get value of Comments: %w", err)
 	}
 
 	query := t.queryBuilder.Insert("users").
@@ -830,46 +829,46 @@ func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) e
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	err = t.DB().Exec(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to create User")
+		return fmt.Errorf("failed to create User: %w", err)
 	}
 	if options.relations && model.Device != nil {
 		s, err := NewDeviceStorage(t.config)
 		if err != nil {
-			return errors.Wrap(err, "failed to create Device")
+			return fmt.Errorf("failed to create Device: %w", err)
 		}
 
 		err = s.Create(ctx, model.Device)
 		if err != nil {
-			return errors.Wrap(err, "failed to create Device")
+			return fmt.Errorf("failed to create Device: %w", err)
 		}
 	}
 	if options.relations && model.Settings != nil {
 		s, err := NewSettingStorage(t.config)
 		if err != nil {
-			return errors.Wrap(err, "failed to create Settings")
+			return fmt.Errorf("failed to create Settings: %w", err)
 		}
 
 		err = s.Create(ctx, model.Settings)
 		if err != nil {
-			return errors.Wrap(err, "failed to create Settings")
+			return fmt.Errorf("failed to create Settings: %w", err)
 		}
 	}
 	if options.relations && model.Addresses != nil {
 		for _, item := range model.Addresses {
 			s, err := NewAddressStorage(t.config)
 			if err != nil {
-				return errors.Wrap(err, "failed to create Addresses")
+				return fmt.Errorf("failed to create Addresses: %w", err)
 			}
 
 			err = s.Create(ctx, item)
 			if err != nil {
-				return errors.Wrap(err, "failed to create Addresses")
+				return fmt.Errorf("failed to create Addresses: %w", err)
 			}
 		}
 	}
@@ -880,7 +879,7 @@ func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) e
 // BatchCreate creates multiple User records in a single batch.
 func (t *userStorage) BatchCreate(ctx context.Context, models []*User, opts ...Option) error {
 	if len(models) == 0 {
-		return errors.New("no models to insert")
+		return fmt.Errorf("no models to insert")
 	}
 
 	options := &Options{}
@@ -889,37 +888,37 @@ func (t *userStorage) BatchCreate(ctx context.Context, models []*User, opts ...O
 	}
 
 	if options.relations {
-		return errors.New("relations are not supported in batch create")
+		return fmt.Errorf("relations are not supported in batch create")
 	}
 
 	batch, err := t.DB().PrepareBatch(ctx, "INSERT INTO "+t.TableName(), driver.WithReleaseConnection())
 	if err != nil {
-		return errors.Wrap(err, "failed to prepare batch")
+		return fmt.Errorf("failed to prepare batch: %w", err)
 	}
 
 	for _, model := range models {
 		if model == nil {
-			return errors.New("one of the models is nil")
+			return fmt.Errorf("one of the models is nil")
 		}
 		// Get value of phones
 		phones, err := model.Phones.Value()
 		if err != nil {
-			return errors.Wrap(err, "failed to get value of Phones")
+			return fmt.Errorf("failed to get value of Phones: %w", err)
 		}
 		// Get value of balls
 		balls, err := model.Balls.Value()
 		if err != nil {
-			return errors.Wrap(err, "failed to get value of Balls")
+			return fmt.Errorf("failed to get value of Balls: %w", err)
 		}
 		// Get value of numrs
 		numrs, err := model.Numrs.Value()
 		if err != nil {
-			return errors.Wrap(err, "failed to get value of Numrs")
+			return fmt.Errorf("failed to get value of Numrs: %w", err)
 		}
 		// Get value of comments
 		comments, err := model.Comments.Value()
 		if err != nil {
-			return errors.Wrap(err, "failed to get value of Comments")
+			return fmt.Errorf("failed to get value of Comments: %w", err)
 		}
 
 		err = batch.Append(
@@ -936,12 +935,12 @@ func (t *userStorage) BatchCreate(ctx context.Context, models []*User, opts ...O
 			comments,
 		)
 		if err != nil {
-			return errors.Wrap(err, "failed to append to batch")
+			return fmt.Errorf("failed to append to batch: %w", err)
 		}
 	}
 
 	if err := batch.Send(); err != nil {
-		return errors.Wrap(err, "failed to execute batch insert")
+		return fmt.Errorf("failed to execute batch insert: %w", err)
 	}
 
 	return nil
@@ -950,7 +949,7 @@ func (t *userStorage) BatchCreate(ctx context.Context, models []*User, opts ...O
 // OriginalBatchCreate creates multiple User records in a single batch.
 func (t *userStorage) OriginalBatchCreate(ctx context.Context, models []*User, opts ...Option) error {
 	if len(models) == 0 {
-		return errors.New("no models to insert")
+		return fmt.Errorf("no models to insert")
 	}
 
 	options := &Options{}
@@ -959,7 +958,7 @@ func (t *userStorage) OriginalBatchCreate(ctx context.Context, models []*User, o
 	}
 
 	if options.relations {
-		return errors.New("relations are not supported in batch create")
+		return fmt.Errorf("relations are not supported in batch create")
 	}
 
 	query := t.queryBuilder.Insert(t.TableName()).
@@ -979,8 +978,29 @@ func (t *userStorage) OriginalBatchCreate(ctx context.Context, models []*User, o
 
 	for _, model := range models {
 		if model == nil {
-			return errors.New("one of the models is nil")
+			return fmt.Errorf("model is nil: %w", ErrModelIsNil)
 		}
+		// Get value of phones
+		phones, err := model.Phones.Value()
+		if err != nil {
+			return fmt.Errorf("failed to get value of Phones: %w", err)
+		}
+		// Get value of balls
+		balls, err := model.Balls.Value()
+		if err != nil {
+			return fmt.Errorf("failed to get value of Balls: %w", err)
+		}
+		// Get value of numrs
+		numrs, err := model.Numrs.Value()
+		if err != nil {
+			return fmt.Errorf("failed to get value of Numrs: %w", err)
+		}
+		// Get value of comments
+		comments, err := model.Comments.Value()
+		if err != nil {
+			return fmt.Errorf("failed to get value of Comments: %w", err)
+		}
+
 		query = query.Values(
 			model.Name,
 			model.Age,
@@ -989,22 +1009,22 @@ func (t *userStorage) OriginalBatchCreate(ctx context.Context, models []*User, o
 			model.CreatedAt,
 			nullValue(model.UpdatedAt),
 			nullValue(model.NotificationSettings),
-			model.Phones,
-			model.Balls,
-			model.Numrs,
-			model.Comments,
+			phones,
+			balls,
+			numrs,
+			comments,
 		)
 	}
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB().Query(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to execute bulk insert")
+		return fmt.Errorf("failed to execute bulk insert: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -1013,7 +1033,7 @@ func (t *userStorage) OriginalBatchCreate(ctx context.Context, models []*User, o
 	}()
 
 	if err := rows.Err(); err != nil {
-		return errors.Wrap(err, "rows iteration error")
+		return fmt.Errorf("rows iteration error: %w", err)
 	}
 
 	return nil
@@ -1068,13 +1088,13 @@ func (t *userStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB().Query(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to execute query")
+		return nil, fmt.Errorf("failed to execute query: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -1086,13 +1106,13 @@ func (t *userStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 	for rows.Next() {
 		model := &User{}
 		if err := model.ScanRow(rows); err != nil { // Используем ScanRow вместо ScanRows
-			return nil, errors.Wrap(err, "failed to scan User")
+			return nil, fmt.Errorf("failed to scan User: %w", err)
 		}
 		results = append(results, model)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "failed to iterate over rows")
+		return nil, fmt.Errorf("failed to iterate over rows: %w", err)
 	}
 
 	return results, nil
@@ -1104,7 +1124,7 @@ func (t *userStorage) FindOne(ctx context.Context, builders ...*QueryBuilder) (*
 	builders = append(builders, LimitBuilder(1))
 	results, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to findOne User")
+		return nil, fmt.Errorf("failed to findOne User: %w", err)
 	}
 
 	if len(results) == 0 {

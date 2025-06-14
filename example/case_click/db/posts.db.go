@@ -2,9 +2,9 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	sq "github.com/Masterminds/squirrel"
-	"github.com/pkg/errors"
 )
 
 // postStorage is a struct for the "posts" table.
@@ -62,10 +62,10 @@ type PostStorage interface {
 // NewPostStorage returns a new postStorage.
 func NewPostStorage(config *Config) (PostStorage, error) {
 	if config == nil {
-		return nil, errors.New("config is nil")
+		return nil, fmt.Errorf("config is nil")
 	}
 	if config.DB == nil {
-		return nil, errors.New("config.DB connection is nil")
+		return nil, fmt.Errorf("config.DB connection is nil")
 	}
 
 	return &postStorage{
@@ -123,19 +123,19 @@ func (t *postStorage) SetQueryBuilder(builder sq.StatementBuilderType) PostStora
 // LoadAuthor loads the Author relation.
 func (t *postStorage) LoadAuthor(ctx context.Context, model *Post, builders ...*QueryBuilder) error {
 	if model == nil {
-		return errors.Wrap(ErrModelIsNil, "Post is nil")
+		return fmt.Errorf("model is nil: %w", ErrModelIsNil)
 	}
 
 	// NewUserStorage creates a new UserStorage.
 	s, err := NewUserStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create UserStorage")
+		return fmt.Errorf("failed to create UserStorage: %w", err)
 	}
 	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(UserIdEq(model.AuthorId)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find one UserStorage")
+		return fmt.Errorf("failed to find one UserStorage: %w", err)
 	}
 
 	model.Author = relationModel
@@ -153,7 +153,7 @@ func (t *postStorage) LoadBatchAuthor(ctx context.Context, items []*Post, builde
 	// NewUserStorage creates a new UserStorage.
 	s, err := NewUserStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create UserStorage")
+		return fmt.Errorf("failed to create UserStorage: %w", err)
 	}
 
 	// Add the filter for the relation
@@ -161,7 +161,7 @@ func (t *postStorage) LoadBatchAuthor(ctx context.Context, items []*Post, builde
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find many UserStorage")
+		return fmt.Errorf("failed to find many UserStorage: %w", err)
 	}
 	resultMap := make(map[interface{}]*User)
 	for _, result := range results {
@@ -327,7 +327,7 @@ func PostAuthorIdOrderBy(asc bool) FilterApplier {
 // AsyncCreate asynchronously inserts a new Post.
 func (t *postStorage) AsyncCreate(ctx context.Context, model *Post, opts ...Option) error {
 	if model == nil {
-		return errors.New("model is nil")
+		return fmt.Errorf("model is nil")
 	}
 
 	// Set default options
@@ -350,12 +350,12 @@ func (t *postStorage) AsyncCreate(ctx context.Context, model *Post, opts ...Opti
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	if err := t.DB().AsyncInsert(ctx, sqlQuery, options.waitAsyncInsert, args...); err != nil {
-		return errors.Wrap(err, "failed to asynchronously create Post")
+		return fmt.Errorf("failed to asynchronously create Post: %w", err)
 	}
 
 	return nil
@@ -364,7 +364,7 @@ func (t *postStorage) AsyncCreate(ctx context.Context, model *Post, opts ...Opti
 // Create creates a new Post.
 func (t *postStorage) Create(ctx context.Context, model *Post, opts ...Option) error {
 	if model == nil {
-		return errors.New("model is nil")
+		return fmt.Errorf("model is nil")
 	}
 
 	// set default options
@@ -387,13 +387,13 @@ func (t *postStorage) Create(ctx context.Context, model *Post, opts ...Option) e
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	err = t.DB().Exec(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to create Post")
+		return fmt.Errorf("failed to create Post: %w", err)
 	}
 
 	return nil
@@ -402,7 +402,7 @@ func (t *postStorage) Create(ctx context.Context, model *Post, opts ...Option) e
 // BatchCreate creates multiple Post records in a single batch.
 func (t *postStorage) BatchCreate(ctx context.Context, models []*Post, opts ...Option) error {
 	if len(models) == 0 {
-		return errors.New("no models to insert")
+		return fmt.Errorf("no models to insert")
 	}
 
 	options := &Options{}
@@ -411,17 +411,17 @@ func (t *postStorage) BatchCreate(ctx context.Context, models []*Post, opts ...O
 	}
 
 	if options.relations {
-		return errors.New("relations are not supported in batch create")
+		return fmt.Errorf("relations are not supported in batch create")
 	}
 
 	batch, err := t.DB().PrepareBatch(ctx, "INSERT INTO "+t.TableName(), driver.WithReleaseConnection())
 	if err != nil {
-		return errors.Wrap(err, "failed to prepare batch")
+		return fmt.Errorf("failed to prepare batch: %w", err)
 	}
 
 	for _, model := range models {
 		if model == nil {
-			return errors.New("one of the models is nil")
+			return fmt.Errorf("one of the models is nil")
 		}
 
 		err := batch.Append(
@@ -430,12 +430,12 @@ func (t *postStorage) BatchCreate(ctx context.Context, models []*Post, opts ...O
 			model.AuthorId,
 		)
 		if err != nil {
-			return errors.Wrap(err, "failed to append to batch")
+			return fmt.Errorf("failed to append to batch: %w", err)
 		}
 	}
 
 	if err := batch.Send(); err != nil {
-		return errors.Wrap(err, "failed to execute batch insert")
+		return fmt.Errorf("failed to execute batch insert: %w", err)
 	}
 
 	return nil
@@ -444,7 +444,7 @@ func (t *postStorage) BatchCreate(ctx context.Context, models []*Post, opts ...O
 // OriginalBatchCreate creates multiple Post records in a single batch.
 func (t *postStorage) OriginalBatchCreate(ctx context.Context, models []*Post, opts ...Option) error {
 	if len(models) == 0 {
-		return errors.New("no models to insert")
+		return fmt.Errorf("no models to insert")
 	}
 
 	options := &Options{}
@@ -453,7 +453,7 @@ func (t *postStorage) OriginalBatchCreate(ctx context.Context, models []*Post, o
 	}
 
 	if options.relations {
-		return errors.New("relations are not supported in batch create")
+		return fmt.Errorf("relations are not supported in batch create")
 	}
 
 	query := t.queryBuilder.Insert(t.TableName()).
@@ -465,8 +465,9 @@ func (t *postStorage) OriginalBatchCreate(ctx context.Context, models []*Post, o
 
 	for _, model := range models {
 		if model == nil {
-			return errors.New("one of the models is nil")
+			return fmt.Errorf("model is nil: %w", ErrModelIsNil)
 		}
+
 		query = query.Values(
 			model.Title,
 			model.Body,
@@ -476,13 +477,13 @@ func (t *postStorage) OriginalBatchCreate(ctx context.Context, models []*Post, o
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB().Query(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to execute bulk insert")
+		return fmt.Errorf("failed to execute bulk insert: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -491,7 +492,7 @@ func (t *postStorage) OriginalBatchCreate(ctx context.Context, models []*Post, o
 	}()
 
 	if err := rows.Err(); err != nil {
-		return errors.Wrap(err, "rows iteration error")
+		return fmt.Errorf("rows iteration error: %w", err)
 	}
 
 	return nil
@@ -546,13 +547,13 @@ func (t *postStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB().Query(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to execute query")
+		return nil, fmt.Errorf("failed to execute query: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -564,13 +565,13 @@ func (t *postStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 	for rows.Next() {
 		model := &Post{}
 		if err := model.ScanRow(rows); err != nil { // Используем ScanRow вместо ScanRows
-			return nil, errors.Wrap(err, "failed to scan Post")
+			return nil, fmt.Errorf("failed to scan Post: %w", err)
 		}
 		results = append(results, model)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "failed to iterate over rows")
+		return nil, fmt.Errorf("failed to iterate over rows: %w", err)
 	}
 
 	return results, nil
@@ -582,7 +583,7 @@ func (t *postStorage) FindOne(ctx context.Context, builders ...*QueryBuilder) (*
 	builders = append(builders, LimitBuilder(1))
 	results, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to findOne Post")
+		return nil, fmt.Errorf("failed to findOne Post: %w", err)
 	}
 
 	if len(results) == 0 {

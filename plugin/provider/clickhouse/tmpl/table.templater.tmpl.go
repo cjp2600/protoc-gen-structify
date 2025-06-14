@@ -280,7 +280,7 @@ func (t *{{ storageName | lowerCamelCase }}) FindOne(ctx context.Context, builde
 	builders = append(builders, LimitBuilder(1))
 	results, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to findOne {{ structureName }}")
+		return nil, fmt.Errorf("failed to findOne {{ structureName }}: %w", err)
 	}
 
 	if len(results) == 0 {
@@ -341,13 +341,13 @@ func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, build
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB().Query(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to execute query")
+		return nil, fmt.Errorf("failed to execute query: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -359,13 +359,13 @@ func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, build
 	for rows.Next() {
 		model := &{{structureName}}{}
 		if err := model.ScanRow(rows); err != nil { // Используем ScanRow вместо ScanRows
-			return nil, errors.Wrap(err, "failed to scan {{ structureName }}")
+			return nil, fmt.Errorf("failed to scan {{ structureName }}: %w", err)
 		}
 		results = append(results, model)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "failed to iterate over rows")
+		return nil, fmt.Errorf("failed to iterate over rows: %w", err)
 	}
 	
 	return results, nil
@@ -436,7 +436,7 @@ const TableOriginalBatchCreateMethodTemplate = `
 // OriginalBatchCreate creates multiple {{ structureName }} records in a single batch.
 func (t *{{ storageName | lowerCamelCase }}) OriginalBatchCreate(ctx context.Context, models []*{{structureName}}, opts ...Option) error {
 	if len(models) == 0 {
-		return errors.New("no models to insert")
+		return fmt.Errorf("no models to insert")
 	}
 
 	options := &Options{}
@@ -445,7 +445,7 @@ func (t *{{ storageName | lowerCamelCase }}) OriginalBatchCreate(ctx context.Con
 	}
 
 	if options.relations {
-		return errors.New("relations are not supported in batch create")
+		return fmt.Errorf("relations are not supported in batch create")
 	}
 
 	query := t.queryBuilder.Insert(t.TableName()).
@@ -463,8 +463,21 @@ func (t *{{ storageName | lowerCamelCase }}) OriginalBatchCreate(ctx context.Con
 
 	for _, model := range models {
 		if model == nil {
-			return errors.New("one of the models is nil")
+			return fmt.Errorf("model is nil: %w", ErrModelIsNil)
 		}
+
+		{{- range $index, $field := fields }}
+		{{- if not ($field | isRelation) }}
+		{{- if ($field | isRepeated) }}
+		// Get value of {{ $field | fieldName | lowerCamelCase }}
+		{{ $field | fieldName | lowerCamelCase }}, err := model.{{ $field | fieldName }}.Value()
+		if err != nil {
+			return fmt.Errorf("failed to get value of {{ $field | fieldName }}: %w", err)
+		}
+		{{- end}}
+		{{- end}}
+		{{- end}}
+
 		query = query.Values(
 			{{- range $index, $field := fields }}
 			{{- if not ($field | isRelation) }}
@@ -492,13 +505,13 @@ func (t *{{ storageName | lowerCamelCase }}) OriginalBatchCreate(ctx context.Con
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB().Query(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to execute bulk insert")
+		return fmt.Errorf("failed to execute bulk insert: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -507,7 +520,7 @@ func (t *{{ storageName | lowerCamelCase }}) OriginalBatchCreate(ctx context.Con
 	}()
 
 	if err := rows.Err(); err != nil {
-		return errors.Wrap(err, "rows iteration error")
+		return fmt.Errorf("rows iteration error: %w", err)
 	}
 
 	return nil 
@@ -518,7 +531,7 @@ const TableBatchCreateMethodTemplate = `
 // BatchCreate creates multiple {{ structureName }} records in a single batch.
 func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, models []*{{structureName}}, opts ...Option) error {
 	if len(models) == 0 {
-		return errors.New("no models to insert")
+		return fmt.Errorf("no models to insert")
 	}
 
 	options := &Options{}
@@ -527,17 +540,17 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 	}
 
 	if options.relations {
-		return errors.New("relations are not supported in batch create")
+		return fmt.Errorf("relations are not supported in batch create")
 	}
 
 	batch, err := t.DB().PrepareBatch(ctx, "INSERT INTO " + t.TableName(), driver.WithReleaseConnection())
 	if err != nil {
-		return errors.Wrap(err, "failed to prepare batch")
+		return fmt.Errorf("failed to prepare batch: %w", err)
 	}
 
 	for _, model := range models {
 		if model == nil {
-			return errors.New("one of the models is nil")
+			return fmt.Errorf("one of the models is nil")
 		}
 
 		{{- range $index, $field := fields }}
@@ -546,7 +559,7 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 		// Get value of {{ $field | fieldName | lowerCamelCase }}
 		{{ $field | fieldName | lowerCamelCase }}, err := model.{{ $field | fieldName }}.Value()
 		if err != nil {
-			return errors.Wrap(err, "failed to get value of {{ $field | fieldName }}")
+			return fmt.Errorf("failed to get value of {{ $field | fieldName }}: %w", err)
 		}
 		{{- end}}
 		{{- end}}
@@ -576,12 +589,12 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 			{{- end}}
 		)
 		if err != nil {
-			return errors.Wrap(err, "failed to append to batch")
+			return fmt.Errorf("failed to append to batch: %w", err)
 		}
 	}
 
 	if err := batch.Send(); err != nil {
-		return errors.Wrap(err, "failed to execute batch insert")
+		return fmt.Errorf("failed to execute batch insert: %w", err)
 	}
 
 	return nil
@@ -591,7 +604,7 @@ const TableCreateAsyncMethodTemplate = `
 // AsyncCreate asynchronously inserts a new {{ structureName }}.
 func (t *{{ storageName | lowerCamelCase }}) AsyncCreate(ctx context.Context, model *{{structureName}}, opts ...Option) error { 
 	if model == nil {
-		return errors.New("model is nil")
+		return fmt.Errorf("model is nil")
 	}
 
 	// Set default options
@@ -606,7 +619,7 @@ func (t *{{ storageName | lowerCamelCase }}) AsyncCreate(ctx context.Context, mo
 	// Get value of {{ $field | fieldName | lowerCamelCase }}
 	{{ $field | fieldName | lowerCamelCase }}, err := model.{{ $field | fieldName }}.Value()
 	if err != nil {
-		return errors.Wrap(err, "failed to get value of {{ $field | fieldName }}")
+		return fmt.Errorf("failed to get value of {{ $field | fieldName }}: %w", err)
 	}
 	{{- end}}
 	{{- end}}
@@ -650,12 +663,12 @@ func (t *{{ storageName | lowerCamelCase }}) AsyncCreate(ctx context.Context, mo
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	if err := t.DB().AsyncInsert(ctx, sqlQuery, options.waitAsyncInsert, args...); err != nil {
-		return errors.Wrap(err, "failed to asynchronously create {{ structureName }}")
+		return fmt.Errorf("failed to asynchronously create {{ structureName }}: %w", err)
 	}
 
 	{{- range $index, $field := fields }}
@@ -664,23 +677,23 @@ func (t *{{ storageName | lowerCamelCase }}) AsyncCreate(ctx context.Context, mo
 		for _, item := range model.{{ $field | fieldName }} {
 			s, err := New{{ $field | relationStorageName }}(t.config)
 			if err != nil {
-				return errors.Wrap(err, "failed to create {{ $field | fieldName }}")
+				return fmt.Errorf("failed to create {{ $field | fieldName }}: %w", err)
 			}
 
 			err = s.AsyncCreate(ctx, item)
 			if err != nil {
-				return errors.Wrap(err, "failed to asynchronously create {{ $field | fieldName }}")
+				return fmt.Errorf("failed to asynchronously create {{ $field | fieldName }}: %w", err)
 			}
 		}
 	{{- else }}
 		s, err := New{{ $field | relationStorageName }}(t.config)
 		if err != nil {
-			return errors.Wrap(err, "failed to create {{ $field | fieldName }}")
+			return fmt.Errorf("failed to create {{ $field | fieldName }}: %w", err)
 		}
 
 		err = s.AsyncCreate(ctx, model.{{ $field | fieldName }})
 		if err != nil {
-			return errors.Wrap(err, "failed to asynchronously create {{ $field | fieldName }}")
+			return fmt.Errorf("failed to asynchronously create {{ $field | fieldName }}: %w", err)
 		}
 	{{- end}}
 	} {{- end}}
@@ -693,7 +706,7 @@ const TableCreateMethodTemplate = `
 // Create creates a new {{ structureName }}.
 func (t *{{ storageName | lowerCamelCase }}) Create(ctx context.Context, model *{{structureName}}, opts ...Option) error { 
 	if model == nil {
-		return errors.New("model is nil")
+		return fmt.Errorf("model is nil")
 	}
 
 	// set default options
@@ -708,7 +721,7 @@ func (t *{{ storageName | lowerCamelCase }}) Create(ctx context.Context, model *
 	// get value of {{ $field | fieldName | lowerCamelCase }}
 	{{ $field | fieldName | lowerCamelCase }}, err := model.{{ $field | fieldName }}.Value()
 	if err != nil {
-		return errors.Wrap(err, "failed to get value of {{ $field | fieldName }}")
+		return fmt.Errorf("failed to get value of {{ $field | fieldName }}: %w", err)
 	}
 	{{- end}}
 	{{- end}}
@@ -752,13 +765,13 @@ func (t *{{ storageName | lowerCamelCase }}) Create(ctx context.Context, model *
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	err = t.DB().Exec(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to create {{ structureName }}")
+		return fmt.Errorf("failed to create {{ structureName }}: %w", err)
 	}
 
 	{{- range $index, $field := fields }}
@@ -767,22 +780,22 @@ func (t *{{ storageName | lowerCamelCase }}) Create(ctx context.Context, model *
 			for _, item := range model.{{ $field | fieldName }} {
 				s, err := New{{ $field | relationStorageName }}(t.config)
 				if err != nil {
-					return errors.Wrap(err, "failed to create {{ $field | fieldName }}")
+					return fmt.Errorf("failed to create {{ $field | fieldName }}: %w", err)
 				}
 
 				err = s.Create(ctx, item)
 				if err != nil {
-					return errors.Wrap(err, "failed to create {{ $field | fieldName }}")
+					return fmt.Errorf("failed to create {{ $field | fieldName }}: %w", err)
 				}
 			} {{ else }}
 			s, err := New{{ $field | relationStorageName }}(t.config)
 			if err != nil {
-				return errors.Wrap(err, "failed to create {{ $field | fieldName }}")
+				return fmt.Errorf("failed to create {{ $field | fieldName }}: %w", err)
 			}
 
 			err = s.Create(ctx, model.{{ $field | fieldName }})
 			if err != nil {
-				return errors.Wrap(err, "failed to create {{ $field | fieldName }}")
+				return fmt.Errorf("failed to create {{ $field | fieldName }}: %w", err)
 			} {{- end}}
 	    } {{- end}}
 	{{- end}}
@@ -855,10 +868,10 @@ type {{ storageName }} interface {
 // New{{ storageName }} returns a new {{ storageName | lowerCamelCase }}.
 func New{{ storageName }}(config *Config) ({{ storageName }}, error) {
 	if config == nil {
-		return nil, errors.New("config is nil")
+		return nil, fmt.Errorf("config is nil")
 	}
 	if config.DB == nil {
-		return nil, errors.New("config.DB connection is nil")
+		return nil, fmt.Errorf("config.DB connection is nil")
 	}
 
 	return &{{ storageName | lowerCamelCase }}{
@@ -918,13 +931,13 @@ func (t *{{ storageName | lowerCamelCase }}) SetQueryBuilder(builder sq.Statemen
 // Load{{ $field | pluralFieldName }} loads the {{ $field | pluralFieldName }} relation.
 func (t *{{ storageName | lowerCamelCase }}) Load{{ $field | pluralFieldName }}(ctx context.Context, model *{{structureName}}, builders ...*QueryBuilder) error {
 	if model == nil {
-		return errors.Wrap(ErrModelIsNil, "{{structureName}} is nil")
+		return fmt.Errorf("model is nil: %w", ErrModelIsNil)
 	}
 
 	// New{{ $field | relationStorageName }} creates a new {{ $field | relationStorageName }}.
 	s, err := New{{ $field | relationStorageName }}(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create {{ $field | relationStorageName }}")
+		return fmt.Errorf("failed to create {{ $field | relationStorageName }}: %w", err)
 	}
 
 	{{- if ($field | isOptional) }}
@@ -943,14 +956,14 @@ func (t *{{ storageName | lowerCamelCase }}) Load{{ $field | pluralFieldName }}(
 	{{- if ($field | isRepeated) }}
 		relationModels, err := s.FindMany(ctx, builders...)
 		if err != nil {
-			return errors.Wrap(err, "failed to find many {{ $field | relationStorageName }}")
+			return fmt.Errorf("failed to find many {{ $field | relationStorageName }}: %w", err)
 		}
 
 		model.{{ $field | fieldName }} = relationModels
 	{{- else }}
 		relationModel, err := s.FindOne(ctx, builders...)
 		if err != nil {
-			return errors.Wrap(err, "failed to find one {{ $field | relationStorageName }}")
+			return fmt.Errorf("failed to find one {{ $field | relationStorageName }}: %w", err)
 		}
 
 		model.{{ $field | fieldName }} = relationModel
@@ -983,7 +996,7 @@ func (t *{{ storageName | lowerCamelCase }}) LoadBatch{{ $field | pluralFieldNam
 	// New{{ $field | relationStorageName }} creates a new {{ $field | relationStorageName }}.
 	s, err := New{{ $field | relationStorageName }}(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create {{ $field | relationStorageName }}")
+		return fmt.Errorf("failed to create {{ $field | relationStorageName }}: %w", err)
 	}
 
 	// Add the filter for the relation
@@ -998,7 +1011,7 @@ func (t *{{ storageName | lowerCamelCase }}) LoadBatch{{ $field | pluralFieldNam
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find many {{ $field | relationStorageName }}")
+		return fmt.Errorf("failed to find many {{ $field | relationStorageName }}: %w", err)
 	}
 
 	{{- if ($field | isRepeated) }}

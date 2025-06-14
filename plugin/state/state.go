@@ -256,15 +256,21 @@ func getNestedMessages(request *plugingo.CodeGeneratorRequest) map[string]*Messa
 // flattenMessage - flatten the message
 func flattenMessage(msg *descriptor.DescriptorProto, result map[string]*MessageDescriptor, parent string) {
 	sourceName := msg.GetName()
+	// Add parent name as prefix to avoid name conflicts
 	name := helperpkg.CamelCaseSlice(strings.Split(parent+sourceName, "."))
-	result[sourceName] = &MessageDescriptor{
-		Descriptor:    msg,
-		StructureName: name,
-		SourceName:    sourceName,
+
+	// Only add to result if it's a nested message
+	if parent != "" {
+		result[sourceName] = &MessageDescriptor{
+			Descriptor:    msg,
+			StructureName: name,
+			SourceName:    sourceName,
+		}
 	}
 
 	for _, nested := range msg.GetNestedType() {
-		flattenMessage(nested, result, sourceName+".")
+		// Pass the current message name as prefix for nested messages
+		flattenMessage(nested, result, name+".")
 	}
 }
 
@@ -815,7 +821,7 @@ func getLinkedStructName(m *descriptor.DescriptorProto, field *descriptor.FieldD
 	linkedStructName := helperpkg.UpperCamelCase(m.GetName()) + helperpkg.UpperCamelCase(field.GetName())
 
 	if val, ok := messages[convertedType]; ok {
-		linkedStructName = val.Descriptor.GetName()
+		linkedStructName = val.StructureName
 	}
 	return linkedStructName
 }

@@ -100,6 +100,18 @@ message BotView {
   };
 }
 
+message Comment {
+  string id = 1 [(structify.field) = {primary_key: true, uuid: true, default: "uuid_generate_v4()"}];
+  string user_id = 2 [(structify.field) = {index: true, uuid: true, unique: true}];
+  int32 post_id = 3 [(structify.field) = {index: true, unique: true}];
+  string text = 4;
+  google.protobuf.Timestamp created_at = 5 [(structify.field) = {default: "now()"}];
+  optional google.protobuf.Timestamp updated_at = 6;
+
+  User user = 7 [(structify.field) = {relation: { field: "user_id", reference: "id", foreign: { cascade: false } } }];
+  Post post = 8 [(structify.field) = {relation: { field: "post_id", reference: "id", foreign: { cascade: false } } }];
+}
+
 
 /**
   * @structify.table users

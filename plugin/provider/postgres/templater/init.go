@@ -91,16 +91,10 @@ func (i *initTemplater) BuildTemplate() string {
 func (i *initTemplater) Imports() *importpkg.ImportSet {
 	is := importpkg.NewImportSet()
 	is.Enable(
-		importpkg.ImportDb,
-		importpkg.ImportLibPQ,
-		importpkg.ImportFMT,
-		importpkg.ImportErrors,
-		importpkg.ImportJson,
-		importpkg.ImportSQLDriver,
-		importpkg.ImportLibPQWOAlias,
-		importpkg.ImportStrings,
 		importpkg.ImportContext,
+		importpkg.ImportFMT,
 		importpkg.ImportSquirrel,
+		importpkg.ImportLibPQ,
 	)
 
 	if i.IncludeConnection {

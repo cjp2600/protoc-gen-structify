@@ -127,7 +127,7 @@ func (t *tableTemplater) Imports() *importpkg.ImportSet {
 	is := importpkg.NewImportSet()
 	is.Enable(
 		importpkg.ImportContext,
-		importpkg.ImportErrors,
+		importpkg.ImportFMT,
 		importpkg.ImportSquirrel,
 		importpkg.ImportClickhouseDriver,
 	)

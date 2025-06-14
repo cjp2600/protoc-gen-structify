@@ -255,19 +255,19 @@ const ConnectionTemplate = `
 func Open(ctx context.Context, dsn string) (driver.Conn, error) {
 	parsedOptions, err := clickhouse.ParseDSN(dsn)
 	if err != nil {
-		return nil, errors.Wrap(err, "parse dsn")
+		return nil, fmt.Errorf("parse dsn: %w", err)
 	}
 
 	conn, err := clickhouse.Open(parsedOptions)
 	if err != nil {
-		return nil, errors.Wrap(err, "open clickhouse connection")
+		return nil, fmt.Errorf("open clickhouse connection: %w", err)
 	}
 
 	if err := conn.Ping(ctx); err != nil {
 		if exception, ok := err.(*clickhouse.Exception); ok {
 			fmt.Printf("Exception [%d] %s \n%s\n", exception.Code, exception.Message, exception.StackTrace)
 		}
-		return nil, errors.Wrap(err, "ping clickhouse instance")
+		return nil, fmt.Errorf("ping clickhouse instance: %w", err)
 	}
 
 	return conn, nil
@@ -314,11 +314,11 @@ type {{ storageName }} interface {
 // New{{ storageName }} returns a new {{ storageName }}.
 func New{{ storageName }}(config *Config) ({{ storageName }}, error) {
 	if config == nil {
-		return nil, errors.New("config is required")
+		return nil, fmt.Errorf("config is required")
 	}
 
 	if config.DB == nil {
-		return nil, errors.New("db is required")
+		return nil, fmt.Errorf("db is required")
 	}
 	
 	var storages = {{ storageName | lowerCamelCase }}{
@@ -327,7 +327,7 @@ func New{{ storageName }}(config *Config) ({{ storageName }}, error) {
 {{ range $value := storages }}
 	{{ $value.Key }}Impl, err := New{{ $value.Value }}(config)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create {{ $value.Value }}")
+		return nil, fmt.Errorf("failed to create {{ $value.Value }}: %w", err)
 	}
 	storages.{{ $value.Key }} = {{ $value.Key }}Impl
 {{ end }}
@@ -351,7 +351,7 @@ func (c *{{ storageName | lowerCamelCase }}) CreateTables(ctx context.Context) e
 	// create the {{ $value.Value }} table.
 	err = c.{{ $value.Key }}.CreateTable(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to create table")
+		return fmt.Errorf("failed to create table: %w", err)
 	}
 {{ end }}
 	return nil
@@ -365,7 +365,7 @@ func (c *{{ storageName | lowerCamelCase }}) DropTables(ctx context.Context) err
 	// drop the {{ $value.Value }} table.
 	err = c.{{ $value.Key }}.DropTable(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to drop table")
+		return fmt.Errorf("failed to drop table: %w", err)
 	}
 {{ end }}
 	return nil
@@ -379,7 +379,7 @@ func (c *{{ storageName | lowerCamelCase }}) TruncateTables(ctx context.Context)
 	// truncate the {{ $value.Value }} table.
 	err = c.{{ $value.Key }}.TruncateTable(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to truncate table")
+		return fmt.Errorf("failed to truncate table: %w", err)
 	}
 {{ end }}
 	return nil
@@ -393,7 +393,7 @@ func (c *{{ storageName | lowerCamelCase }}) UpgradeTables(ctx context.Context) 
 	// run the {{ $value.Value }} upgrade.
 	err = c.{{ $value.Key }}.UpgradeTable(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to upgrade table")
+		return fmt.Errorf("failed to upgrade table: %w", err)
 	}
 {{ end }}
 	return nil
@@ -558,12 +558,12 @@ type QueryExecer interface {
 const ErrorsTemplate = `
 var (
 	// ErrNotFound is returned when a record is not found.
-	ErrRowNotFound = errors.New("row not found")
+	ErrRowNotFound = fmt.Errorf("row not found")
 	// ErrNoTransaction is returned when a transaction is not provided.
-	ErrNoTransaction = errors.New("no transaction provided")
+	ErrNoTransaction = fmt.Errorf("no transaction provided")
 	// ErrRowAlreadyExist is returned when a row already exist.
-	ErrRowAlreadyExist    = errors.New("row already exist")
+	ErrRowAlreadyExist    = fmt.Errorf("row already exist")
 	// ErrModelIsNil is returned when a relation model is nil.
-	ErrModelIsNil = errors.New("model is nil")
+	ErrModelIsNil = fmt.Errorf("model is nil")
 )
 `

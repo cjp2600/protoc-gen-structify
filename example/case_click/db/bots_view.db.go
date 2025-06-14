@@ -2,9 +2,9 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	sq "github.com/Masterminds/squirrel"
-	"github.com/pkg/errors"
 	"time"
 )
 
@@ -63,10 +63,10 @@ type BotViewStorage interface {
 // NewBotViewStorage returns a new botViewStorage.
 func NewBotViewStorage(config *Config) (BotViewStorage, error) {
 	if config == nil {
-		return nil, errors.New("config is nil")
+		return nil, fmt.Errorf("config is nil")
 	}
 	if config.DB == nil {
-		return nil, errors.New("config.DB connection is nil")
+		return nil, fmt.Errorf("config.DB connection is nil")
 	}
 
 	return &botViewStorage{
@@ -124,19 +124,19 @@ func (t *botViewStorage) SetQueryBuilder(builder sq.StatementBuilderType) BotVie
 // LoadUser loads the User relation.
 func (t *botViewStorage) LoadUser(ctx context.Context, model *BotView, builders ...*QueryBuilder) error {
 	if model == nil {
-		return errors.Wrap(ErrModelIsNil, "BotView is nil")
+		return fmt.Errorf("model is nil: %w", ErrModelIsNil)
 	}
 
 	// NewUserStorage creates a new UserStorage.
 	s, err := NewUserStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create UserStorage")
+		return fmt.Errorf("failed to create UserStorage: %w", err)
 	}
 	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(UserIdEq(model.UserId)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find one UserStorage")
+		return fmt.Errorf("failed to find one UserStorage: %w", err)
 	}
 
 	model.User = relationModel
@@ -154,7 +154,7 @@ func (t *botViewStorage) LoadBatchUser(ctx context.Context, items []*BotView, bu
 	// NewUserStorage creates a new UserStorage.
 	s, err := NewUserStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create UserStorage")
+		return fmt.Errorf("failed to create UserStorage: %w", err)
 	}
 
 	// Add the filter for the relation
@@ -162,7 +162,7 @@ func (t *botViewStorage) LoadBatchUser(ctx context.Context, items []*BotView, bu
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find many UserStorage")
+		return fmt.Errorf("failed to find many UserStorage: %w", err)
 	}
 	resultMap := make(map[interface{}]*User)
 	for _, result := range results {
@@ -402,7 +402,7 @@ func BotViewCreatedAtOrderBy(asc bool) FilterApplier {
 // AsyncCreate asynchronously inserts a new BotView.
 func (t *botViewStorage) AsyncCreate(ctx context.Context, model *BotView, opts ...Option) error {
 	if model == nil {
-		return errors.New("model is nil")
+		return fmt.Errorf("model is nil")
 	}
 
 	// Set default options
@@ -433,12 +433,12 @@ func (t *botViewStorage) AsyncCreate(ctx context.Context, model *BotView, opts .
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	if err := t.DB().AsyncInsert(ctx, sqlQuery, options.waitAsyncInsert, args...); err != nil {
-		return errors.Wrap(err, "failed to asynchronously create BotView")
+		return fmt.Errorf("failed to asynchronously create BotView: %w", err)
 	}
 
 	return nil
@@ -447,7 +447,7 @@ func (t *botViewStorage) AsyncCreate(ctx context.Context, model *BotView, opts .
 // Create creates a new BotView.
 func (t *botViewStorage) Create(ctx context.Context, model *BotView, opts ...Option) error {
 	if model == nil {
-		return errors.New("model is nil")
+		return fmt.Errorf("model is nil")
 	}
 
 	// set default options
@@ -478,13 +478,13 @@ func (t *botViewStorage) Create(ctx context.Context, model *BotView, opts ...Opt
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	err = t.DB().Exec(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to create BotView")
+		return fmt.Errorf("failed to create BotView: %w", err)
 	}
 
 	return nil
@@ -493,7 +493,7 @@ func (t *botViewStorage) Create(ctx context.Context, model *BotView, opts ...Opt
 // BatchCreate creates multiple BotView records in a single batch.
 func (t *botViewStorage) BatchCreate(ctx context.Context, models []*BotView, opts ...Option) error {
 	if len(models) == 0 {
-		return errors.New("no models to insert")
+		return fmt.Errorf("no models to insert")
 	}
 
 	options := &Options{}
@@ -502,17 +502,17 @@ func (t *botViewStorage) BatchCreate(ctx context.Context, models []*BotView, opt
 	}
 
 	if options.relations {
-		return errors.New("relations are not supported in batch create")
+		return fmt.Errorf("relations are not supported in batch create")
 	}
 
 	batch, err := t.DB().PrepareBatch(ctx, "INSERT INTO "+t.TableName(), driver.WithReleaseConnection())
 	if err != nil {
-		return errors.Wrap(err, "failed to prepare batch")
+		return fmt.Errorf("failed to prepare batch: %w", err)
 	}
 
 	for _, model := range models {
 		if model == nil {
-			return errors.New("one of the models is nil")
+			return fmt.Errorf("one of the models is nil")
 		}
 
 		err := batch.Append(
@@ -525,12 +525,12 @@ func (t *botViewStorage) BatchCreate(ctx context.Context, models []*BotView, opt
 			nullValue(model.DeletedAt),
 		)
 		if err != nil {
-			return errors.Wrap(err, "failed to append to batch")
+			return fmt.Errorf("failed to append to batch: %w", err)
 		}
 	}
 
 	if err := batch.Send(); err != nil {
-		return errors.Wrap(err, "failed to execute batch insert")
+		return fmt.Errorf("failed to execute batch insert: %w", err)
 	}
 
 	return nil
@@ -539,7 +539,7 @@ func (t *botViewStorage) BatchCreate(ctx context.Context, models []*BotView, opt
 // OriginalBatchCreate creates multiple BotView records in a single batch.
 func (t *botViewStorage) OriginalBatchCreate(ctx context.Context, models []*BotView, opts ...Option) error {
 	if len(models) == 0 {
-		return errors.New("no models to insert")
+		return fmt.Errorf("no models to insert")
 	}
 
 	options := &Options{}
@@ -548,7 +548,7 @@ func (t *botViewStorage) OriginalBatchCreate(ctx context.Context, models []*BotV
 	}
 
 	if options.relations {
-		return errors.New("relations are not supported in batch create")
+		return fmt.Errorf("relations are not supported in batch create")
 	}
 
 	query := t.queryBuilder.Insert(t.TableName()).
@@ -564,8 +564,9 @@ func (t *botViewStorage) OriginalBatchCreate(ctx context.Context, models []*BotV
 
 	for _, model := range models {
 		if model == nil {
-			return errors.New("one of the models is nil")
+			return fmt.Errorf("model is nil: %w", ErrModelIsNil)
 		}
+
 		query = query.Values(
 			model.UserId,
 			model.Name,
@@ -579,13 +580,13 @@ func (t *botViewStorage) OriginalBatchCreate(ctx context.Context, models []*BotV
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB().Query(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to execute bulk insert")
+		return fmt.Errorf("failed to execute bulk insert: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -594,7 +595,7 @@ func (t *botViewStorage) OriginalBatchCreate(ctx context.Context, models []*BotV
 	}()
 
 	if err := rows.Err(); err != nil {
-		return errors.Wrap(err, "rows iteration error")
+		return fmt.Errorf("rows iteration error: %w", err)
 	}
 
 	return nil
@@ -649,13 +650,13 @@ func (t *botViewStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB().Query(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to execute query")
+		return nil, fmt.Errorf("failed to execute query: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -667,13 +668,13 @@ func (t *botViewStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	for rows.Next() {
 		model := &BotView{}
 		if err := model.ScanRow(rows); err != nil { // Используем ScanRow вместо ScanRows
-			return nil, errors.Wrap(err, "failed to scan BotView")
+			return nil, fmt.Errorf("failed to scan BotView: %w", err)
 		}
 		results = append(results, model)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "failed to iterate over rows")
+		return nil, fmt.Errorf("failed to iterate over rows: %w", err)
 	}
 
 	return results, nil
@@ -685,7 +686,7 @@ func (t *botViewStorage) FindOne(ctx context.Context, builders ...*QueryBuilder)
 	builders = append(builders, LimitBuilder(1))
 	results, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to findOne BotView")
+		return nil, fmt.Errorf("failed to findOne BotView: %w", err)
 	}
 
 	if len(results) == 0 {

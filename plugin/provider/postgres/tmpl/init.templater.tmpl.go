@@ -279,14 +279,14 @@ func Open(dsn string, opts ...{{ clientName }}Option) (*sql.DB, error) {
 
     db, err := sql.Open("postgres", dsn)
     if err != nil {
-        return nil, errors.Wrap(err, "failed to open database")
+        return nil, fmt.Errorf("failed to open database: %w", err)
     }
 
 	// Ping verifies a connection to the database is still alive, establishing a connection if necessary.
 	if err = db.Ping(); err != nil {
 		// If Ping fails, close the DB and return an error.
 		db.Close() // Ignoring error from Close, as we already have a more significant error.
-		return nil, errors.Wrap(err, "failed to ping database")
+		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
 	// Set the connection pool options.
@@ -389,15 +389,15 @@ type {{ storageName }} interface {
 // New{{ storageName }} returns a new {{ storageName }}.
 func New{{ storageName }}(config *Config) ({{ storageName }}, error) {
 	if config == nil {
-		return nil, errors.New("config is required")
+		return nil, fmt.Errorf("config is required")
 	}
 
 	if config.DB == nil {
-		return nil, errors.New("db is required")
+		return nil, fmt.Errorf("db is required")
 	}
 
 	if config.DB.DBRead == nil {
-		return nil, errors.New("db read is required")
+		return nil, fmt.Errorf("db read is required")
 	}
 
 	if config.DB.DBWrite == nil {
@@ -411,7 +411,7 @@ func New{{ storageName }}(config *Config) ({{ storageName }}, error) {
 {{ range $value := storages }}
 	{{ $value.Key }}Impl, err := New{{ $value.Value }}(config)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create {{ $value.Value }}")
+		return nil, fmt.Errorf("failed to create {{ $value.Value }}: %w", err)
 	}
 	storages.{{ $value.Key }} = {{ $value.Key }}Impl
 {{ end }}
@@ -440,7 +440,7 @@ func (c *{{ storageName | lowerCamelCase }}) CreateTables(ctx context.Context) e
 	// create the {{ $value.Value }} table.
 	err = c.{{ $value.Key }}.CreateTable(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to create table")
+		return fmt.Errorf("failed to create table: %w", err)
 	}
 {{ end }}
 	return nil
@@ -454,7 +454,7 @@ func (c *{{ storageName | lowerCamelCase }}) DropTables(ctx context.Context) err
 	// drop the {{ $value.Value }} table.
 	err = c.{{ $value.Key }}.DropTable(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to drop table")
+		return fmt.Errorf("failed to drop table: %w", err)
 	}
 {{ end }}
 	return nil
@@ -468,7 +468,7 @@ func (c *{{ storageName | lowerCamelCase }}) TruncateTables(ctx context.Context)
 	// truncate the {{ $value.Value }} table.
 	err = c.{{ $value.Key }}.TruncateTable(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to truncate table")
+		return fmt.Errorf("failed to truncate table: %w", err)
 	}
 {{ end }}
 	return nil
@@ -482,7 +482,7 @@ func (c *{{ storageName | lowerCamelCase }}) UpgradeTables(ctx context.Context) 
 	// run the {{ $value.Value }} upgrade.
 	err = c.{{ $value.Key }}.UpgradeTable(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to upgrade table")
+		return fmt.Errorf("failed to upgrade table: %w", err)
 	}
 {{ end }}
 	return nil
@@ -511,12 +511,12 @@ func (n *NullableJSON[T]) Scan(value interface{}) error {
 
 	bytes, ok := value.([]byte)
 	if !ok {
-		return errors.New("failed to convert value to []byte")
+		return fmt.Errorf("failed to convert value to []byte")
 	}
 
 	if err := json.Unmarshal(bytes, &n.Data); err != nil {
 		n.Valid = false
-		return errors.Wrap(err, "failed to unmarshal json")
+		return fmt.Errorf("failed to unmarshal json: %w", err)
 	}
 
 	n.Valid = true
@@ -554,7 +554,7 @@ func (m *{{ $field.StructureName }}) Scan(src interface{}) error  {
 		return json.Unmarshal(bytes, m)
 	}
 
-	return errors.New(fmt.Sprintf("can't convert %T", src))
+	return fmt.Errorf(fmt.Sprintf("can't convert %T", src))
 }
 
 // Value implements the driver.Valuer interface for JSON.
@@ -583,7 +583,7 @@ func (m *{{ $field.FieldType }}) Scan(src interface{}) error  {
 		return json.Unmarshal(bytes, m)
 	}
 
-	return errors.New(fmt.Sprintf("can't convert %T", src))
+	return fmt.Errorf(fmt.Sprintf("can't convert %T", src))
 }
 
 // Value implements the driver.Valuer interface for JSON.
@@ -640,7 +640,7 @@ func (m *TxManager) Begin(ctx context.Context) (context.Context, error) {
 
 	tx, err := m.db.Begin()
 	if err != nil {
-		return ctx, errors.Wrap(err, "could not begin transaction")
+		return ctx, fmt.Errorf("could not begin transaction: %w", err)
 	}
 
 	// store the transaction in the context.
@@ -651,11 +651,11 @@ func (m *TxManager) Begin(ctx context.Context) (context.Context, error) {
 func (m *TxManager) Commit(ctx context.Context) error {
 	tx, ok := TxFromContext(ctx)
 	if !ok {
-		return errors.New("transactions wasn't opened")
+		return fmt.Errorf("transactions wasn't opened")
 	}
 
 	if err := tx.Commit(); err != nil {
-		return errors.Wrap(err, "could not commit transaction")
+		return fmt.Errorf("could not commit transaction: %w", err)
 	}
 
 	return nil
@@ -666,7 +666,7 @@ func (m *TxManager) Rollback(ctx context.Context) error {
 	if tx, ok := TxFromContext(ctx); ok {
 		err := tx.Rollback()
 		if err != nil && !errors.Is(err, sql.ErrTxDone) {
-			return err
+			return fmt.Errorf("failed to rollback transaction: %w", err)
 		}
 	}
 
@@ -738,7 +738,7 @@ func IsPgViolationError(err error) bool {
 // PgPrettyErr returns a pretty postgres error.
 func PgPrettyErr(err error) error {
 	if pgErr, ok := err.(*pq.Error); ok {
-		return errors.New(pgErr.Detail)
+		return fmt.Errorf(pgErr.Detail)
 	}
 	return err
 }
@@ -758,12 +758,12 @@ const (
 const ErrorsTemplate = `
 var (
 	// ErrNotFound is returned when a record is not found.
-	ErrRowNotFound = errors.New("row not found")
+	ErrRowNotFound = fmt.Errorf("row not found")
 	// ErrNoTransaction is returned when a transaction is not provided.
-	ErrNoTransaction = errors.New("no transaction provided")
+	ErrNoTransaction = fmt.Errorf("no transaction provided")
 	// ErrRowAlreadyExist is returned when a row already exist.
-	ErrRowAlreadyExist    = errors.New("row already exist")
+	ErrRowAlreadyExist    = fmt.Errorf("row already exist")
 	// ErrModelIsNil is returned when a relation model is nil.
-	ErrModelIsNil = errors.New("model is nil")
+	ErrModelIsNil = fmt.Errorf("model is nil")
 )
 `
