@@ -6,6 +6,7 @@ import (
 
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 
+	structify "github.com/cjp2600/protoc-gen-structify/plugin/options"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,12 +26,85 @@ func TestGoTypeToPostgresType(t *testing.T) {
 		{"time.Time", "TIMESTAMP"},
 		{"[]byte", "BYTEA"},
 		{"CustomType", "TEXT"},
+		// Array types
+		{"[]string", "TEXT[]"},
+		{"[]bool", "BOOLEAN[]"},
+		{"[]int", "INTEGER[]"},
+		{"[]int32", "INTEGER[]"},
+		{"[]int64", "BIGINT[]"},
+		{"[]float32", "REAL[]"},
+		{"[]float64", "DOUBLE PRECISION[]"},
+		{"[]time.Time", "TIMESTAMP[]"},
+		{"[][]byte", "JSONB"},
+		{"[]CustomType", "JSONB"},
+		{"*[]string", "TEXT[]"},
+		{"*[]CustomType", "JSONB"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.goType, func(t *testing.T) {
 			result := GoTypeToPostgresType(tt.goType)
 			assert.Equal(t, tt.postgresType, result)
+		})
+	}
+}
+
+func TestPostgresType(t *testing.T) {
+	tests := []struct {
+		name     string
+		goType   string
+		options  *structify.StructifyFieldOptions
+		isJson   bool
+		expected string
+	}{
+		{
+			name:     "string with uuid option",
+			goType:   "string",
+			options:  &structify.StructifyFieldOptions{Uuid: true},
+			isJson:   false,
+			expected: "UUID",
+		},
+		{
+			name:     "string array with uuid option",
+			goType:   "[]string",
+			options:  &structify.StructifyFieldOptions{Uuid: true},
+			isJson:   false,
+			expected: "UUID[]",
+		},
+		{
+			name:     "string array without uuid option",
+			goType:   "[]string",
+			options:  nil,
+			isJson:   false,
+			expected: "TEXT[]",
+		},
+		{
+			name:     "string with json option",
+			goType:   "string",
+			options:  &structify.StructifyFieldOptions{Json: true},
+			isJson:   false,
+			expected: "JSONB",
+		},
+		{
+			name:     "string array with json option",
+			goType:   "[]string",
+			options:  &structify.StructifyFieldOptions{Json: true},
+			isJson:   false,
+			expected: "JSONB",
+		},
+		{
+			name:     "string array with isJson true",
+			goType:   "[]string",
+			options:  nil,
+			isJson:   true,
+			expected: "JSONB",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := PostgresType(tt.goType, tt.options, tt.isJson)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

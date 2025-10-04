@@ -3,9 +3,8 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	sq "github.com/Masterminds/squirrel"
-	_ "github.com/lib/pq"
-	"github.com/pkg/errors"
 	"math"
 )
 
@@ -65,13 +64,13 @@ type DeviceStorage interface {
 // NewDeviceStorage returns a new deviceStorage.
 func NewDeviceStorage(config *Config) (DeviceStorage, error) {
 	if config == nil {
-		return nil, errors.New("config is nil")
+		return nil, fmt.Errorf("config is nil")
 	}
 	if config.DB == nil {
-		return nil, errors.New("config.DB is nil")
+		return nil, fmt.Errorf("config.DB is nil")
 	}
 	if config.DB.DBRead == nil {
-		return nil, errors.New("config.DB.DBRead is nil")
+		return nil, fmt.Errorf("config.DB.DBRead is nil")
 	}
 	if config.DB.DBWrite == nil {
 		config.DB.DBWrite = config.DB.DBRead
@@ -111,14 +110,12 @@ func (t *deviceStorage) Columns() []string {
 
 // DB returns the underlying DB. This is useful for doing transactions.
 func (t *deviceStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
-	var db QueryExecer
-
 	// Check if there is an active transaction in the context.
 	if tx, ok := TxFromContext(ctx); ok {
 		if tx == nil {
-			t.logError(ctx, errors.New("transaction is nil"), "failed to get transaction from context")
+			t.logError(ctx, fmt.Errorf("transaction is nil"), "failed to get transaction from context")
 			// set default connection
-			return t.config.DB.DBWrite
+			return &dbWrapper{db: t.config.DB.DBWrite}
 		}
 
 		return tx
@@ -126,12 +123,10 @@ func (t *deviceStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
 
 	// Use the appropriate connection based on the operation type.
 	if isWrite {
-		db = t.config.DB.DBWrite
+		return &dbWrapper{db: t.config.DB.DBWrite}
 	} else {
-		db = t.config.DB.DBRead
+		return &dbWrapper{db: t.config.DB.DBRead}
 	}
-
-	return db
 }
 
 // Device is a struct for the "devices" table.
@@ -233,7 +228,7 @@ func DeviceUserIdOrderBy(asc bool) FilterApplier {
 // Create creates a new Device.
 func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Option) error {
 	if model == nil {
-		return errors.New("model is nil")
+		return fmt.Errorf("model is nil")
 	}
 
 	// set default options
@@ -256,17 +251,17 @@ func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Optio
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
 		if IsPgUniqueViolation(err) {
-			return errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
+			return fmt.Errorf("%w: %s", ErrRowAlreadyExist, PgPrettyErr(err).Error())
 		}
 
-		return errors.Wrap(err, "failed to create Device")
+		return fmt.Errorf("failed to create Device: %w", err)
 	}
 
 	return nil
@@ -275,7 +270,7 @@ func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Optio
 // BatchCreate creates multiple Device records in a single batch.
 func (t *deviceStorage) BatchCreate(ctx context.Context, models []*Device, opts ...Option) error {
 	if len(models) == 0 {
-		return errors.New("no models to insert")
+		return fmt.Errorf("no models to insert")
 	}
 
 	options := &Options{}
@@ -284,7 +279,7 @@ func (t *deviceStorage) BatchCreate(ctx context.Context, models []*Device, opts 
 	}
 
 	if options.relations {
-		return errors.New("relations are not supported in batch create")
+		return fmt.Errorf("relations are not supported in batch create")
 	}
 
 	query := t.queryBuilder.Insert(t.TableName()).
@@ -296,7 +291,7 @@ func (t *deviceStorage) BatchCreate(ctx context.Context, models []*Device, opts 
 
 	for _, model := range models {
 		if model == nil {
-			return errors.New("one of the models is nil")
+			return fmt.Errorf("one of the models is nil")
 		}
 		query = query.Values(
 			model.Name,
@@ -311,16 +306,16 @@ func (t *deviceStorage) BatchCreate(ctx context.Context, models []*Device, opts 
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		if IsPgUniqueViolation(err) {
-			return errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
+			return fmt.Errorf("%w: %s", ErrRowAlreadyExist, PgPrettyErr(err).Error())
 		}
-		return errors.Wrap(err, "failed to execute bulk insert")
+		return fmt.Errorf("failed to execute bulk insert: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -329,7 +324,7 @@ func (t *deviceStorage) BatchCreate(ctx context.Context, models []*Device, opts 
 	}()
 
 	if err := rows.Err(); err != nil {
-		return errors.Wrap(err, "rows iteration error")
+		return fmt.Errorf("rows iteration error: %w", err)
 	}
 
 	return nil
@@ -348,7 +343,7 @@ type DeviceUpdate struct {
 // Update updates an existing Device based on non-nil fields.
 func (t *deviceStorage) Update(ctx context.Context, id int64, updateData *DeviceUpdate) error {
 	if updateData == nil {
-		return errors.New("update data is nil")
+		return fmt.Errorf("update data is nil")
 	}
 
 	query := t.queryBuilder.Update("devices")
@@ -369,13 +364,13 @@ func (t *deviceStorage) Update(ctx context.Context, id int64, updateData *Device
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to update Device")
+		return fmt.Errorf("failed to update Device: %w", err)
 	}
 
 	return nil
@@ -400,18 +395,18 @@ func (t *deviceStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilde
 	}
 
 	if !withFilter {
-		return errors.New("filters are required for delete operation")
+		return fmt.Errorf("filters are required for delete operation")
 	}
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to delete devices")
+		return fmt.Errorf("failed to delete devices: %w", err)
 	}
 
 	return nil
@@ -463,13 +458,13 @@ func (t *deviceStorage) FindMany(ctx context.Context, builders ...*QueryBuilder)
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to execute query")
+		return nil, fmt.Errorf("failed to execute query: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -481,13 +476,13 @@ func (t *deviceStorage) FindMany(ctx context.Context, builders ...*QueryBuilder)
 	for rows.Next() {
 		model := &Device{}
 		if err := model.ScanRows(rows); err != nil {
-			return nil, errors.Wrap(err, "failed to scan Device")
+			return nil, fmt.Errorf("failed to scan Device: %w", err)
 		}
 		results = append(results, model)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "failed to iterate over rows")
+		return nil, fmt.Errorf("failed to iterate over rows: %w", err)
 	}
 
 	return results, nil
@@ -499,7 +494,7 @@ func (t *deviceStorage) FindOne(ctx context.Context, builders ...*QueryBuilder) 
 	builders = append(builders, LimitBuilder(1))
 	results, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to findOne Device")
+		return nil, fmt.Errorf("failed to findOne Device: %w", err)
 	}
 
 	if len(results) == 0 {
@@ -532,14 +527,14 @@ func (t *deviceStorage) Count(ctx context.Context, builders ...*QueryBuilder) (i
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to build query")
+		return 0, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
 	if err := row.Scan(&count); err != nil {
-		return 0, errors.Wrap(err, "failed to scan count")
+		return 0, fmt.Errorf("failed to scan count: %w", err)
 	}
 
 	return count, nil
@@ -550,7 +545,7 @@ func (t *deviceStorage) FindManyWithPagination(ctx context.Context, limit int, p
 	// Count the total number of records
 	totalCount, err := t.Count(ctx, builders...)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to count Device")
+		return nil, nil, fmt.Errorf("failed to count Device: %w", err)
 	}
 
 	// Calculate offset
@@ -570,7 +565,7 @@ func (t *deviceStorage) FindManyWithPagination(ctx context.Context, limit int, p
 	// Find records using FindMany
 	records, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to find Device")
+		return nil, nil, fmt.Errorf("failed to find Device: %w", err)
 	}
 
 	return records, paginator, nil
@@ -598,17 +593,17 @@ func (t *deviceStorage) SelectForUpdate(ctx context.Context, builders ...*QueryB
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
 	var model Device
 	if err := model.ScanRow(row); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if err == sql.ErrNoRows {
 			return nil, ErrRowNotFound
 		}
-		return nil, errors.Wrap(err, "failed to scan Device")
+		return nil, fmt.Errorf("failed to scan Device: %w", err)
 	}
 
 	return &model, nil

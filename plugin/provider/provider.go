@@ -42,7 +42,6 @@ func GetTemplateBuilder(request *plugingo.CodeGeneratorRequest) (TemplateBuilder
 	}
 
 	provider := strings.TrimSpace(opts.GetProvider())
-	println("Debug: Provider value:", provider)
 
 	switch provider {
 	case "postgres":

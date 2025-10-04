@@ -28,10 +28,6 @@ const InitStatementTemplate = `
 
 {{ template "repeatedTypes" . }}
 
-// 
-// errors.
-//
-
 {{ template "errors" . }}
 
 //
@@ -569,6 +565,74 @@ func (m *{{ $field.StructureName }}) Value() (driver.Value, error) {
 
 const SingleRepeatedTypesTemplate = `
 {{ range $field := singleTypes }}
+{{ if ($field.Descriptor | isUUIDArray) }}
+// {{ $field.FieldType }} is a UUID array type for Postgres.
+type {{ $field.FieldType }} {{ $field.Descriptor | fieldType }}
+
+// New{{ $field.SourceName | camelCase }}Field returns a new {{ $field.FieldType }}.
+func New{{ $field.SourceName | camelCase }}Field (v {{ $field.Descriptor | fieldType }}) {{ $field.FieldType }} {
+	return v
+}
+
+// Scan implements the sql.Scanner interface for UUID arrays.
+func (m *{{ $field.FieldType }}) Scan(src interface{}) error {
+	if src == nil {
+		*m = nil
+		return nil
+	}
+
+	switch v := src.(type) {
+	case string:
+		// Handle PostgreSQL array format: {uuid1,uuid2,uuid3}
+		if v == "{}" {
+			*m = make({{ $field.Descriptor | fieldType }}, 0)
+			return nil
+		}
+		
+		// Remove curly braces and split by comma
+		v = strings.Trim(v, "{}")
+		if v == "" {
+			*m = make({{ $field.Descriptor | fieldType }}, 0)
+			return nil
+		}
+		
+		parts := strings.Split(v, ",")
+		result := make({{ $field.Descriptor | fieldType }}, len(parts))
+		for i, part := range parts {
+			result[i] = strings.TrimSpace(part)
+		}
+		*m = result
+		return nil
+	case []byte:
+		return m.Scan(string(v))
+	default:
+		return fmt.Errorf("cannot scan %T into {{ $field.FieldType }}", src)
+	}
+}
+
+// Value implements the driver.Valuer interface for UUID arrays.
+func (m {{ $field.FieldType }}) Value() (driver.Value, error) {
+	if m == nil || len(m) == 0 {
+		return "{}", nil
+	}
+	
+	// Format as PostgreSQL array: {uuid1,uuid2,uuid3}
+	var parts []string
+	for _, uuid := range m {
+		parts = append(parts, uuid)
+	}
+	return "{" + strings.Join(parts, ",") + "}", nil
+}
+
+// Get returns the value of the field.
+func (m {{ $field.FieldType }}) Get() {{ $field.Descriptor | fieldType }} {
+	return m
+}
+
+func (m *{{ $field.FieldType }}) String() string {
+	return fmt.Sprintf("%v", m.Get())
+}
+{{ else }}
 // {{ $field.FieldType }} is a JSON type nested in another message.
 type {{ $field.FieldType }} {{ $field.Descriptor | fieldType }}
 
@@ -599,6 +663,7 @@ func (m {{ $field.FieldType }}) Get() {{ $field.Descriptor | fieldType }} {
 func (m *{{ $field.FieldType }}) String() string {
 	return fmt.Sprintf("%v", m.Get())
 }
+{{ end }}
 {{ end }}
 
 // Pagination is the pagination.
@@ -665,7 +730,7 @@ func (m *TxManager) Commit(ctx context.Context) error {
 func (m *TxManager) Rollback(ctx context.Context) error {
 	if tx, ok := TxFromContext(ctx); ok {
 		err := tx.Rollback()
-		if err != nil && !errors.Is(err, sql.ErrTxDone) {
+		if err != nil && err != sql.ErrTxDone {
 			return fmt.Errorf("failed to rollback transaction: %w", err)
 		}
 	}
@@ -710,6 +775,26 @@ type QueryExecer interface {
 	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+}
+
+// dbWrapper wraps *sql.DB to implement QueryExecer interface.
+type dbWrapper struct {
+	db *sql.DB
+}
+
+// QueryContext implements QueryExecer interface.
+func (w *dbWrapper) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	return w.db.QueryContext(ctx, query, args...)
+}
+
+// ExecContext implements QueryExecer interface.
+func (w *dbWrapper) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return w.db.ExecContext(ctx, query, args...)
+}
+
+// QueryRowContext implements QueryExecer interface.
+func (w *dbWrapper) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	return w.db.QueryRowContext(ctx, query, args...)
 }
 
 // IsPgCheckViolation returns true if the error is a postgres check violation.
@@ -766,4 +851,24 @@ var (
 	// ErrModelIsNil is returned when a relation model is nil.
 	ErrModelIsNil = fmt.Errorf("model is nil")
 )
+
+// Dsn returns a connection string for PostgreSQL.
+func Dsn(host string, port int, user, password, dbname, sslmode string, maxOpenConns int) string {
+	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s", host, port, user, password, dbname, sslmode)
+}
+
+// Open opens a database connection.
+func Open(dsn string) (*sql.DB, error) {
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+	
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+	
+	return db, nil
+}
+
 `

@@ -3,6 +3,7 @@ package templater
 import (
 	"fmt"
 	"log"
+	"strings"
 	"text/template"
 
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -94,21 +95,36 @@ func (i *initTemplater) Imports() *importpkg.ImportSet {
 		importpkg.ImportContext,
 		importpkg.ImportFMT,
 		importpkg.ImportSquirrel,
-		importpkg.ImportLibPQ,
 	)
 
-	if i.IncludeConnection {
+	tmp := i.BuildTemplate()
+	if strings.Contains(tmp, "time.Time") {
 		is.Add(importpkg.ImportTime)
+	}
+	if strings.Contains(tmp, "strconv.") {
 		is.Add(importpkg.ImportStrconv)
 	}
-
-	/*	tmp := i.BuildTemplate()
-		if strings.Contains(tmp, "time.Time") {
-			is.Add(importpkg.ImportTime)
-		}
-		if strings.Contains(tmp, "strconv.") {
-			is.Add(importpkg.ImportStrconv)
-		}*/
+	if strings.Contains(tmp, "sql.") {
+		is.Add(importpkg.ImportDb)
+	}
+	if strings.Contains(tmp, "driver.") {
+		is.Add(importpkg.ImportSQLDriver)
+	}
+	if strings.Contains(tmp, "math.") {
+		is.Add(importpkg.ImportMath)
+	}
+	if strings.Contains(tmp, "json.") {
+		is.Add(importpkg.ImportJson)
+	}
+	if strings.Contains(tmp, "errors.") {
+		is.Add(importpkg.ImportStdErrors)
+	}
+	if strings.Contains(tmp, "strings.") {
+		is.Add(importpkg.ImportStrings)
+	}
+	if strings.Contains(tmp, "pq.") {
+		is.Add(importpkg.ImportLibPQWOAlias)
+	}
 
 	return is
 }
@@ -212,6 +228,23 @@ func (i *initTemplater) Funcs() map[string]interface{} {
 		// sourceName returns the source name.
 		"sourceName": func(f *descriptorpb.FieldDescriptorProto) string {
 			return f.GetName()
+		},
+
+		// isUUIDArray checks if the field is a UUID array.
+		"isUUIDArray": func(f *descriptorpb.FieldDescriptorProto) bool {
+			// Check if it's a repeated field
+			if !helperpkg.IsRepeated(f) {
+				return false
+			}
+
+			// Check if it's a string field with UUID option
+			if f.GetType() != descriptorpb.FieldDescriptorProto_TYPE_STRING {
+				return false
+			}
+
+			// Check if it has UUID option
+			opts := helperpkg.GetFieldOptions(f)
+			return opts != nil && opts.GetUuid()
 		},
 	}
 }

@@ -3,13 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/pkg/errors"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/cjp2600/protoc-gen-structify/example/case_one/db"
 )
 
-func main() {
+func getByIdExample() {
 	connection, err := db.Open(db.Dsn(
 		"localhost",
 		5432,
@@ -27,7 +28,17 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	store := db.NewBlogStorages(connection)
+	config := &db.Config{
+		DB: &db.DB{
+			DBRead:  connection,
+			DBWrite: connection,
+		},
+	}
+
+	store, err := db.NewBlogStorages(config)
+	if err != nil {
+		panic(err)
+	}
 	userStorage := store.GetUserStorage()
 
 	//

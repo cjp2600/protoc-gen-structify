@@ -3,9 +3,8 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	sq "github.com/Masterminds/squirrel"
-	_ "github.com/lib/pq"
-	"github.com/pkg/errors"
 	"gopkg.in/guregu/null.v4"
 	"math"
 )
@@ -73,13 +72,13 @@ type MessageStorage interface {
 // NewMessageStorage returns a new messageStorage.
 func NewMessageStorage(config *Config) (MessageStorage, error) {
 	if config == nil {
-		return nil, errors.New("config is nil")
+		return nil, fmt.Errorf("config is nil")
 	}
 	if config.DB == nil {
-		return nil, errors.New("config.DB is nil")
+		return nil, fmt.Errorf("config.DB is nil")
 	}
 	if config.DB.DBRead == nil {
-		return nil, errors.New("config.DB.DBRead is nil")
+		return nil, fmt.Errorf("config.DB.DBRead is nil")
 	}
 	if config.DB.DBWrite == nil {
 		config.DB.DBWrite = config.DB.DBRead
@@ -119,14 +118,12 @@ func (t *messageStorage) Columns() []string {
 
 // DB returns the underlying DB. This is useful for doing transactions.
 func (t *messageStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
-	var db QueryExecer
-
 	// Check if there is an active transaction in the context.
 	if tx, ok := TxFromContext(ctx); ok {
 		if tx == nil {
-			t.logError(ctx, errors.New("transaction is nil"), "failed to get transaction from context")
+			t.logError(ctx, fmt.Errorf("transaction is nil"), "failed to get transaction from context")
 			// set default connection
-			return t.config.DB.DBWrite
+			return &dbWrapper{db: t.config.DB.DBWrite}
 		}
 
 		return tx
@@ -134,24 +131,22 @@ func (t *messageStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
 
 	// Use the appropriate connection based on the operation type.
 	if isWrite {
-		db = t.config.DB.DBWrite
+		return &dbWrapper{db: t.config.DB.DBWrite}
 	} else {
-		db = t.config.DB.DBRead
+		return &dbWrapper{db: t.config.DB.DBRead}
 	}
-
-	return db
 }
 
 // LoadBot loads the Bot relation.
 func (t *messageStorage) LoadBot(ctx context.Context, model *Message, builders ...*QueryBuilder) error {
 	if model == nil {
-		return errors.Wrap(ErrModelIsNil, "Message is nil")
+		return fmt.Errorf("Message is nil")
 	}
 
 	// NewBotStorage creates a new BotStorage.
 	s, err := NewBotStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create BotStorage")
+		return fmt.Errorf("failed to create BotStorage: %w", err)
 	}
 	// Check if the optional field is nil
 	if model.BotId == nil {
@@ -162,7 +157,7 @@ func (t *messageStorage) LoadBot(ctx context.Context, model *Message, builders .
 	builders = append(builders, FilterBuilder(BotIdEq(*model.BotId)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find one BotStorage")
+		return fmt.Errorf("failed to find one BotStorage: %w", err)
 	}
 
 	model.Bot = relationModel
@@ -172,19 +167,19 @@ func (t *messageStorage) LoadBot(ctx context.Context, model *Message, builders .
 // LoadFromUser loads the FromUser relation.
 func (t *messageStorage) LoadFromUser(ctx context.Context, model *Message, builders ...*QueryBuilder) error {
 	if model == nil {
-		return errors.Wrap(ErrModelIsNil, "Message is nil")
+		return fmt.Errorf("Message is nil")
 	}
 
 	// NewUserStorage creates a new UserStorage.
 	s, err := NewUserStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create UserStorage")
+		return fmt.Errorf("failed to create UserStorage: %w", err)
 	}
 	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(UserIdEq(model.FromUserId)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find one UserStorage")
+		return fmt.Errorf("failed to find one UserStorage: %w", err)
 	}
 
 	model.FromUser = relationModel
@@ -194,19 +189,19 @@ func (t *messageStorage) LoadFromUser(ctx context.Context, model *Message, build
 // LoadToUser loads the ToUser relation.
 func (t *messageStorage) LoadToUser(ctx context.Context, model *Message, builders ...*QueryBuilder) error {
 	if model == nil {
-		return errors.Wrap(ErrModelIsNil, "Message is nil")
+		return fmt.Errorf("Message is nil")
 	}
 
 	// NewUserStorage creates a new UserStorage.
 	s, err := NewUserStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create UserStorage")
+		return fmt.Errorf("failed to create UserStorage: %w", err)
 	}
 	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(UserIdEq(model.ToUserId)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find one UserStorage")
+		return fmt.Errorf("failed to find one UserStorage: %w", err)
 	}
 
 	model.ToUser = relationModel
@@ -229,7 +224,7 @@ func (t *messageStorage) LoadBatchBot(ctx context.Context, items []*Message, bui
 	// NewBotStorage creates a new BotStorage.
 	s, err := NewBotStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create BotStorage")
+		return fmt.Errorf("failed to create BotStorage: %w", err)
 	}
 
 	// Add the filter for the relation
@@ -240,7 +235,7 @@ func (t *messageStorage) LoadBatchBot(ctx context.Context, items []*Message, bui
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find many BotStorage")
+		return fmt.Errorf("failed to find many BotStorage: %w", err)
 	}
 	resultMap := make(map[interface{}]*Bot)
 	for _, result := range results {
@@ -273,7 +268,7 @@ func (t *messageStorage) LoadBatchFromUser(ctx context.Context, items []*Message
 	// NewUserStorage creates a new UserStorage.
 	s, err := NewUserStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create UserStorage")
+		return fmt.Errorf("failed to create UserStorage: %w", err)
 	}
 
 	// Add the filter for the relation
@@ -281,7 +276,7 @@ func (t *messageStorage) LoadBatchFromUser(ctx context.Context, items []*Message
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find many UserStorage")
+		return fmt.Errorf("failed to find many UserStorage: %w", err)
 	}
 	resultMap := make(map[interface{}]*User)
 	for _, result := range results {
@@ -310,7 +305,7 @@ func (t *messageStorage) LoadBatchToUser(ctx context.Context, items []*Message, 
 	// NewUserStorage creates a new UserStorage.
 	s, err := NewUserStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create UserStorage")
+		return fmt.Errorf("failed to create UserStorage: %w", err)
 	}
 
 	// Add the filter for the relation
@@ -318,7 +313,7 @@ func (t *messageStorage) LoadBatchToUser(ctx context.Context, items []*Message, 
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find many UserStorage")
+		return fmt.Errorf("failed to find many UserStorage: %w", err)
 	}
 	resultMap := make(map[interface{}]*User)
 	for _, result := range results {
@@ -582,7 +577,7 @@ func MessageBotIdOrderBy(asc bool) FilterApplier {
 // Create creates a new Message.
 func (t *messageStorage) Create(ctx context.Context, model *Message, opts ...Option) (*string, error) {
 	if model == nil {
-		return nil, errors.New("model is nil")
+		return nil, fmt.Errorf("model is nil")
 	}
 
 	// set default options
@@ -608,7 +603,7 @@ func (t *messageStorage) Create(ctx context.Context, model *Message, opts ...Opt
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
@@ -616,10 +611,10 @@ func (t *messageStorage) Create(ctx context.Context, model *Message, opts ...Opt
 	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
 	if err != nil {
 		if IsPgUniqueViolation(err) {
-			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
+			return nil, fmt.Errorf("%w: %s", ErrRowAlreadyExist, PgPrettyErr(err).Error())
 		}
 
-		return nil, errors.Wrap(err, "failed to create Message")
+		return nil, fmt.Errorf("failed to create Message: %w", err)
 	}
 
 	return &id, nil
@@ -628,7 +623,7 @@ func (t *messageStorage) Create(ctx context.Context, model *Message, opts ...Opt
 // BatchCreate creates multiple Message records in a single batch.
 func (t *messageStorage) BatchCreate(ctx context.Context, models []*Message, opts ...Option) ([]string, error) {
 	if len(models) == 0 {
-		return nil, errors.New("no models to insert")
+		return nil, fmt.Errorf("no models to insert")
 	}
 
 	options := &Options{}
@@ -637,7 +632,7 @@ func (t *messageStorage) BatchCreate(ctx context.Context, models []*Message, opt
 	}
 
 	if options.relations {
-		return nil, errors.New("relations are not supported in batch create")
+		return nil, fmt.Errorf("relations are not supported in batch create")
 	}
 
 	query := t.queryBuilder.Insert(t.TableName()).
@@ -649,7 +644,7 @@ func (t *messageStorage) BatchCreate(ctx context.Context, models []*Message, opt
 
 	for _, model := range models {
 		if model == nil {
-			return nil, errors.New("one of the models is nil")
+			return nil, fmt.Errorf("one of the models is nil")
 		}
 		query = query.Values(
 			model.FromUserId,
@@ -666,16 +661,16 @@ func (t *messageStorage) BatchCreate(ctx context.Context, models []*Message, opt
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		if IsPgUniqueViolation(err) {
-			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
+			return nil, fmt.Errorf("%w: %s", ErrRowAlreadyExist, PgPrettyErr(err).Error())
 		}
-		return nil, errors.Wrap(err, "failed to execute bulk insert")
+		return nil, fmt.Errorf("failed to execute bulk insert: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -687,13 +682,13 @@ func (t *messageStorage) BatchCreate(ctx context.Context, models []*Message, opt
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			return nil, errors.Wrap(err, "failed to scan id")
+			return nil, fmt.Errorf("failed to scan id: %w", err)
 		}
 		returnIDs = append(returnIDs, id)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "rows iteration error")
+		return nil, fmt.Errorf("rows iteration error: %w", err)
 	}
 
 	return returnIDs, nil
@@ -712,7 +707,7 @@ type MessageUpdate struct {
 // Update updates an existing Message based on non-nil fields.
 func (t *messageStorage) Update(ctx context.Context, id string, updateData *MessageUpdate) error {
 	if updateData == nil {
-		return errors.New("update data is nil")
+		return fmt.Errorf("update data is nil")
 	}
 
 	query := t.queryBuilder.Update("messages")
@@ -738,13 +733,13 @@ func (t *messageStorage) Update(ctx context.Context, id string, updateData *Mess
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to update Message")
+		return fmt.Errorf("failed to update Message: %w", err)
 	}
 
 	return nil
@@ -762,13 +757,13 @@ func (t *messageStorage) DeleteById(ctx context.Context, id string, opts ...Opti
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to delete Message")
+		return fmt.Errorf("failed to delete Message: %w", err)
 	}
 
 	return nil
@@ -793,18 +788,18 @@ func (t *messageStorage) DeleteMany(ctx context.Context, builders ...*QueryBuild
 	}
 
 	if !withFilter {
-		return errors.New("filters are required for delete operation")
+		return fmt.Errorf("filters are required for delete operation")
 	}
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to delete messages")
+		return fmt.Errorf("failed to delete messages: %w", err)
 	}
 
 	return nil
@@ -821,7 +816,7 @@ func (t *messageStorage) FindById(ctx context.Context, id string, opts ...Option
 	// Use FindOne to get a single result
 	model, err := t.FindOne(ctx, builder)
 	if err != nil {
-		return nil, errors.Wrap(err, "find one Message: ")
+		return nil, fmt.Errorf("find one Message: %w", err)
 	}
 
 	return model, nil
@@ -873,13 +868,13 @@ func (t *messageStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to execute query")
+		return nil, fmt.Errorf("failed to execute query: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -891,13 +886,13 @@ func (t *messageStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	for rows.Next() {
 		model := &Message{}
 		if err := model.ScanRows(rows); err != nil {
-			return nil, errors.Wrap(err, "failed to scan Message")
+			return nil, fmt.Errorf("failed to scan Message: %w", err)
 		}
 		results = append(results, model)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "failed to iterate over rows")
+		return nil, fmt.Errorf("failed to iterate over rows: %w", err)
 	}
 
 	return results, nil
@@ -909,7 +904,7 @@ func (t *messageStorage) FindOne(ctx context.Context, builders ...*QueryBuilder)
 	builders = append(builders, LimitBuilder(1))
 	results, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to findOne Message")
+		return nil, fmt.Errorf("failed to findOne Message: %w", err)
 	}
 
 	if len(results) == 0 {
@@ -942,14 +937,14 @@ func (t *messageStorage) Count(ctx context.Context, builders ...*QueryBuilder) (
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to build query")
+		return 0, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
 	if err := row.Scan(&count); err != nil {
-		return 0, errors.Wrap(err, "failed to scan count")
+		return 0, fmt.Errorf("failed to scan count: %w", err)
 	}
 
 	return count, nil
@@ -960,7 +955,7 @@ func (t *messageStorage) FindManyWithPagination(ctx context.Context, limit int, 
 	// Count the total number of records
 	totalCount, err := t.Count(ctx, builders...)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to count Message")
+		return nil, nil, fmt.Errorf("failed to count Message: %w", err)
 	}
 
 	// Calculate offset
@@ -980,7 +975,7 @@ func (t *messageStorage) FindManyWithPagination(ctx context.Context, limit int, 
 	// Find records using FindMany
 	records, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to find Message")
+		return nil, nil, fmt.Errorf("failed to find Message: %w", err)
 	}
 
 	return records, paginator, nil
@@ -1008,17 +1003,17 @@ func (t *messageStorage) SelectForUpdate(ctx context.Context, builders ...*Query
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
 	var model Message
 	if err := model.ScanRow(row); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if err == sql.ErrNoRows {
 			return nil, ErrRowNotFound
 		}
-		return nil, errors.Wrap(err, "failed to scan Message")
+		return nil, fmt.Errorf("failed to scan Message: %w", err)
 	}
 
 	return &model, nil

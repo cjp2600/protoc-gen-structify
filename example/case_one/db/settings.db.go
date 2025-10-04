@@ -3,9 +3,8 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	sq "github.com/Masterminds/squirrel"
-	_ "github.com/lib/pq"
-	"github.com/pkg/errors"
 	"math"
 )
 
@@ -68,13 +67,13 @@ type SettingStorage interface {
 // NewSettingStorage returns a new settingStorage.
 func NewSettingStorage(config *Config) (SettingStorage, error) {
 	if config == nil {
-		return nil, errors.New("config is nil")
+		return nil, fmt.Errorf("config is nil")
 	}
 	if config.DB == nil {
-		return nil, errors.New("config.DB is nil")
+		return nil, fmt.Errorf("config.DB is nil")
 	}
 	if config.DB.DBRead == nil {
-		return nil, errors.New("config.DB.DBRead is nil")
+		return nil, fmt.Errorf("config.DB.DBRead is nil")
 	}
 	if config.DB.DBWrite == nil {
 		config.DB.DBWrite = config.DB.DBRead
@@ -114,14 +113,12 @@ func (t *settingStorage) Columns() []string {
 
 // DB returns the underlying DB. This is useful for doing transactions.
 func (t *settingStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
-	var db QueryExecer
-
 	// Check if there is an active transaction in the context.
 	if tx, ok := TxFromContext(ctx); ok {
 		if tx == nil {
-			t.logError(ctx, errors.New("transaction is nil"), "failed to get transaction from context")
+			t.logError(ctx, fmt.Errorf("transaction is nil"), "failed to get transaction from context")
 			// set default connection
-			return t.config.DB.DBWrite
+			return &dbWrapper{db: t.config.DB.DBWrite}
 		}
 
 		return tx
@@ -129,30 +126,28 @@ func (t *settingStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
 
 	// Use the appropriate connection based on the operation type.
 	if isWrite {
-		db = t.config.DB.DBWrite
+		return &dbWrapper{db: t.config.DB.DBWrite}
 	} else {
-		db = t.config.DB.DBRead
+		return &dbWrapper{db: t.config.DB.DBRead}
 	}
-
-	return db
 }
 
 // LoadUser loads the User relation.
 func (t *settingStorage) LoadUser(ctx context.Context, model *Setting, builders ...*QueryBuilder) error {
 	if model == nil {
-		return errors.Wrap(ErrModelIsNil, "Setting is nil")
+		return fmt.Errorf("Setting is nil")
 	}
 
 	// NewUserStorage creates a new UserStorage.
 	s, err := NewUserStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create UserStorage")
+		return fmt.Errorf("failed to create UserStorage: %w", err)
 	}
 	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(UserIdEq(model.UserId)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find one UserStorage")
+		return fmt.Errorf("failed to find one UserStorage: %w", err)
 	}
 
 	model.User = relationModel
@@ -170,7 +165,7 @@ func (t *settingStorage) LoadBatchUser(ctx context.Context, items []*Setting, bu
 	// NewUserStorage creates a new UserStorage.
 	s, err := NewUserStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create UserStorage")
+		return fmt.Errorf("failed to create UserStorage: %w", err)
 	}
 
 	// Add the filter for the relation
@@ -178,7 +173,7 @@ func (t *settingStorage) LoadBatchUser(ctx context.Context, items []*Setting, bu
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find many UserStorage")
+		return fmt.Errorf("failed to find many UserStorage: %w", err)
 	}
 	resultMap := make(map[interface{}]*User)
 	for _, result := range results {
@@ -349,7 +344,7 @@ func SettingUserIdOrderBy(asc bool) FilterApplier {
 // Create creates a new Setting.
 func (t *settingStorage) Create(ctx context.Context, model *Setting, opts ...Option) (*int32, error) {
 	if model == nil {
-		return nil, errors.New("model is nil")
+		return nil, fmt.Errorf("model is nil")
 	}
 
 	// set default options
@@ -375,7 +370,7 @@ func (t *settingStorage) Create(ctx context.Context, model *Setting, opts ...Opt
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
@@ -383,10 +378,10 @@ func (t *settingStorage) Create(ctx context.Context, model *Setting, opts ...Opt
 	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
 	if err != nil {
 		if IsPgUniqueViolation(err) {
-			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
+			return nil, fmt.Errorf("%w: %s", ErrRowAlreadyExist, PgPrettyErr(err).Error())
 		}
 
-		return nil, errors.Wrap(err, "failed to create Setting")
+		return nil, fmt.Errorf("failed to create Setting: %w", err)
 	}
 
 	return &id, nil
@@ -395,7 +390,7 @@ func (t *settingStorage) Create(ctx context.Context, model *Setting, opts ...Opt
 // BatchCreate creates multiple Setting records in a single batch.
 func (t *settingStorage) BatchCreate(ctx context.Context, models []*Setting, opts ...Option) ([]string, error) {
 	if len(models) == 0 {
-		return nil, errors.New("no models to insert")
+		return nil, fmt.Errorf("no models to insert")
 	}
 
 	options := &Options{}
@@ -404,7 +399,7 @@ func (t *settingStorage) BatchCreate(ctx context.Context, models []*Setting, opt
 	}
 
 	if options.relations {
-		return nil, errors.New("relations are not supported in batch create")
+		return nil, fmt.Errorf("relations are not supported in batch create")
 	}
 
 	query := t.queryBuilder.Insert(t.TableName()).
@@ -416,7 +411,7 @@ func (t *settingStorage) BatchCreate(ctx context.Context, models []*Setting, opt
 
 	for _, model := range models {
 		if model == nil {
-			return nil, errors.New("one of the models is nil")
+			return nil, fmt.Errorf("one of the models is nil")
 		}
 		query = query.Values(
 			model.Name,
@@ -433,16 +428,16 @@ func (t *settingStorage) BatchCreate(ctx context.Context, models []*Setting, opt
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		if IsPgUniqueViolation(err) {
-			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
+			return nil, fmt.Errorf("%w: %s", ErrRowAlreadyExist, PgPrettyErr(err).Error())
 		}
-		return nil, errors.Wrap(err, "failed to execute bulk insert")
+		return nil, fmt.Errorf("failed to execute bulk insert: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -454,13 +449,13 @@ func (t *settingStorage) BatchCreate(ctx context.Context, models []*Setting, opt
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			return nil, errors.Wrap(err, "failed to scan id")
+			return nil, fmt.Errorf("failed to scan id: %w", err)
 		}
 		returnIDs = append(returnIDs, id)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "rows iteration error")
+		return nil, fmt.Errorf("rows iteration error: %w", err)
 	}
 
 	return returnIDs, nil
@@ -479,7 +474,7 @@ type SettingUpdate struct {
 // Update updates an existing Setting based on non-nil fields.
 func (t *settingStorage) Update(ctx context.Context, id int32, updateData *SettingUpdate) error {
 	if updateData == nil {
-		return errors.New("update data is nil")
+		return fmt.Errorf("update data is nil")
 	}
 
 	query := t.queryBuilder.Update("settings")
@@ -500,13 +495,13 @@ func (t *settingStorage) Update(ctx context.Context, id int32, updateData *Setti
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to update Setting")
+		return fmt.Errorf("failed to update Setting: %w", err)
 	}
 
 	return nil
@@ -524,13 +519,13 @@ func (t *settingStorage) DeleteById(ctx context.Context, id int32, opts ...Optio
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to delete Setting")
+		return fmt.Errorf("failed to delete Setting: %w", err)
 	}
 
 	return nil
@@ -555,18 +550,18 @@ func (t *settingStorage) DeleteMany(ctx context.Context, builders ...*QueryBuild
 	}
 
 	if !withFilter {
-		return errors.New("filters are required for delete operation")
+		return fmt.Errorf("filters are required for delete operation")
 	}
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to delete settings")
+		return fmt.Errorf("failed to delete settings: %w", err)
 	}
 
 	return nil
@@ -583,7 +578,7 @@ func (t *settingStorage) FindById(ctx context.Context, id int32, opts ...Option)
 	// Use FindOne to get a single result
 	model, err := t.FindOne(ctx, builder)
 	if err != nil {
-		return nil, errors.Wrap(err, "find one Setting: ")
+		return nil, fmt.Errorf("find one Setting: %w", err)
 	}
 
 	return model, nil
@@ -635,13 +630,13 @@ func (t *settingStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to execute query")
+		return nil, fmt.Errorf("failed to execute query: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -653,13 +648,13 @@ func (t *settingStorage) FindMany(ctx context.Context, builders ...*QueryBuilder
 	for rows.Next() {
 		model := &Setting{}
 		if err := model.ScanRows(rows); err != nil {
-			return nil, errors.Wrap(err, "failed to scan Setting")
+			return nil, fmt.Errorf("failed to scan Setting: %w", err)
 		}
 		results = append(results, model)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "failed to iterate over rows")
+		return nil, fmt.Errorf("failed to iterate over rows: %w", err)
 	}
 
 	return results, nil
@@ -671,7 +666,7 @@ func (t *settingStorage) FindOne(ctx context.Context, builders ...*QueryBuilder)
 	builders = append(builders, LimitBuilder(1))
 	results, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to findOne Setting")
+		return nil, fmt.Errorf("failed to findOne Setting: %w", err)
 	}
 
 	if len(results) == 0 {
@@ -704,14 +699,14 @@ func (t *settingStorage) Count(ctx context.Context, builders ...*QueryBuilder) (
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to build query")
+		return 0, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
 	if err := row.Scan(&count); err != nil {
-		return 0, errors.Wrap(err, "failed to scan count")
+		return 0, fmt.Errorf("failed to scan count: %w", err)
 	}
 
 	return count, nil
@@ -722,7 +717,7 @@ func (t *settingStorage) FindManyWithPagination(ctx context.Context, limit int, 
 	// Count the total number of records
 	totalCount, err := t.Count(ctx, builders...)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to count Setting")
+		return nil, nil, fmt.Errorf("failed to count Setting: %w", err)
 	}
 
 	// Calculate offset
@@ -742,7 +737,7 @@ func (t *settingStorage) FindManyWithPagination(ctx context.Context, limit int, 
 	// Find records using FindMany
 	records, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to find Setting")
+		return nil, nil, fmt.Errorf("failed to find Setting: %w", err)
 	}
 
 	return records, paginator, nil
@@ -770,17 +765,17 @@ func (t *settingStorage) SelectForUpdate(ctx context.Context, builders ...*Query
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
 	var model Setting
 	if err := model.ScanRow(row); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if err == sql.ErrNoRows {
 			return nil, ErrRowNotFound
 		}
-		return nil, errors.Wrap(err, "failed to scan Setting")
+		return nil, fmt.Errorf("failed to scan Setting: %w", err)
 	}
 
 	return &model, nil

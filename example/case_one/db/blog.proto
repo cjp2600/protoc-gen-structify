@@ -22,6 +22,7 @@ message Post {
   int32 id = 1 [(structify.field) = {primary_key: true, auto_increment: true}];
   string title = 2 [(structify.field) = {index: true}];
   string body = 3;
+  repeated string tags = 6 [(structify.field) = { in_filter: true,  uuid: true}];
   User author = 4 [(structify.field) = {relation: { field: "author_id", reference: "id", foreign: { cascade: false } } }];
   string author_id = 5 [(structify.field) = {index: true, uuid: true, unique: true}];
 }

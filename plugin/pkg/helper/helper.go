@@ -82,25 +82,20 @@ func GetMessageOptions(d *descriptorpb.DescriptorProto) *structify.StructifyMess
 func GetDBOptions(f *descriptorpb.FileDescriptorProto) *structify.StructifyDBOptions {
 	opts := f.GetOptions()
 	if opts == nil {
-		println("Debug: File options is nil")
 		return nil
 	}
 
 	ext, err := proto.GetExtension(opts, structify.E_Db)
 	if err != nil {
-		println("Debug: Error getting extension:", err.Error())
 		return nil
 	}
 	if ext == nil {
-		println("Debug: Extension is nil")
 		return nil
 	}
 
 	if customOpts, ok := ext.(*structify.StructifyDBOptions); ok {
-		println("Debug: Found DB options, provider:", customOpts.GetProvider())
 		return customOpts
 	}
-	println("Debug: Failed to convert extension to StructifyDBOptions")
 	return nil
 }
 
@@ -179,6 +174,10 @@ func PostgresType(goType string, options *structify.StructifyFieldOptions, isJso
 	// Check if it is a JSON/UUID field
 	if options != nil {
 		if options.Uuid {
+			// Handle UUID arrays specially
+			if strings.HasPrefix(goType, "[]") {
+				return "UUID[]"
+			}
 			return "UUID"
 		}
 		if options.Json {
@@ -237,6 +236,41 @@ func GoTypeToSQLiteType(goType string) string {
 // GoTypeToPostgresType returns the postgres type for the given type.
 func GoTypeToPostgresType(goType string) string {
 	goType = strings.TrimPrefix(goType, "*")
+
+	// Special case: []byte should be BYTEA, not an array
+	if goType == "[]byte" {
+		return "BYTEA"
+	}
+
+	// Handle arrays (repeated fields)
+	if strings.HasPrefix(goType, "[]") {
+		elementType := strings.TrimPrefix(goType, "[]")
+		elementType = strings.TrimPrefix(elementType, "*")
+
+		switch elementType {
+		case "string":
+			return "TEXT[]"
+		case "bool":
+			return "BOOLEAN[]"
+		case "int", "int32":
+			return "INTEGER[]"
+		case "int64":
+			return "BIGINT[]"
+		case "float32":
+			return "REAL[]"
+		case "float64":
+			return "DOUBLE PRECISION[]"
+		case "time.Time":
+			return "TIMESTAMP[]"
+		case "byte":
+			return "BYTEA[]"
+		default:
+			// For custom types and complex types, use JSONB array
+			return "JSONB"
+		}
+	}
+
+	// Handle non-array types
 	switch goType {
 	case "string":
 		return "TEXT"
@@ -573,22 +607,16 @@ func DumpPrint(values ...interface{}) {
 
 // GetUserProtoFiles returns the user proto files.
 func GetUserProtoFiles(req *plugingo.CodeGeneratorRequest) []*descriptorpb.FileDescriptorProto {
-	println("Debug: GetUserProtoFiles - request is nil:", req == nil)
 	if req == nil {
 		return nil
 	}
 
 	var userFiles []*descriptorpb.FileDescriptorProto
 	for _, file := range req.ProtoFile {
-		println("Debug: GetUserProtoFiles - checking file:", file.GetName(), "package:", file.GetPackage())
 		if file.GetPackage() != "google.protobuf" && file.GetPackage() != "structify" {
-			println("Debug: GetUserProtoFiles - adding user file:", file.GetName())
 			userFiles = append(userFiles, file)
-		} else {
-			println("Debug: GetUserProtoFiles - skipping system file:", file.GetName())
 		}
 	}
-	println("Debug: GetUserProtoFiles - found", len(userFiles), "user files")
 	return userFiles
 }
 
@@ -599,18 +627,11 @@ func IsContainsStar(s string) bool {
 
 // GetUserProtoFile returns the first user proto file.
 func GetUserProtoFile(req *plugingo.CodeGeneratorRequest) *descriptorpb.FileDescriptorProto {
-	println("Debug: GetUserProtoFile - request is nil:", req == nil)
 	if req == nil {
 		return nil
 	}
 
-	println("Debug: GetUserProtoFile - number of proto files:", len(req.ProtoFile))
-	for i, file := range req.ProtoFile {
-		println("Debug: GetUserProtoFile - file", i, "name:", file.GetName(), "package:", file.GetPackage())
-	}
-
 	files := GetUserProtoFiles(req)
-	println("Debug: GetUserProtoFile - number of user proto files:", len(files))
 	if len(files) == 0 {
 		return nil
 	}

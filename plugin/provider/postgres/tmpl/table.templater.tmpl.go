@@ -327,7 +327,7 @@ func (t *{{ storageName | lowerCamelCase }}) SelectForUpdate(ctx context.Context
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
 	var model {{ structureName }}
     if err := model.ScanRow(row); err != nil {
-        if errors.Is(err, sql.ErrNoRows){
+        if err == sql.ErrNoRows {
             return nil, ErrRowNotFound
         }
         return nil, fmt.Errorf("failed to scan {{ structureName }}: %w", err)
@@ -740,7 +740,7 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 			{{- if not ($field | isDefaultUUID ) }}
 
 			{{- if ($field | isRepeated) }}
-				{{ $field | fieldName | lowerCamelCase }},
+				model.{{ $field | fieldName }},
 			{{- else }}
 			
 				{{- if (findPointer $field) }}
@@ -1060,14 +1060,12 @@ func (t *{{ storageName | lowerCamelCase }}) Columns() []string {
 
 // DB returns the underlying DB. This is useful for doing transactions.
 func (t *{{ storageName | lowerCamelCase }}) DB(ctx context.Context, isWrite bool) QueryExecer {
-	var db QueryExecer
-
 	// Check if there is an active transaction in the context.
 	if tx, ok := TxFromContext(ctx); ok {
 		if tx == nil {
 			t.logError(ctx, fmt.Errorf("transaction is nil"), "failed to get transaction from context")
 			// set default connection
-			return t.config.DB.DBWrite
+			return &dbWrapper{db: t.config.DB.DBWrite}
 		}
 
 		return tx
@@ -1075,12 +1073,10 @@ func (t *{{ storageName | lowerCamelCase }}) DB(ctx context.Context, isWrite boo
 
 	// Use the appropriate connection based on the operation type.
 	if isWrite {
-		db = t.config.DB.DBWrite
+		return &dbWrapper{db: t.config.DB.DBWrite}
 	} else {
-		db = t.config.DB.DBRead
+		return &dbWrapper{db: t.config.DB.DBRead}
 	}
-
-	return db
 }
 
 {{ if .CRUDSchemas }}

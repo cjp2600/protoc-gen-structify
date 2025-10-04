@@ -3,8 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/pkg/errors"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/cjp2600/protoc-gen-structify/example/case_one/db"
 )
@@ -39,14 +40,19 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	store := db.NewBlogStorages(connection)
+	config := &db.Config{
+		DB: &db.DB{
+			DBRead:  connection,
+			DBWrite: connection,
+		},
+	}
+
+	store, err := db.NewBlogStorages(config)
+	if err != nil {
+		panic(err)
+	}
 	userStorage := store.GetUserStorage()
 	userService := newUserService(userStorage)
-	{
-		if err := store.CreateTables(ctx); err != nil {
-			panic(err)
-		}
-	}
 
 	// Create Transaction Manager for store
 	err = store.TxManager().ExecFuncWithTx(ctx, func(ctx context.Context) error {
@@ -97,7 +103,7 @@ func main() {
 			Comments: db.NewCommentsField([]db.UserComment{
 				{
 					Name: "John",
-					Meta: &db.CommentMeta{
+					Meta: &db.UserCommentMeta{
 						Ip:      "10.0.0.1",
 						Browser: "Opera",
 						Os:      "Windows",

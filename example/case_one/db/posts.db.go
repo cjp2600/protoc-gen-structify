@@ -3,9 +3,8 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	sq "github.com/Masterminds/squirrel"
-	_ "github.com/lib/pq"
-	"github.com/pkg/errors"
 	"math"
 )
 
@@ -68,13 +67,13 @@ type PostStorage interface {
 // NewPostStorage returns a new postStorage.
 func NewPostStorage(config *Config) (PostStorage, error) {
 	if config == nil {
-		return nil, errors.New("config is nil")
+		return nil, fmt.Errorf("config is nil")
 	}
 	if config.DB == nil {
-		return nil, errors.New("config.DB is nil")
+		return nil, fmt.Errorf("config.DB is nil")
 	}
 	if config.DB.DBRead == nil {
-		return nil, errors.New("config.DB.DBRead is nil")
+		return nil, fmt.Errorf("config.DB.DBRead is nil")
 	}
 	if config.DB.DBWrite == nil {
 		config.DB.DBWrite = config.DB.DBRead
@@ -108,20 +107,18 @@ func (t *postStorage) TableName() string {
 // Columns returns the columns for the table.
 func (t *postStorage) Columns() []string {
 	return []string{
-		"id", "title", "body", "author_id",
+		"id", "title", "body", "tags", "author_id",
 	}
 }
 
 // DB returns the underlying DB. This is useful for doing transactions.
 func (t *postStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
-	var db QueryExecer
-
 	// Check if there is an active transaction in the context.
 	if tx, ok := TxFromContext(ctx); ok {
 		if tx == nil {
-			t.logError(ctx, errors.New("transaction is nil"), "failed to get transaction from context")
+			t.logError(ctx, fmt.Errorf("transaction is nil"), "failed to get transaction from context")
 			// set default connection
-			return t.config.DB.DBWrite
+			return &dbWrapper{db: t.config.DB.DBWrite}
 		}
 
 		return tx
@@ -129,30 +126,28 @@ func (t *postStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
 
 	// Use the appropriate connection based on the operation type.
 	if isWrite {
-		db = t.config.DB.DBWrite
+		return &dbWrapper{db: t.config.DB.DBWrite}
 	} else {
-		db = t.config.DB.DBRead
+		return &dbWrapper{db: t.config.DB.DBRead}
 	}
-
-	return db
 }
 
 // LoadAuthor loads the Author relation.
 func (t *postStorage) LoadAuthor(ctx context.Context, model *Post, builders ...*QueryBuilder) error {
 	if model == nil {
-		return errors.Wrap(ErrModelIsNil, "Post is nil")
+		return fmt.Errorf("Post is nil")
 	}
 
 	// NewUserStorage creates a new UserStorage.
 	s, err := NewUserStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create UserStorage")
+		return fmt.Errorf("failed to create UserStorage: %w", err)
 	}
 	// Add the filter for the relation without dereferencing
 	builders = append(builders, FilterBuilder(UserIdEq(model.AuthorId)))
 	relationModel, err := s.FindOne(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find one UserStorage")
+		return fmt.Errorf("failed to find one UserStorage: %w", err)
 	}
 
 	model.Author = relationModel
@@ -170,7 +165,7 @@ func (t *postStorage) LoadBatchAuthor(ctx context.Context, items []*Post, builde
 	// NewUserStorage creates a new UserStorage.
 	s, err := NewUserStorage(t.config)
 	if err != nil {
-		return errors.Wrap(err, "failed to create UserStorage")
+		return fmt.Errorf("failed to create UserStorage: %w", err)
 	}
 
 	// Add the filter for the relation
@@ -178,7 +173,7 @@ func (t *postStorage) LoadBatchAuthor(ctx context.Context, items []*Post, builde
 
 	results, err := s.FindMany(ctx, builders...)
 	if err != nil {
-		return errors.Wrap(err, "failed to find many UserStorage")
+		return fmt.Errorf("failed to find many UserStorage: %w", err)
 	}
 	resultMap := make(map[interface{}]*User)
 	for _, result := range results {
@@ -198,9 +193,10 @@ func (t *postStorage) LoadBatchAuthor(ctx context.Context, items []*Post, builde
 
 // Post is a struct for the "posts" table.
 type Post struct {
-	Id       int32  `db:"id"`
-	Title    string `db:"title"`
-	Body     string `db:"body"`
+	Id       int32            `db:"id"`
+	Title    string           `db:"title"`
+	Body     string           `db:"body"`
+	Tags     PostTagsRepeated `db:"tags"`
 	Author   *User
 	AuthorId string `db:"author_id"`
 }
@@ -212,7 +208,7 @@ func (t *Post) TableName() string {
 
 // ScanRow scans a row into a Post.
 func (t *Post) ScanRow(r *sql.Row) error {
-	return r.Scan(&t.Id, &t.Title, &t.Body, &t.AuthorId)
+	return r.Scan(&t.Id, &t.Title, &t.Body, &t.Tags, &t.AuthorId)
 }
 
 // ScanRows scans a single row into the Post.
@@ -221,6 +217,7 @@ func (t *Post) ScanRows(r *sql.Rows) error {
 		&t.Id,
 		&t.Title,
 		&t.Body,
+		&t.Tags,
 		&t.AuthorId,
 	)
 }
@@ -228,6 +225,7 @@ func (t *Post) ScanRows(r *sql.Rows) error {
 // PostFilters is a struct that holds filters for Post.
 type PostFilters struct {
 	Id       *int32
+	Tags     *PostTagsRepeated
 	AuthorId *string
 }
 
@@ -349,7 +347,7 @@ func PostAuthorIdOrderBy(asc bool) FilterApplier {
 // Create creates a new Post.
 func (t *postStorage) Create(ctx context.Context, model *Post, opts ...Option) (*int32, error) {
 	if model == nil {
-		return nil, errors.New("model is nil")
+		return nil, fmt.Errorf("model is nil")
 	}
 
 	// set default options
@@ -357,16 +355,23 @@ func (t *postStorage) Create(ctx context.Context, model *Post, opts ...Option) (
 	for _, o := range opts {
 		o(options)
 	}
+	// get value of tags
+	tags, err := model.Tags.Value()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get value of Tags: %w", err)
+	}
 
 	query := t.queryBuilder.Insert("posts").
 		Columns(
 			"title",
 			"body",
+			"tags",
 			"author_id",
 		).
 		Values(
 			model.Title,
 			model.Body,
+			tags,
 			model.AuthorId,
 		)
 
@@ -375,7 +380,7 @@ func (t *postStorage) Create(ctx context.Context, model *Post, opts ...Option) (
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
@@ -383,10 +388,10 @@ func (t *postStorage) Create(ctx context.Context, model *Post, opts ...Option) (
 	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
 	if err != nil {
 		if IsPgUniqueViolation(err) {
-			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
+			return nil, fmt.Errorf("%w: %s", ErrRowAlreadyExist, PgPrettyErr(err).Error())
 		}
 
-		return nil, errors.Wrap(err, "failed to create Post")
+		return nil, fmt.Errorf("failed to create Post: %w", err)
 	}
 
 	return &id, nil
@@ -395,7 +400,7 @@ func (t *postStorage) Create(ctx context.Context, model *Post, opts ...Option) (
 // BatchCreate creates multiple Post records in a single batch.
 func (t *postStorage) BatchCreate(ctx context.Context, models []*Post, opts ...Option) ([]string, error) {
 	if len(models) == 0 {
-		return nil, errors.New("no models to insert")
+		return nil, fmt.Errorf("no models to insert")
 	}
 
 	options := &Options{}
@@ -404,23 +409,25 @@ func (t *postStorage) BatchCreate(ctx context.Context, models []*Post, opts ...O
 	}
 
 	if options.relations {
-		return nil, errors.New("relations are not supported in batch create")
+		return nil, fmt.Errorf("relations are not supported in batch create")
 	}
 
 	query := t.queryBuilder.Insert(t.TableName()).
 		Columns(
 			"title",
 			"body",
+			"tags",
 			"author_id",
 		)
 
 	for _, model := range models {
 		if model == nil {
-			return nil, errors.New("one of the models is nil")
+			return nil, fmt.Errorf("one of the models is nil")
 		}
 		query = query.Values(
 			model.Title,
 			model.Body,
+			model.Tags,
 			model.AuthorId,
 		)
 	}
@@ -433,16 +440,16 @@ func (t *postStorage) BatchCreate(ctx context.Context, models []*Post, opts ...O
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
 		if IsPgUniqueViolation(err) {
-			return nil, errors.Wrap(ErrRowAlreadyExist, PgPrettyErr(err).Error())
+			return nil, fmt.Errorf("%w: %s", ErrRowAlreadyExist, PgPrettyErr(err).Error())
 		}
-		return nil, errors.Wrap(err, "failed to execute bulk insert")
+		return nil, fmt.Errorf("failed to execute bulk insert: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -454,13 +461,13 @@ func (t *postStorage) BatchCreate(ctx context.Context, models []*Post, opts ...O
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			return nil, errors.Wrap(err, "failed to scan id")
+			return nil, fmt.Errorf("failed to scan id: %w", err)
 		}
 		returnIDs = append(returnIDs, id)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "rows iteration error")
+		return nil, fmt.Errorf("rows iteration error: %w", err)
 	}
 
 	return returnIDs, nil
@@ -473,13 +480,15 @@ type PostUpdate struct {
 	// Use regular pointer types for non-optional fields
 	Body *string
 	// Use regular pointer types for non-optional fields
+	Tags *PostTagsRepeated
+	// Use regular pointer types for non-optional fields
 	AuthorId *string
 }
 
 // Update updates an existing Post based on non-nil fields.
 func (t *postStorage) Update(ctx context.Context, id int32, updateData *PostUpdate) error {
 	if updateData == nil {
-		return errors.New("update data is nil")
+		return fmt.Errorf("update data is nil")
 	}
 
 	query := t.queryBuilder.Update("posts")
@@ -492,6 +501,10 @@ func (t *postStorage) Update(ctx context.Context, id int32, updateData *PostUpda
 		query = query.Set("body", *updateData.Body) // Dereference pointer value
 	}
 	// Handle fields that are not optional using a nil check
+	if updateData.Tags != nil {
+		query = query.Set("tags", *updateData.Tags) // Dereference pointer value
+	}
+	// Handle fields that are not optional using a nil check
 	if updateData.AuthorId != nil {
 		query = query.Set("author_id", *updateData.AuthorId) // Dereference pointer value
 	}
@@ -500,13 +513,13 @@ func (t *postStorage) Update(ctx context.Context, id int32, updateData *PostUpda
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to update Post")
+		return fmt.Errorf("failed to update Post: %w", err)
 	}
 
 	return nil
@@ -524,13 +537,13 @@ func (t *postStorage) DeleteById(ctx context.Context, id int32, opts ...Option) 
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to delete Post")
+		return fmt.Errorf("failed to delete Post: %w", err)
 	}
 
 	return nil
@@ -555,18 +568,18 @@ func (t *postStorage) DeleteMany(ctx context.Context, builders ...*QueryBuilder)
 	}
 
 	if !withFilter {
-		return errors.New("filters are required for delete operation")
+		return fmt.Errorf("filters are required for delete operation")
 	}
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return errors.Wrap(err, "failed to build query")
+		return fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return errors.Wrap(err, "failed to delete posts")
+		return fmt.Errorf("failed to delete posts: %w", err)
 	}
 
 	return nil
@@ -583,7 +596,7 @@ func (t *postStorage) FindById(ctx context.Context, id int32, opts ...Option) (*
 	// Use FindOne to get a single result
 	model, err := t.FindOne(ctx, builder)
 	if err != nil {
-		return nil, errors.Wrap(err, "find one Post: ")
+		return nil, fmt.Errorf("find one Post: %w", err)
 	}
 
 	return model, nil
@@ -635,13 +648,13 @@ func (t *postStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB(ctx, false).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to execute query")
+		return nil, fmt.Errorf("failed to execute query: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -653,13 +666,13 @@ func (t *postStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 	for rows.Next() {
 		model := &Post{}
 		if err := model.ScanRows(rows); err != nil {
-			return nil, errors.Wrap(err, "failed to scan Post")
+			return nil, fmt.Errorf("failed to scan Post: %w", err)
 		}
 		results = append(results, model)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "failed to iterate over rows")
+		return nil, fmt.Errorf("failed to iterate over rows: %w", err)
 	}
 
 	return results, nil
@@ -671,7 +684,7 @@ func (t *postStorage) FindOne(ctx context.Context, builders ...*QueryBuilder) (*
 	builders = append(builders, LimitBuilder(1))
 	results, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to findOne Post")
+		return nil, fmt.Errorf("failed to findOne Post: %w", err)
 	}
 
 	if len(results) == 0 {
@@ -704,14 +717,14 @@ func (t *postStorage) Count(ctx context.Context, builders ...*QueryBuilder) (int
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to build query")
+		return 0, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
 	var count int64
 	if err := row.Scan(&count); err != nil {
-		return 0, errors.Wrap(err, "failed to scan count")
+		return 0, fmt.Errorf("failed to scan count: %w", err)
 	}
 
 	return count, nil
@@ -722,7 +735,7 @@ func (t *postStorage) FindManyWithPagination(ctx context.Context, limit int, pag
 	// Count the total number of records
 	totalCount, err := t.Count(ctx, builders...)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to count Post")
+		return nil, nil, fmt.Errorf("failed to count Post: %w", err)
 	}
 
 	// Calculate offset
@@ -742,7 +755,7 @@ func (t *postStorage) FindManyWithPagination(ctx context.Context, limit int, pag
 	// Find records using FindMany
 	records, err := t.FindMany(ctx, builders...)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to find Post")
+		return nil, nil, fmt.Errorf("failed to find Post: %w", err)
 	}
 
 	return records, paginator, nil
@@ -770,17 +783,17 @@ func (t *postStorage) SelectForUpdate(ctx context.Context, builders ...*QueryBui
 	// execute query
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query")
+		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
 	row := t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...)
 	var model Post
 	if err := model.ScanRow(row); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if err == sql.ErrNoRows {
 			return nil, ErrRowNotFound
 		}
-		return nil, errors.Wrap(err, "failed to scan Post")
+		return nil, fmt.Errorf("failed to scan Post: %w", err)
 	}
 
 	return &model, nil

@@ -121,7 +121,6 @@ func (t *tableTemplater) Imports() *importpkg.ImportSet {
 		importpkg.ImportContext,
 		importpkg.ImportFMT,
 		importpkg.ImportSquirrel,
-		importpkg.ImportLibPQ,
 	)
 
 	tmp := t.BuildTemplate()
@@ -130,6 +129,27 @@ func (t *tableTemplater) Imports() *importpkg.ImportSet {
 	}
 	if strings.Contains(tmp, "null.") {
 		is.Add(importpkg.ImportNull)
+	}
+	if strings.Contains(tmp, "sql.") {
+		is.Add(importpkg.ImportDb)
+	}
+	if strings.Contains(tmp, "driver.") {
+		is.Add(importpkg.ImportSQLDriver)
+	}
+	if strings.Contains(tmp, "math.") {
+		is.Add(importpkg.ImportMath)
+	}
+	if strings.Contains(tmp, "json.") {
+		is.Add(importpkg.ImportJson)
+	}
+	if strings.Contains(tmp, "errors.") {
+		is.Add(importpkg.ImportStdErrors)
+	}
+	if strings.Contains(tmp, "strings.") {
+		is.Add(importpkg.ImportStrings)
+	}
+	if strings.Contains(tmp, "pq.") {
+		is.Add(importpkg.ImportLibPQWOAlias)
 	}
 
 	return is
