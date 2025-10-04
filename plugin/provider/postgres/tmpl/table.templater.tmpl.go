@@ -670,7 +670,16 @@ func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{ID
 	{{- else }}
 		// Handle fields that are not optional using a nil check
 		if updateData.{{ $field | fieldName }} != nil {
+			{{- if ($field | isRepeated) }}
+			// Handle repeated fields by calling .Value()
+			{{ $field | fieldName | lowerCamelCase }}, err := updateData.{{ $field | fieldName }}.Value()
+			if err != nil {
+				return fmt.Errorf("failed to get value of {{ $field | fieldName }}: %w", err)
+			}
+			query = query.Set("{{ $field | sourceName }}", {{ $field | fieldName | lowerCamelCase }})
+			{{- else }}
 			query = query.Set("{{ $field | sourceName }}", *updateData.{{ $field | fieldName }}) // Dereference pointer value
+			{{- end }}
 		}
 	{{- end }}
 	{{- end }}
@@ -757,6 +766,19 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 		if model == nil {
 			{{ if (hasID) }} return nil, fmt.Errorf("one of the models is nil") {{ else }} return fmt.Errorf("one of the models is nil") {{ end }}
 		}
+
+		{{- range $index, $field := fields }}
+		{{- if not ($field | isRelation) }}
+		{{- if ($field | isRepeated) }}
+		// get value of {{ $field | fieldName | lowerCamelCase }}
+		{{ $field | fieldName | lowerCamelCase }}, err := model.{{ $field | fieldName }}.Value()
+		if err != nil {
+			{{ if (hasID) }} return nil, fmt.Errorf("failed to get value of {{ $field | fieldName }}: %w", err) {{ else }} return fmt.Errorf("failed to get value of {{ $field | fieldName }}: %w", err) {{ end }}
+		}
+		{{- end}}
+		{{- end}}
+		{{- end}}
+
 		query = query.Values(
 			{{- range $index, $field := fields }}
 			{{- if not ($field | isRelation) }}
@@ -764,7 +786,7 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 			{{- if not ($field | isDefaultUUID ) }}
 
 			{{- if ($field | isRepeated) }}
-				model.{{ $field | fieldName }},
+				{{ $field | fieldName | lowerCamelCase }},
 			{{- else }}
 			
 				{{- if (findPointer $field) }}
