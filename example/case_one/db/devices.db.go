@@ -359,6 +359,7 @@ func (t *deviceStorage) BatchCreate(ctx context.Context, models []*Device, opts 
 		if model == nil {
 			return fmt.Errorf("one of the models is nil")
 		}
+
 		query = query.Values(
 			model.Name,
 			model.Value,
@@ -426,7 +427,7 @@ func (t *deviceStorage) Update(ctx context.Context, id int64, updateData *Device
 		query = query.Set("user_id", *updateData.UserId) // Dereference pointer value
 	}
 
-	query = query.Where("id = ?", id)
+	query = query.Where(" = ?", id)
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {

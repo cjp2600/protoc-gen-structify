@@ -11,6 +11,7 @@ const TableTemplate = `
 {{ template "delete_method" . }}
 {{- if (hasPrimaryKey) }}
 {{ template "get_by_id_method" . }}
+{{ template "get_field_by_id_method" . }}
 {{- end }}
 {{ template "find_many_method" . }}
 {{ template "find_one_method" . }}
@@ -514,6 +515,30 @@ func (t *{{ storageName | lowerCamelCase }}) FindBy{{ getPrimaryKey.GetName | ca
 }
 `
 
+const TableGetFieldByIDMethodTemplate = `
+// Get{{ getPrimaryKey.GetName | camelCase }}Field retrieves a specific field value by {{ getPrimaryKey.GetName }}.
+func (t *{{ storageName | lowerCamelCase }}) Get{{ getPrimaryKey.GetName | camelCase }}Field(ctx context.Context, {{getPrimaryKey.GetName | lowerCamelCase}} {{IDType}}, field string) (interface{}, error) {
+	query := t.queryBuilder.Select(field).From(t.TableName()).Where("{{ getPrimaryKey.GetName }} = ?", {{getPrimaryKey.GetName | lowerCamelCase}})
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
+	var value interface{}
+	if err := row.Scan(&value); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrRowNotFound
+		}
+		return nil, fmt.Errorf("failed to scan field value: %w", err)
+	}
+
+	return value, nil
+}
+`
+
 const TableRawQueryMethodTemplate = `
 // Query executes a raw query and returns the result.
 // isWrite is used to determine if the query is a write operation.
@@ -537,14 +562,14 @@ func (t *{{ storageName | lowerCamelCase }}) QueryRows(ctx context.Context, isWr
 const TableDeleteMethodTemplate = `
 {{- if (hasPrimaryKey) }}
 // DeleteBy{{ getPrimaryKey.GetName | camelCase }} - deletes a {{ structureName }} by its {{ getPrimaryKey.GetName }}.
-func (t *{{ storageName | lowerCamelCase }}) DeleteBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, {{getPrimaryKey.GetName}} {{IDType}}, opts ...Option) error {
+func (t *{{ storageName | lowerCamelCase }}) DeleteBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, {{getPrimaryKey.GetName | lowerCamelCase}} {{IDType}}, opts ...Option) error {
 	// set default options
 	options := &Options{}
 	for _, o := range opts {
 		o(options)
 	}
 
-	query := t.queryBuilder.Delete("{{ tableName }}").Where("id = ?", id)
+	query := t.queryBuilder.Delete("{{ tableName }}").Where("{{ getPrimaryKey.GetName }} = ?", {{getPrimaryKey.GetName | lowerCamelCase}})
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -687,7 +712,7 @@ func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{ID
 	{{- end }}
 	{{- end }}
 
-	query = query.Where("id = ?", id)
+	query = query.Where("{{ getPrimaryKey.GetName }} = ?", id)
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -806,9 +831,9 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 
 	{{ if (hasID) }}
 	if options.ignoreConflictField != "" {
-		query = query.Suffix("ON CONFLICT ("+options.ignoreConflictField+") DO NOTHING RETURNING \"id\"")
+		query = query.Suffix("ON CONFLICT ("+options.ignoreConflictField+") DO NOTHING RETURNING \"{{ getPrimaryKey.GetName }}\"")
 	} else {
-		query = query.Suffix("RETURNING \"id\"")
+		query = query.Suffix("RETURNING \"{{ getPrimaryKey.GetName }}\"")
 	}
 	{{ else }}
 	if options.ignoreConflictField != "" {
@@ -914,8 +939,8 @@ const TableCreateMethodTemplate = `
 			{{- end}}
 	)
 	{{ if (hasID) }}
-		// add RETURNING "id" to query
-		query = query.Suffix("RETURNING \"id\"")
+		// add RETURNING "{{ getPrimaryKey.GetName }}" to query
+		query = query.Suffix("RETURNING \"{{ getPrimaryKey.GetName }}\"")
 	{{ end }}
 
 	sqlQuery, args, err := query.ToSql()
@@ -1003,10 +1028,11 @@ type {{structureName}}CRUDOperations interface {
 	{{- end }}
 	Update(ctx context.Context, id {{IDType}}, updateData *{{structureName}}Update) error
 	{{- if (hasPrimaryKey) }}
-	DeleteBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, {{getPrimaryKey.GetName}} {{IDType}}, opts ...Option) error
+	DeleteBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, {{getPrimaryKey.GetName | lowerCamelCase}} {{IDType}}, opts ...Option) error
 	{{- end }}
 	{{- if (hasPrimaryKey) }}
 	FindBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, id {{IDType}}, opts ...Option) (*{{ structureName }}, error)
+	Get{{ getPrimaryKey.GetName | camelCase }}Field(ctx context.Context, {{getPrimaryKey.GetName | lowerCamelCase}} {{IDType}}, field string) (interface{}, error)
 	{{- end }}
 }
 
@@ -1439,8 +1465,8 @@ const TableUpsertMethodTemplate = `
 	}
 
 	{{ if (hasID) }}
-	// add RETURNING "id" to query
-	query = query.Suffix("RETURNING \"id\"")
+	// add RETURNING "{{ getPrimaryKey.GetName }}" to query
+	query = query.Suffix("RETURNING \"{{ getPrimaryKey.GetName }}\"")
 	{{ end }}
 
 	sqlQuery, args, err := query.ToSql()

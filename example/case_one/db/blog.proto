@@ -69,6 +69,34 @@ message Bot {
   User user = 9  [(structify.field) = {relation: { field: "user_id", reference: "id", foreign: { cascade: true } } }];
 }
 
+// PrCacheState — tracks presence and freshness of per-customer projection cache.
+// This table is used to determine whether cached projection data in Postgres (L2)
+// is still valid or needs to be rebuilt from ClickHouse.
+message PrCacheState {
+  // Unique customer identifier (UUID primary key).
+  string customer_id = 1 [
+    (structify.field) = {
+      primary_key: true,
+      uuid: true
+    }
+  ];
+
+  // Timestamp when this cache record was initially created.
+  google.protobuf.Timestamp created_at = 2 [
+    (structify.field) = {default: "now()"}
+  ];
+
+  // Timestamp of the last time this customer's cache was accessed.
+  // Used for lazy TTL cleanup and activity tracking.
+  google.protobuf.Timestamp last_access_at = 3 [
+    (structify.field) = {default: "now()"}
+  ];
+
+  option (structify.opts) = {
+    table: "pr_cache_state"
+  };
+}
+
 
 /**
   * @structify.table users

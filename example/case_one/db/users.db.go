@@ -25,6 +25,7 @@ type UserCRUDOperations interface {
 	Update(ctx context.Context, id string, updateData *UserUpdate) error
 	DeleteById(ctx context.Context, id string, opts ...Option) error
 	FindById(ctx context.Context, id string, opts ...Option) (*User, error)
+	GetIdField(ctx context.Context, id string, field string) (interface{}, error)
 }
 
 // UserSearchOperations is an interface for searching the users table.
@@ -999,6 +1000,27 @@ func (t *userStorage) BatchCreate(ctx context.Context, models []*User, opts ...O
 		if model == nil {
 			return nil, fmt.Errorf("one of the models is nil")
 		}
+		// get value of phones
+		phones, err := model.Phones.Value()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get value of Phones: %w", err)
+		}
+		// get value of balls
+		balls, err := model.Balls.Value()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get value of Balls: %w", err)
+		}
+		// get value of numrs
+		numrs, err := model.Numrs.Value()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get value of Numrs: %w", err)
+		}
+		// get value of comments
+		comments, err := model.Comments.Value()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get value of Comments: %w", err)
+		}
+
 		query = query.Values(
 			model.Name,
 			model.Age,
@@ -1007,10 +1029,10 @@ func (t *userStorage) BatchCreate(ctx context.Context, models []*User, opts ...O
 			model.CreatedAt,
 			nullValue(model.UpdatedAt),
 			nullValue(model.NotificationSettings),
-			model.Phones,
-			model.Balls,
-			model.Numrs,
-			model.Comments,
+			phones,
+			balls,
+			numrs,
+			comments,
 		)
 	}
 
@@ -1132,19 +1154,39 @@ func (t *userStorage) Update(ctx context.Context, id string, updateData *UserUpd
 	}
 	// Handle fields that are not optional using a nil check
 	if updateData.Phones != nil {
-		query = query.Set("phones", *updateData.Phones) // Dereference pointer value
+		// Handle repeated fields by calling .Value()
+		phones, err := updateData.Phones.Value()
+		if err != nil {
+			return fmt.Errorf("failed to get value of Phones: %w", err)
+		}
+		query = query.Set("phones", phones)
 	}
 	// Handle fields that are not optional using a nil check
 	if updateData.Balls != nil {
-		query = query.Set("balls", *updateData.Balls) // Dereference pointer value
+		// Handle repeated fields by calling .Value()
+		balls, err := updateData.Balls.Value()
+		if err != nil {
+			return fmt.Errorf("failed to get value of Balls: %w", err)
+		}
+		query = query.Set("balls", balls)
 	}
 	// Handle fields that are not optional using a nil check
 	if updateData.Numrs != nil {
-		query = query.Set("numrs", *updateData.Numrs) // Dereference pointer value
+		// Handle repeated fields by calling .Value()
+		numrs, err := updateData.Numrs.Value()
+		if err != nil {
+			return fmt.Errorf("failed to get value of Numrs: %w", err)
+		}
+		query = query.Set("numrs", numrs)
 	}
 	// Handle fields that are not optional using a nil check
 	if updateData.Comments != nil {
-		query = query.Set("comments", *updateData.Comments) // Dereference pointer value
+		// Handle repeated fields by calling .Value()
+		comments, err := updateData.Comments.Value()
+		if err != nil {
+			return fmt.Errorf("failed to get value of Comments: %w", err)
+		}
+		query = query.Set("comments", comments)
 	}
 
 	query = query.Where("id = ?", id)
@@ -1238,6 +1280,28 @@ func (t *userStorage) FindById(ctx context.Context, id string, opts ...Option) (
 	}
 
 	return model, nil
+}
+
+// GetIdField retrieves a specific field value by id.
+func (t *userStorage) GetIdField(ctx context.Context, id string, field string) (interface{}, error) {
+	query := t.queryBuilder.Select(field).From(t.TableName()).Where("id = ?", id)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
+	var value interface{}
+	if err := row.Scan(&value); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrRowNotFound
+		}
+		return nil, fmt.Errorf("failed to scan field value: %w", err)
+	}
+
+	return value, nil
 }
 
 // FindMany finds multiple User based on the provided options.

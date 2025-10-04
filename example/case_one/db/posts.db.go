@@ -23,6 +23,7 @@ type PostCRUDOperations interface {
 	Update(ctx context.Context, id int32, updateData *PostUpdate) error
 	DeleteById(ctx context.Context, id int32, opts ...Option) error
 	FindById(ctx context.Context, id int32, opts ...Option) (*Post, error)
+	GetIdField(ctx context.Context, id int32, field string) (interface{}, error)
 }
 
 // PostSearchOperations is an interface for searching the posts table.
@@ -517,10 +518,16 @@ func (t *postStorage) BatchCreate(ctx context.Context, models []*Post, opts ...O
 		if model == nil {
 			return nil, fmt.Errorf("one of the models is nil")
 		}
+		// get value of tags
+		tags, err := model.Tags.Value()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get value of Tags: %w", err)
+		}
+
 		query = query.Values(
 			model.Title,
 			model.Body,
-			model.Tags,
+			tags,
 			model.AuthorId,
 		)
 	}
@@ -595,7 +602,12 @@ func (t *postStorage) Update(ctx context.Context, id int32, updateData *PostUpda
 	}
 	// Handle fields that are not optional using a nil check
 	if updateData.Tags != nil {
-		query = query.Set("tags", *updateData.Tags) // Dereference pointer value
+		// Handle repeated fields by calling .Value()
+		tags, err := updateData.Tags.Value()
+		if err != nil {
+			return fmt.Errorf("failed to get value of Tags: %w", err)
+		}
+		query = query.Set("tags", tags)
 	}
 	// Handle fields that are not optional using a nil check
 	if updateData.AuthorId != nil {
@@ -693,6 +705,28 @@ func (t *postStorage) FindById(ctx context.Context, id int32, opts ...Option) (*
 	}
 
 	return model, nil
+}
+
+// GetIdField retrieves a specific field value by id.
+func (t *postStorage) GetIdField(ctx context.Context, id int32, field string) (interface{}, error) {
+	query := t.queryBuilder.Select(field).From(t.TableName()).Where("id = ?", id)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
+	var value interface{}
+	if err := row.Scan(&value); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrRowNotFound
+		}
+		return nil, fmt.Errorf("failed to scan field value: %w", err)
+	}
+
+	return value, nil
 }
 
 // FindMany finds multiple Post based on the provided options.

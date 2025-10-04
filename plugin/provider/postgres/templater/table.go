@@ -77,6 +77,10 @@ func (t *tableTemplater) BuildTemplate() string {
 			Body: tmplpkg.TableGetByIDMethodTemplate,
 		},
 		helperpkg.IncludeTemplate{
+			Name: "get_field_by_id_method",
+			Body: tmplpkg.TableGetFieldByIDMethodTemplate,
+		},
+		helperpkg.IncludeTemplate{
 			Name: "find_many_method",
 			Body: tmplpkg.TableFindManyMethodTemplate,
 		},
@@ -733,8 +737,10 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 					}
 				} else {
 					for _, f := range rd.GetField() {
-						if f.GetName() == "id" {
-							return helperpkg.UpperCamelCase(f.GetName())
+						if opts := helperpkg.GetFieldOptions(f); opts != nil {
+							if opts.GetPrimaryKey() {
+								return helperpkg.UpperCamelCase(f.GetName())
+							}
 						}
 					}
 				}
@@ -764,8 +770,10 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 					}
 				} else {
 					for _, f := range rd.GetField() {
-						if f.GetName() == "id" {
-							return helperpkg.SnakeCase(f.GetName())
+						if opts := helperpkg.GetFieldOptions(f); opts != nil {
+							if opts.GetPrimaryKey() {
+								return helperpkg.SnakeCase(f.GetName())
+							}
 						}
 					}
 				}
@@ -824,8 +832,10 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 		// relationName returns the relation name.
 		"hasID": func() bool {
 			for _, f := range t.message.GetField() {
-				if f.GetName() == "id" {
-					return true
+				if opts := helperpkg.GetFieldOptions(f); opts != nil {
+					if opts.GetPrimaryKey() {
+						return true
+					}
 				}
 			}
 			return false
@@ -833,8 +843,10 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 
 		"IDType": func() string {
 			for _, f := range t.message.GetField() {
-				if f.GetName() == "id" {
-					return helperpkg.ConvertType(f)
+				if opts := helperpkg.GetFieldOptions(f); opts != nil {
+					if opts.GetPrimaryKey() {
+						return helperpkg.ConvertType(f)
+					}
 				}
 			}
 			return "int64"

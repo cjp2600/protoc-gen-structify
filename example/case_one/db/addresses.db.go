@@ -25,6 +25,7 @@ type AddressCRUDOperations interface {
 	Update(ctx context.Context, id string, updateData *AddressUpdate) error
 	DeleteById(ctx context.Context, id string, opts ...Option) error
 	FindById(ctx context.Context, id string, opts ...Option) (*Address, error)
+	GetIdField(ctx context.Context, id string, field string) (interface{}, error)
 }
 
 // AddressSearchOperations is an interface for searching the addresses table.
@@ -538,6 +539,7 @@ func (t *addressStorage) BatchCreate(ctx context.Context, models []*Address, opt
 		if model == nil {
 			return nil, fmt.Errorf("one of the models is nil")
 		}
+
 		query = query.Values(
 			model.Street,
 			model.City,
@@ -740,6 +742,28 @@ func (t *addressStorage) FindById(ctx context.Context, id string, opts ...Option
 	}
 
 	return model, nil
+}
+
+// GetIdField retrieves a specific field value by id.
+func (t *addressStorage) GetIdField(ctx context.Context, id string, field string) (interface{}, error) {
+	query := t.queryBuilder.Select(field).From(t.TableName()).Where("id = ?", id)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
+	var value interface{}
+	if err := row.Scan(&value); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrRowNotFound
+		}
+		return nil, fmt.Errorf("failed to scan field value: %w", err)
+	}
+
+	return value, nil
 }
 
 // FindMany finds multiple Address based on the provided options.

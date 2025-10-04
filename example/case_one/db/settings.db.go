@@ -23,6 +23,7 @@ type SettingCRUDOperations interface {
 	Update(ctx context.Context, id int32, updateData *SettingUpdate) error
 	DeleteById(ctx context.Context, id int32, opts ...Option) error
 	FindById(ctx context.Context, id int32, opts ...Option) (*Setting, error)
+	GetIdField(ctx context.Context, id int32, field string) (interface{}, error)
 }
 
 // SettingSearchOperations is an interface for searching the settings table.
@@ -481,6 +482,7 @@ func (t *settingStorage) BatchCreate(ctx context.Context, models []*Setting, opt
 		if model == nil {
 			return nil, fmt.Errorf("one of the models is nil")
 		}
+
 		query = query.Values(
 			model.Name,
 			model.Value,
@@ -650,6 +652,28 @@ func (t *settingStorage) FindById(ctx context.Context, id int32, opts ...Option)
 	}
 
 	return model, nil
+}
+
+// GetIdField retrieves a specific field value by id.
+func (t *settingStorage) GetIdField(ctx context.Context, id int32, field string) (interface{}, error) {
+	query := t.queryBuilder.Select(field).From(t.TableName()).Where("id = ?", id)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	row := t.DB(ctx, false).QueryRowContext(ctx, sqlQuery, args...)
+	var value interface{}
+	if err := row.Scan(&value); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrRowNotFound
+		}
+		return nil, fmt.Errorf("failed to scan field value: %w", err)
+	}
+
+	return value, nil
 }
 
 // FindMany finds multiple Setting based on the provided options.
