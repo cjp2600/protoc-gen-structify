@@ -263,6 +263,29 @@ const TableConditionFilters = `
   {{ end }}
   {{ end }}
 {{ end }}
+
+{{ range $key, $fieldMess := messages_for_filter }}
+  {{ range $field := $fieldMess.GetField }}
+   {{- if not ($field | isRelation) }}
+   {{- if ($field | isUUIDArray) }}
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Overlap checks if the array field overlaps with the given value (&&).
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Overlap(value {{ $field | fieldType }}) FilterApplier {
+      return ArrayOverlapCondition{Field: "{{ $field.GetName }}", Value: value}
+    }
+
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Contains checks if the array field contains the given value (@>).
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}Contains(value {{ $field | fieldType }}) FilterApplier {
+      return ArrayContainsCondition{Field: "{{ $field.GetName }}", Value: value}
+    }
+
+	// {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}ContainedBy checks if the array field is contained by the given value (<@).
+    func {{ $fieldMess.GetName | camelCase }}{{ $field.GetName | camelCase }}ContainedBy(value {{ $field | fieldType }}) FilterApplier {
+      return ArrayContainedByCondition{Field: "{{ $field.GetName }}", Value: value}
+    }
+   {{ end }}
+   {{ end }}
+  {{ end }}
+{{ end }}
 `
 
 const TableFindWithPaginationMethodTemplate = `

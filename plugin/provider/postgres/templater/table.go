@@ -906,5 +906,22 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 
 		// lowerCamelCase returns the lower camel case.
 		"lowerCamelCase": helperpkg.LowerCamelCase,
+
+		// isUUIDArray checks if the field is a UUID array.
+		"isUUIDArray": func(f *descriptorpb.FieldDescriptorProto) bool {
+			// Check if it's a repeated field
+			if !helperpkg.IsRepeated(f) {
+				return false
+			}
+
+			// Check if it's a string field with UUID option
+			if f.GetType() != descriptorpb.FieldDescriptorProto_TYPE_STRING {
+				return false
+			}
+
+			// Check if it has UUID option
+			opts := helperpkg.GetFieldOptions(f)
+			return opts != nil && opts.GetUuid()
+		},
 	}
 }

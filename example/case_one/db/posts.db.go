@@ -346,6 +346,21 @@ func PostAuthorIdOrderBy(asc bool) FilterApplier {
 	return OrderBy("author_id", asc)
 }
 
+// PostTagsOverlap checks if the array field overlaps with the given value (&&).
+func PostTagsOverlap(value PostTagsRepeated) FilterApplier {
+	return ArrayOverlapCondition{Field: "tags", Value: value}
+}
+
+// PostTagsContains checks if the array field contains the given value (@>).
+func PostTagsContains(value PostTagsRepeated) FilterApplier {
+	return ArrayContainsCondition{Field: "tags", Value: value}
+}
+
+// PostTagsContainedBy checks if the array field is contained by the given value (<@).
+func PostTagsContainedBy(value PostTagsRepeated) FilterApplier {
+	return ArrayContainedByCondition{Field: "tags", Value: value}
+}
+
 // Create creates a new Post.
 func (t *postStorage) Create(ctx context.Context, model *Post, opts ...Option) (*int32, error) {
 	if model == nil {

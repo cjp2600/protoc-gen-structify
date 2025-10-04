@@ -427,4 +427,97 @@ func (c OrderCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
 	return query
 }
 
+// ArrayOverlapCondition represents the array overlap condition (&&).
+type ArrayOverlapCondition struct {
+	Field string
+	Value interface{}
+}
+
+// Apply applies the condition to the query.
+func (c ArrayOverlapCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s && ?", c.Field), c.Value))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c ArrayOverlapCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s && ?", c.Field), c.Value))
+}
+
+// ArrayOverlap returns a condition that checks if the array field overlaps with the given value.
+func ArrayOverlap(field string, value interface{}) FilterApplier {
+	return ArrayOverlapCondition{Field: field, Value: value}
+}
+
+// ArrayContainsCondition represents the array contains condition (@>).
+type ArrayContainsCondition struct {
+	Field string
+	Value interface{}
+}
+
+// Apply applies the condition to the query.
+func (c ArrayContainsCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s @> ?", c.Field), c.Value))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c ArrayContainsCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s @> ?", c.Field), c.Value))
+}
+
+// ArrayContains returns a condition that checks if the array field contains the given value.
+func ArrayContains(field string, value interface{}) FilterApplier {
+	return ArrayContainsCondition{Field: field, Value: value}
+}
+
+// ArrayContainedByCondition represents the array contained by condition (<@).
+type ArrayContainedByCondition struct {
+	Field string
+	Value interface{}
+}
+
+// Apply applies the condition to the query.
+func (c ArrayContainedByCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s <@ ?", c.Field), c.Value))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c ArrayContainedByCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query.Where(sq.Expr(fmt.Sprintf("%s <@ ?", c.Field), c.Value))
+}
+
+// ArrayContainedBy returns a condition that checks if the array field is contained by the given value.
+func ArrayContainedBy(field string, value interface{}) FilterApplier {
+	return ArrayContainedByCondition{Field: field, Value: value}
+}
+
+// CursorPaginationCondition represents cursor-based pagination condition.
+type CursorPaginationCondition struct {
+	Fields []string
+	Values []interface{}
+}
+
+// Apply applies the condition to the query.
+func (c CursorPaginationCondition) Apply(query sq.SelectBuilder) sq.SelectBuilder {
+	if len(c.Fields) == 0 || len(c.Values) == 0 {
+		return query
+	}
+	
+	// Build tuple comparison: (field1, field2, ...) < (value1, value2, ...)
+	tupleFields := "(" + strings.Join(c.Fields, ", ") + ")"
+	tupleValues := "(" + strings.Repeat("?,", len(c.Values))
+	tupleValues = tupleValues[:len(tupleValues)-1] + ")" // Remove last comma
+	
+	return query.Where(sq.Expr(fmt.Sprintf("%s < %s", tupleFields, tupleValues), c.Values...))
+}
+
+// ApplyDelete applies the condition to the query.
+func (c CursorPaginationCondition) ApplyDelete(query sq.DeleteBuilder) sq.DeleteBuilder {
+	return query
+}
+
+// CursorPagination returns a condition for cursor-based pagination.
+func CursorPagination(fields []string, values []interface{}) FilterApplier {
+	return CursorPaginationCondition{Fields: fields, Values: values}
+}
+
 `
