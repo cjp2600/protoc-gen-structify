@@ -5,6 +5,7 @@ const TableTemplate = `
 {{ template "structure" . }}
 {{ template "table_conditions" . }}
 {{ template "create_method" . }}
+{{ template "upsert_method" . }}
 {{ template "batch_create_method" . }}
 {{ template "update_method" . }}
 {{ template "delete_method" . }}
@@ -946,6 +947,11 @@ type {{structureName}}CRUDOperations interface {
 	{{- else }} 
 	Create(ctx context.Context, model *{{structureName}}, opts ...Option) error
 	{{- end }}
+	{{- if (hasID) }}
+	Upsert(ctx context.Context, model *{{structureName}}, updateFields []string, opts ...Option) (*{{IDType}}, error)
+	{{- else }} 
+	Upsert(ctx context.Context, model *{{structureName}}, updateFields []string, opts ...Option) error
+	{{- end }}
 	{{ if (hasID) }}BatchCreate(ctx context.Context, models []*{{structureName}}, opts ...Option) ([]string, error)
 	{{- else }}
 	BatchCreate(ctx context.Context, models []*{{structureName}}, opts ...Option) error
@@ -1290,4 +1296,150 @@ func (t *{{ storageName | lowerCamelCase }}) LoadBatch{{ $field | pluralFieldNam
 }
 {{- end }}
 {{- end }}
+`
+
+const TableUpsertMethodTemplate = `
+// Upsert creates a new {{ structureName }} or updates existing one on conflict.
+{{ if (hasID) }} func (t *{{ storageName | lowerCamelCase }}) Upsert(ctx context.Context, model *{{structureName}}, updateFields []string, opts ...Option) (*{{IDType}}, error) { {{ else }} func (t *{{ storageName | lowerCamelCase }}) Upsert(ctx context.Context, model *{{structureName}}, updateFields []string, opts ...Option) error { {{ end }}
+	if model == nil {
+		{{ if (hasID) }}return nil, fmt.Errorf("model is nil") {{ else }}return fmt.Errorf("model is nil") {{ end }}
+	}
+
+	// set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	{{- range $index, $field := fields }}
+	{{- if not ($field | isRelation) }}
+	{{- if ($field | isRepeated) }}
+	// get value of {{ $field | fieldName | lowerCamelCase }}
+	{{ $field | fieldName | lowerCamelCase }}, err := model.{{ $field | fieldName }}.Value()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get value of {{ $field | fieldName }}: %w", err)
+	}
+	{{- end}}
+	{{- end}}
+	{{- end}}
+
+	// Build INSERT query
+	query := t.queryBuilder.Insert("{{ tableName }}").
+		Columns(
+			{{- range $index, $field := fields }}
+			{{- if not ($field | isRelation) }}
+			{{- if not ($field | isAutoIncrement ) }}
+			{{- if not ($field | isDefaultUUID ) }}
+			"{{ $field | sourceName }}",
+			{{- end}}
+			{{- end}}
+			{{- end}}
+			{{- end}}
+		).
+		Values(
+			{{- range $index, $field := fields }}
+			{{- if not ($field | isRelation) }}
+			{{- if not ($field | isAutoIncrement ) }}
+			{{- if not ($field | isDefaultUUID ) }}
+			
+			{{- if ($field | isRepeated) }}
+				{{ $field | fieldName | lowerCamelCase }},
+			{{- else }}
+			
+				{{- if (findPointer $field) }}
+				nullValue(model.{{ $field | fieldName }}),
+				{{- else }}
+				model.{{ $field | fieldName }},
+				{{- end }}
+
+			{{- end}}
+
+			{{- end}}
+			{{- end}}
+			{{- end}}
+			{{- end}}
+		)
+
+	// Add ON CONFLICT clause
+	{{- if (hasPrimaryKey) }}
+	query = query.Suffix("ON CONFLICT ({{ getPrimaryKey.GetName }}) DO UPDATE SET")
+	{{- else }}
+	// For tables without primary key, you need to specify conflict target
+	// This is a placeholder - you may need to customize based on your unique constraints
+	query = query.Suffix("ON CONFLICT DO UPDATE SET")
+	{{- end }}
+
+	// Build UPDATE SET clause based on updateFields
+	updateSet := make([]string, 0, len(updateFields))
+	for _, field := range updateFields {
+		{{- range $index, $field := fields }}
+		{{- if not ($field | isRelation) }}
+		{{- if not ($field | isAutoIncrement ) }}
+		{{- if not ($field | isDefaultUUID ) }}
+		{{- if not ($field | isPrimaryKey ) }}
+		if field == "{{ $field | sourceName }}" {
+			updateSet = append(updateSet, "{{ $field | sourceName }} = EXCLUDED.{{ $field | sourceName }}")
+		}
+		{{- end}}
+		{{- end}}
+		{{- end}}
+		{{- end}}
+		{{- end}}
+	}
+
+	// Note: You can manually add updated_at to updateFields if needed
+
+	if len(updateSet) > 0 {
+		query = query.Suffix(strings.Join(updateSet, ", "))
+	}
+
+	{{ if (hasID) }}
+	// add RETURNING "id" to query
+	query = query.Suffix("RETURNING \"id\"")
+	{{ end }}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		{{ if (hasID) }} return nil, fmt.Errorf("failed to build query: %w", err) {{ else }} return fmt.Errorf("failed to build query: %w", err) {{ end }}
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	{{ if (hasID) }}var id {{IDType}}
+	err = t.DB(ctx, true).QueryRowContext(ctx,sqlQuery, args...).Scan(&id) {{ else }} _, err = t.DB(ctx, true).ExecContext(ctx,sqlQuery, args...) {{ end }}
+	if err != nil {
+		{{ if (hasID) }} return nil, fmt.Errorf("failed to upsert {{ structureName }}: %w", err) {{ else }} return fmt.Errorf("failed to upsert {{ structureName }}: %w", err) {{ end }}
+	}
+
+	{{ if (hasID) }}
+	{{- range $index, $field := fields }}
+	{{- if and ($field | isRelation) ($field | relationAllowSubCreating) }}
+	    if options.relations && model.{{ $field | fieldName }} != nil { {{ if ($field | isRepeated) }}
+			for _, item := range model.{{ $field | fieldName }} {
+				item.{{ $field | getRefID }} = id
+				s, err := New{{ $field | relationStorageName }}(t.config)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create {{ $field | fieldName }}: %w", err)
+				}
+
+                {{ if ($field | hasIDFromRelation) }} _, err = s.Create(ctx, item) {{ else }} err = s.Create(ctx, item) {{ end }}
+				if err != nil {
+				{{ if (hasID) }} return nil, fmt.Errorf("failed to create {{ $field | fieldName }}: %w", err) {{ else }} return fmt.Errorf("failed to create {{ $field | fieldName }}: %w", err) {{ end }}
+				}
+			} {{ else }}
+			s, err := New{{ $field | relationStorageName }}(t.config)
+			if err != nil {
+				{{ if (hasID) }} return nil, fmt.Errorf("failed to create {{ $field | fieldName }}: %w", err) {{ else }} return fmt.Errorf("failed to create {{ $field | fieldName }}: %w", err) {{ end }}
+			}
+
+			model.{{ $field | fieldName }}.{{ $field | getRefID }} = id
+			{{ if ($field | hasIDFromRelation) }} _, err = s.Create(ctx, model.{{ $field | fieldName }}) {{ else }} err = s.Create(ctx, model.{{ $field | fieldName }}) {{ end }}
+			if err != nil {
+				{{ if (hasID) }} return nil, fmt.Errorf("failed to create {{ $field | fieldName }}: %w", err) {{ else }} return fmt.Errorf("failed to create {{ $field | fieldName }}: %w", err) {{ end }}
+			} {{- end}}
+	    } {{- end}}
+	{{- end}}
+	{{- end}}
+
+	{{ if (hasID) }} return &id, nil {{ else }} return nil {{ end }}
+}
 `

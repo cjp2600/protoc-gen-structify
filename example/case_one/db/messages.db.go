@@ -7,6 +7,7 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"gopkg.in/guregu/null.v4"
 	"math"
+	"strings"
 )
 
 // messageStorage is a struct for the "messages" table.
@@ -18,6 +19,7 @@ type messageStorage struct {
 // MessageCRUDOperations is an interface for managing the messages table.
 type MessageCRUDOperations interface {
 	Create(ctx context.Context, model *Message, opts ...Option) (*string, error)
+	Upsert(ctx context.Context, model *Message, updateFields []string, opts ...Option) (*string, error)
 	BatchCreate(ctx context.Context, models []*Message, opts ...Option) ([]string, error)
 	Update(ctx context.Context, id string, updateData *MessageUpdate) error
 	DeleteById(ctx context.Context, id string, opts ...Option) error
@@ -615,6 +617,72 @@ func (t *messageStorage) Create(ctx context.Context, model *Message, opts ...Opt
 		}
 
 		return nil, fmt.Errorf("failed to create Message: %w", err)
+	}
+
+	return &id, nil
+}
+
+// Upsert creates a new Message or updates existing one on conflict.
+func (t *messageStorage) Upsert(ctx context.Context, model *Message, updateFields []string, opts ...Option) (*string, error) {
+	if model == nil {
+		return nil, fmt.Errorf("model is nil")
+	}
+
+	// set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	// Build INSERT query
+	query := t.queryBuilder.Insert("messages").
+		Columns(
+			"from_user_id",
+			"to_user_id",
+			"bot_id",
+		).
+		Values(
+			model.FromUserId,
+			model.ToUserId,
+			nullValue(model.BotId),
+		)
+
+	// Add ON CONFLICT clause
+	query = query.Suffix("ON CONFLICT (id) DO UPDATE SET")
+
+	// Build UPDATE SET clause based on updateFields
+	updateSet := make([]string, 0, len(updateFields))
+	for _, field := range updateFields {
+		if field == "from_user_id" {
+			updateSet = append(updateSet, "from_user_id = EXCLUDED.from_user_id")
+		}
+		if field == "to_user_id" {
+			updateSet = append(updateSet, "to_user_id = EXCLUDED.to_user_id")
+		}
+		if field == "bot_id" {
+			updateSet = append(updateSet, "bot_id = EXCLUDED.bot_id")
+		}
+	}
+
+	// Note: You can manually add updated_at to updateFields if needed
+
+	if len(updateSet) > 0 {
+		query = query.Suffix(strings.Join(updateSet, ", "))
+	}
+
+	// add RETURNING "id" to query
+	query = query.Suffix("RETURNING \"id\"")
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	var id string
+	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upsert Message: %w", err)
 	}
 
 	return &id, nil

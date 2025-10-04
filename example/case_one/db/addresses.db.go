@@ -7,6 +7,7 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"gopkg.in/guregu/null.v4"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -19,6 +20,7 @@ type addressStorage struct {
 // AddressCRUDOperations is an interface for managing the addresses table.
 type AddressCRUDOperations interface {
 	Create(ctx context.Context, model *Address, opts ...Option) (*string, error)
+	Upsert(ctx context.Context, model *Address, updateFields []string, opts ...Option) (*string, error)
 	BatchCreate(ctx context.Context, models []*Address, opts ...Option) ([]string, error)
 	Update(ctx context.Context, id string, updateData *AddressUpdate) error
 	DeleteById(ctx context.Context, id string, opts ...Option) error
@@ -415,6 +417,92 @@ func (t *addressStorage) Create(ctx context.Context, model *Address, opts ...Opt
 		}
 
 		return nil, fmt.Errorf("failed to create Address: %w", err)
+	}
+
+	return &id, nil
+}
+
+// Upsert creates a new Address or updates existing one on conflict.
+func (t *addressStorage) Upsert(ctx context.Context, model *Address, updateFields []string, opts ...Option) (*string, error) {
+	if model == nil {
+		return nil, fmt.Errorf("model is nil")
+	}
+
+	// set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	// Build INSERT query
+	query := t.queryBuilder.Insert("addresses").
+		Columns(
+			"street",
+			"city",
+			"state",
+			"zip",
+			"user_id",
+			"created_at",
+			"updated_at",
+		).
+		Values(
+			model.Street,
+			model.City,
+			model.State,
+			model.Zip,
+			model.UserId,
+			model.CreatedAt,
+			nullValue(model.UpdatedAt),
+		)
+
+	// Add ON CONFLICT clause
+	query = query.Suffix("ON CONFLICT (id) DO UPDATE SET")
+
+	// Build UPDATE SET clause based on updateFields
+	updateSet := make([]string, 0, len(updateFields))
+	for _, field := range updateFields {
+		if field == "street" {
+			updateSet = append(updateSet, "street = EXCLUDED.street")
+		}
+		if field == "city" {
+			updateSet = append(updateSet, "city = EXCLUDED.city")
+		}
+		if field == "state" {
+			updateSet = append(updateSet, "state = EXCLUDED.state")
+		}
+		if field == "zip" {
+			updateSet = append(updateSet, "zip = EXCLUDED.zip")
+		}
+		if field == "user_id" {
+			updateSet = append(updateSet, "user_id = EXCLUDED.user_id")
+		}
+		if field == "created_at" {
+			updateSet = append(updateSet, "created_at = EXCLUDED.created_at")
+		}
+		if field == "updated_at" {
+			updateSet = append(updateSet, "updated_at = EXCLUDED.updated_at")
+		}
+	}
+
+	// Note: You can manually add updated_at to updateFields if needed
+
+	if len(updateSet) > 0 {
+		query = query.Suffix(strings.Join(updateSet, ", "))
+	}
+
+	// add RETURNING "id" to query
+	query = query.Suffix("RETURNING \"id\"")
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	var id string
+	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upsert Address: %w", err)
 	}
 
 	return &id, nil

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	sq "github.com/Masterminds/squirrel"
 	"math"
+	"strings"
 )
 
 // postStorage is a struct for the "posts" table.
@@ -17,6 +18,7 @@ type postStorage struct {
 // PostCRUDOperations is an interface for managing the posts table.
 type PostCRUDOperations interface {
 	Create(ctx context.Context, model *Post, opts ...Option) (*int32, error)
+	Upsert(ctx context.Context, model *Post, updateFields []string, opts ...Option) (*int32, error)
 	BatchCreate(ctx context.Context, models []*Post, opts ...Option) ([]string, error)
 	Update(ctx context.Context, id int32, updateData *PostUpdate) error
 	DeleteById(ctx context.Context, id int32, opts ...Option) error
@@ -392,6 +394,82 @@ func (t *postStorage) Create(ctx context.Context, model *Post, opts ...Option) (
 		}
 
 		return nil, fmt.Errorf("failed to create Post: %w", err)
+	}
+
+	return &id, nil
+}
+
+// Upsert creates a new Post or updates existing one on conflict.
+func (t *postStorage) Upsert(ctx context.Context, model *Post, updateFields []string, opts ...Option) (*int32, error) {
+	if model == nil {
+		return nil, fmt.Errorf("model is nil")
+	}
+
+	// set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+	// get value of tags
+	tags, err := model.Tags.Value()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get value of Tags: %w", err)
+	}
+
+	// Build INSERT query
+	query := t.queryBuilder.Insert("posts").
+		Columns(
+			"title",
+			"body",
+			"tags",
+			"author_id",
+		).
+		Values(
+			model.Title,
+			model.Body,
+			tags,
+			model.AuthorId,
+		)
+
+	// Add ON CONFLICT clause
+	query = query.Suffix("ON CONFLICT (id) DO UPDATE SET")
+
+	// Build UPDATE SET clause based on updateFields
+	updateSet := make([]string, 0, len(updateFields))
+	for _, field := range updateFields {
+		if field == "title" {
+			updateSet = append(updateSet, "title = EXCLUDED.title")
+		}
+		if field == "body" {
+			updateSet = append(updateSet, "body = EXCLUDED.body")
+		}
+		if field == "tags" {
+			updateSet = append(updateSet, "tags = EXCLUDED.tags")
+		}
+		if field == "author_id" {
+			updateSet = append(updateSet, "author_id = EXCLUDED.author_id")
+		}
+	}
+
+	// Note: You can manually add updated_at to updateFields if needed
+
+	if len(updateSet) > 0 {
+		query = query.Suffix(strings.Join(updateSet, ", "))
+	}
+
+	// add RETURNING "id" to query
+	query = query.Suffix("RETURNING \"id\"")
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	var id int32
+	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upsert Post: %w", err)
 	}
 
 	return &id, nil

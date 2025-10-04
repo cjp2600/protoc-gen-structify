@@ -53,6 +53,10 @@ func (t *tableTemplater) BuildTemplate() string {
 			Body: tmplpkg.TableCreateMethodTemplate,
 		},
 		helperpkg.IncludeTemplate{
+			Name: "upsert_method",
+			Body: tmplpkg.TableUpsertMethodTemplate,
+		},
+		helperpkg.IncludeTemplate{
 			Name: "batch_create_method",
 			Body: tmplpkg.TableBatchCreateMethodTemplate,
 		},

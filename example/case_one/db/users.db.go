@@ -7,6 +7,7 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"gopkg.in/guregu/null.v4"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -19,6 +20,7 @@ type userStorage struct {
 // UserCRUDOperations is an interface for managing the users table.
 type UserCRUDOperations interface {
 	Create(ctx context.Context, model *User, opts ...Option) (*string, error)
+	Upsert(ctx context.Context, model *User, updateFields []string, opts ...Option) (*string, error)
 	BatchCreate(ctx context.Context, models []*User, opts ...Option) ([]string, error)
 	Update(ctx context.Context, id string, updateData *UserUpdate) error
 	DeleteById(ctx context.Context, id string, opts ...Option) error
@@ -754,6 +756,171 @@ func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) (
 		}
 
 		return nil, fmt.Errorf("failed to create User: %w", err)
+	}
+
+	if options.relations && model.Device != nil {
+		s, err := NewDeviceStorage(t.config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Device: %w", err)
+		}
+
+		model.Device.UserId = id
+		err = s.Create(ctx, model.Device)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Device: %w", err)
+		}
+	}
+	if options.relations && model.Settings != nil {
+		s, err := NewSettingStorage(t.config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Settings: %w", err)
+		}
+
+		model.Settings.UserId = id
+		_, err = s.Create(ctx, model.Settings)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Settings: %w", err)
+		}
+	}
+	if options.relations && model.Addresses != nil {
+		for _, item := range model.Addresses {
+			item.UserId = id
+			s, err := NewAddressStorage(t.config)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create Addresses: %w", err)
+			}
+
+			_, err = s.Create(ctx, item)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create Addresses: %w", err)
+			}
+		}
+	}
+
+	return &id, nil
+}
+
+// Upsert creates a new User or updates existing one on conflict.
+func (t *userStorage) Upsert(ctx context.Context, model *User, updateFields []string, opts ...Option) (*string, error) {
+	if model == nil {
+		return nil, fmt.Errorf("model is nil")
+	}
+
+	// set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+	// get value of phones
+	phones, err := model.Phones.Value()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get value of Phones: %w", err)
+	}
+	// get value of balls
+	balls, err := model.Balls.Value()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get value of Balls: %w", err)
+	}
+	// get value of numrs
+	numrs, err := model.Numrs.Value()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get value of Numrs: %w", err)
+	}
+	// get value of comments
+	comments, err := model.Comments.Value()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get value of Comments: %w", err)
+	}
+
+	// Build INSERT query
+	query := t.queryBuilder.Insert("users").
+		Columns(
+			"name",
+			"age",
+			"email",
+			"last_name",
+			"created_at",
+			"updated_at",
+			"notification_settings",
+			"phones",
+			"balls",
+			"numrs",
+			"comments",
+		).
+		Values(
+			model.Name,
+			model.Age,
+			model.Email,
+			nullValue(model.LastName),
+			model.CreatedAt,
+			nullValue(model.UpdatedAt),
+			nullValue(model.NotificationSettings),
+			phones,
+			balls,
+			numrs,
+			comments,
+		)
+
+	// Add ON CONFLICT clause
+	query = query.Suffix("ON CONFLICT (id) DO UPDATE SET")
+
+	// Build UPDATE SET clause based on updateFields
+	updateSet := make([]string, 0, len(updateFields))
+	for _, field := range updateFields {
+		if field == "name" {
+			updateSet = append(updateSet, "name = EXCLUDED.name")
+		}
+		if field == "age" {
+			updateSet = append(updateSet, "age = EXCLUDED.age")
+		}
+		if field == "email" {
+			updateSet = append(updateSet, "email = EXCLUDED.email")
+		}
+		if field == "last_name" {
+			updateSet = append(updateSet, "last_name = EXCLUDED.last_name")
+		}
+		if field == "created_at" {
+			updateSet = append(updateSet, "created_at = EXCLUDED.created_at")
+		}
+		if field == "updated_at" {
+			updateSet = append(updateSet, "updated_at = EXCLUDED.updated_at")
+		}
+		if field == "notification_settings" {
+			updateSet = append(updateSet, "notification_settings = EXCLUDED.notification_settings")
+		}
+		if field == "phones" {
+			updateSet = append(updateSet, "phones = EXCLUDED.phones")
+		}
+		if field == "balls" {
+			updateSet = append(updateSet, "balls = EXCLUDED.balls")
+		}
+		if field == "numrs" {
+			updateSet = append(updateSet, "numrs = EXCLUDED.numrs")
+		}
+		if field == "comments" {
+			updateSet = append(updateSet, "comments = EXCLUDED.comments")
+		}
+	}
+
+	// Note: You can manually add updated_at to updateFields if needed
+
+	if len(updateSet) > 0 {
+		query = query.Suffix(strings.Join(updateSet, ", "))
+	}
+
+	// add RETURNING "id" to query
+	query = query.Suffix("RETURNING \"id\"")
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	var id string
+	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upsert User: %w", err)
 	}
 
 	if options.relations && model.Device != nil {

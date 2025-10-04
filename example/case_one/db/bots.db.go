@@ -7,6 +7,7 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"gopkg.in/guregu/null.v4"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -19,6 +20,7 @@ type botStorage struct {
 // BotCRUDOperations is an interface for managing the bots table.
 type BotCRUDOperations interface {
 	Create(ctx context.Context, model *Bot, opts ...Option) (*string, error)
+	Upsert(ctx context.Context, model *Bot, updateFields []string, opts ...Option) (*string, error)
 	BatchCreate(ctx context.Context, models []*Bot, opts ...Option) ([]string, error)
 	Update(ctx context.Context, id string, updateData *BotUpdate) error
 	DeleteById(ctx context.Context, id string, opts ...Option) error
@@ -466,6 +468,92 @@ func (t *botStorage) Create(ctx context.Context, model *Bot, opts ...Option) (*s
 		}
 
 		return nil, fmt.Errorf("failed to create Bot: %w", err)
+	}
+
+	return &id, nil
+}
+
+// Upsert creates a new Bot or updates existing one on conflict.
+func (t *botStorage) Upsert(ctx context.Context, model *Bot, updateFields []string, opts ...Option) (*string, error) {
+	if model == nil {
+		return nil, fmt.Errorf("model is nil")
+	}
+
+	// set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	// Build INSERT query
+	query := t.queryBuilder.Insert("bots").
+		Columns(
+			"user_id",
+			"name",
+			"token",
+			"is_publish",
+			"created_at",
+			"updated_at",
+			"deleted_at",
+		).
+		Values(
+			model.UserId,
+			model.Name,
+			model.Token,
+			model.IsPublish,
+			model.CreatedAt,
+			model.UpdatedAt,
+			nullValue(model.DeletedAt),
+		)
+
+	// Add ON CONFLICT clause
+	query = query.Suffix("ON CONFLICT (id) DO UPDATE SET")
+
+	// Build UPDATE SET clause based on updateFields
+	updateSet := make([]string, 0, len(updateFields))
+	for _, field := range updateFields {
+		if field == "user_id" {
+			updateSet = append(updateSet, "user_id = EXCLUDED.user_id")
+		}
+		if field == "name" {
+			updateSet = append(updateSet, "name = EXCLUDED.name")
+		}
+		if field == "token" {
+			updateSet = append(updateSet, "token = EXCLUDED.token")
+		}
+		if field == "is_publish" {
+			updateSet = append(updateSet, "is_publish = EXCLUDED.is_publish")
+		}
+		if field == "created_at" {
+			updateSet = append(updateSet, "created_at = EXCLUDED.created_at")
+		}
+		if field == "updated_at" {
+			updateSet = append(updateSet, "updated_at = EXCLUDED.updated_at")
+		}
+		if field == "deleted_at" {
+			updateSet = append(updateSet, "deleted_at = EXCLUDED.deleted_at")
+		}
+	}
+
+	// Note: You can manually add updated_at to updateFields if needed
+
+	if len(updateSet) > 0 {
+		query = query.Suffix(strings.Join(updateSet, ", "))
+	}
+
+	// add RETURNING "id" to query
+	query = query.Suffix("RETURNING \"id\"")
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	var id string
+	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upsert Bot: %w", err)
 	}
 
 	return &id, nil

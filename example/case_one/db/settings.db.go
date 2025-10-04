@@ -6,6 +6,7 @@ import (
 	"fmt"
 	sq "github.com/Masterminds/squirrel"
 	"math"
+	"strings"
 )
 
 // settingStorage is a struct for the "settings" table.
@@ -17,6 +18,7 @@ type settingStorage struct {
 // SettingCRUDOperations is an interface for managing the settings table.
 type SettingCRUDOperations interface {
 	Create(ctx context.Context, model *Setting, opts ...Option) (*int32, error)
+	Upsert(ctx context.Context, model *Setting, updateFields []string, opts ...Option) (*int32, error)
 	BatchCreate(ctx context.Context, models []*Setting, opts ...Option) ([]string, error)
 	Update(ctx context.Context, id int32, updateData *SettingUpdate) error
 	DeleteById(ctx context.Context, id int32, opts ...Option) error
@@ -382,6 +384,72 @@ func (t *settingStorage) Create(ctx context.Context, model *Setting, opts ...Opt
 		}
 
 		return nil, fmt.Errorf("failed to create Setting: %w", err)
+	}
+
+	return &id, nil
+}
+
+// Upsert creates a new Setting or updates existing one on conflict.
+func (t *settingStorage) Upsert(ctx context.Context, model *Setting, updateFields []string, opts ...Option) (*int32, error) {
+	if model == nil {
+		return nil, fmt.Errorf("model is nil")
+	}
+
+	// set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	// Build INSERT query
+	query := t.queryBuilder.Insert("settings").
+		Columns(
+			"name",
+			"value",
+			"user_id",
+		).
+		Values(
+			model.Name,
+			model.Value,
+			model.UserId,
+		)
+
+	// Add ON CONFLICT clause
+	query = query.Suffix("ON CONFLICT (id) DO UPDATE SET")
+
+	// Build UPDATE SET clause based on updateFields
+	updateSet := make([]string, 0, len(updateFields))
+	for _, field := range updateFields {
+		if field == "name" {
+			updateSet = append(updateSet, "name = EXCLUDED.name")
+		}
+		if field == "value" {
+			updateSet = append(updateSet, "value = EXCLUDED.value")
+		}
+		if field == "user_id" {
+			updateSet = append(updateSet, "user_id = EXCLUDED.user_id")
+		}
+	}
+
+	// Note: You can manually add updated_at to updateFields if needed
+
+	if len(updateSet) > 0 {
+		query = query.Suffix(strings.Join(updateSet, ", "))
+	}
+
+	// add RETURNING "id" to query
+	query = query.Suffix("RETURNING \"id\"")
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	var id int32
+	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upsert Setting: %w", err)
 	}
 
 	return &id, nil

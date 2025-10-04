@@ -6,6 +6,7 @@ import (
 	"fmt"
 	sq "github.com/Masterminds/squirrel"
 	"math"
+	"strings"
 )
 
 // deviceStorage is a struct for the "devices" table.
@@ -17,6 +18,7 @@ type deviceStorage struct {
 // DeviceCRUDOperations is an interface for managing the devices table.
 type DeviceCRUDOperations interface {
 	Create(ctx context.Context, model *Device, opts ...Option) error
+	Upsert(ctx context.Context, model *Device, updateFields []string, opts ...Option) error
 
 	BatchCreate(ctx context.Context, models []*Device, opts ...Option) error
 	Update(ctx context.Context, id int64, updateData *DeviceUpdate) error
@@ -262,6 +264,70 @@ func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Optio
 		}
 
 		return fmt.Errorf("failed to create Device: %w", err)
+	}
+
+	return nil
+}
+
+// Upsert creates a new Device or updates existing one on conflict.
+func (t *deviceStorage) Upsert(ctx context.Context, model *Device, updateFields []string, opts ...Option) error {
+	if model == nil {
+		return fmt.Errorf("model is nil")
+	}
+
+	// set default options
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	// Build INSERT query
+	query := t.queryBuilder.Insert("devices").
+		Columns(
+			"name",
+			"value",
+			"user_id",
+		).
+		Values(
+			model.Name,
+			model.Value,
+			model.UserId,
+		)
+
+	// Add ON CONFLICT clause
+	// For tables without primary key, you need to specify conflict target
+	// This is a placeholder - you may need to customize based on your unique constraints
+	query = query.Suffix("ON CONFLICT DO UPDATE SET")
+
+	// Build UPDATE SET clause based on updateFields
+	updateSet := make([]string, 0, len(updateFields))
+	for _, field := range updateFields {
+		if field == "name" {
+			updateSet = append(updateSet, "name = EXCLUDED.name")
+		}
+		if field == "value" {
+			updateSet = append(updateSet, "value = EXCLUDED.value")
+		}
+		if field == "user_id" {
+			updateSet = append(updateSet, "user_id = EXCLUDED.user_id")
+		}
+	}
+
+	// Note: You can manually add updated_at to updateFields if needed
+
+	if len(updateSet) > 0 {
+		query = query.Suffix(strings.Join(updateSet, ", "))
+	}
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build query: %w", err)
+	}
+	t.logQuery(ctx, sqlQuery, args...)
+
+	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return fmt.Errorf("failed to upsert Device: %w", err)
 	}
 
 	return nil
