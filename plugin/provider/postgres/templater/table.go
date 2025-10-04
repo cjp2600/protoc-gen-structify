@@ -390,10 +390,6 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 		// getDefaultValue returns the default value.
 		"getDefaultValue": func(f *descriptorpb.FieldDescriptorProto) string {
 			if opts := helperpkg.GetFieldOptions(f); opts != nil {
-				// Skip default value for UUID fields to allow manual ID assignment
-				if opts.GetUuid() {
-					return ""
-				}
 				return opts.GetDefault()
 			}
 			return ""
@@ -460,11 +456,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 
 		// isDefaultUUID returns true if the field is default uuid.
 		"isDefaultUUID": func(f *descriptorpb.FieldDescriptorProto) bool {
-			// Always return false for UUID fields to allow manual ID assignment
 			if opts := helperpkg.GetFieldOptions(f); opts != nil {
-				if opts.GetUuid() {
-					return false
-				}
 				if strings.Contains(opts.GetDefault(), "uuid_generate") {
 					return true
 				}
