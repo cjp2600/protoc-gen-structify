@@ -581,47 +581,17 @@ func (m *{{ $field.FieldType }}) Scan(src interface{}) error {
 		return nil
 	}
 
-	switch v := src.(type) {
-	case string:
-		// Handle PostgreSQL array format: {uuid1,uuid2,uuid3}
-		if v == "{}" {
-			*m = make({{ $field.Descriptor | fieldType }}, 0)
-			return nil
-		}
-		
-		// Remove curly braces and split by comma
-		v = strings.Trim(v, "{}")
-		if v == "" {
-			*m = make({{ $field.Descriptor | fieldType }}, 0)
-			return nil
-		}
-		
-		parts := strings.Split(v, ",")
-		result := make({{ $field.Descriptor | fieldType }}, len(parts))
-		for i, part := range parts {
-			result[i] = strings.TrimSpace(part)
-		}
-		*m = result
-		return nil
-	case []byte:
-		return m.Scan(string(v))
-	default:
-		return fmt.Errorf("cannot scan %T into {{ $field.FieldType }}", src)
+	var arr pq.StringArray
+	if err := arr.Scan(src); err != nil {
+		return err
 	}
+	*m = {{ $field.FieldType }}(arr)
+	return nil
 }
 
 // Value implements the driver.Valuer interface for UUID arrays.
 func (m {{ $field.FieldType }}) Value() (driver.Value, error) {
-	if m == nil || len(m) == 0 {
-		return "{}", nil
-	}
-	
-	// Format as PostgreSQL array: {uuid1,uuid2,uuid3}
-	var parts []string
-	for _, uuid := range m {
-		parts = append(parts, uuid)
-	}
-	return "{" + strings.Join(parts, ",") + "}", nil
+	return pq.Array([]string(m)).Value()
 }
 
 // Get returns the value of the field.
