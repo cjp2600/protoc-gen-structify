@@ -452,8 +452,11 @@ func (t *botStorage) Create(ctx context.Context, model *Bot, opts ...Option) (*s
 			nullValue(model.DeletedAt),
 		)
 
-	// add RETURNING "id" to query
-	query = query.Suffix("RETURNING \"id\"")
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO NOTHING RETURNING \"id\"")
+	} else {
+		query = query.Suffix("RETURNING \"id\"")
+	}
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -508,7 +511,11 @@ func (t *botStorage) Upsert(ctx context.Context, model *Bot, updateFields []stri
 		)
 
 	// Add ON CONFLICT clause
-	query = query.Suffix("ON CONFLICT (id) DO UPDATE SET")
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO UPDATE SET")
+	} else {
+		query = query.Suffix("ON CONFLICT (id) DO UPDATE SET")
+	}
 
 	// Build UPDATE SET clause based on updateFields
 	updateSet := make([]string, 0, len(updateFields))

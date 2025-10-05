@@ -254,8 +254,11 @@ func (t *prCacheStateStorage) Create(ctx context.Context, model *PrCacheState, o
 			model.LastAccessAt,
 		)
 
-	// add RETURNING "customer_id" to query
-	query = query.Suffix("RETURNING \"customer_id\"")
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO NOTHING RETURNING \"customer_id\"")
+	} else {
+		query = query.Suffix("RETURNING \"customer_id\"")
+	}
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -302,7 +305,11 @@ func (t *prCacheStateStorage) Upsert(ctx context.Context, model *PrCacheState, u
 		)
 
 	// Add ON CONFLICT clause
-	query = query.Suffix("ON CONFLICT (customer_id) DO UPDATE SET")
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO UPDATE SET")
+	} else {
+		query = query.Suffix("ON CONFLICT (customer_id) DO UPDATE SET")
+	}
 
 	// Build UPDATE SET clause based on updateFields
 	updateSet := make([]string, 0, len(updateFields))

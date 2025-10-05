@@ -740,8 +740,11 @@ func (t *userStorage) Create(ctx context.Context, model *User, opts ...Option) (
 			comments,
 		)
 
-	// add RETURNING "id" to query
-	query = query.Suffix("RETURNING \"id\"")
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO NOTHING RETURNING \"id\"")
+	} else {
+		query = query.Suffix("RETURNING \"id\"")
+	}
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
@@ -863,7 +866,11 @@ func (t *userStorage) Upsert(ctx context.Context, model *User, updateFields []st
 		)
 
 	// Add ON CONFLICT clause
-	query = query.Suffix("ON CONFLICT (id) DO UPDATE SET")
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO UPDATE SET")
+	} else {
+		query = query.Suffix("ON CONFLICT (id) DO UPDATE SET")
+	}
 
 	// Build UPDATE SET clause based on updateFields
 	updateSet := make([]string, 0, len(updateFields))

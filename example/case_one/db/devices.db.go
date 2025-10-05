@@ -251,6 +251,10 @@ func (t *deviceStorage) Create(ctx context.Context, model *Device, opts ...Optio
 			model.UserId,
 		)
 
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO NOTHING")
+	}
+
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
 		return fmt.Errorf("failed to build query: %w", err)
@@ -296,8 +300,12 @@ func (t *deviceStorage) Upsert(ctx context.Context, model *Device, updateFields 
 
 	// Add ON CONFLICT clause
 	// For tables without primary key, you need to specify conflict target
-	// This is a placeholder - you may need to customize based on your unique constraints
-	query = query.Suffix("ON CONFLICT DO UPDATE SET")
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO UPDATE SET")
+	} else {
+		// This is a placeholder - you may need to customize based on your unique constraints
+		query = query.Suffix("ON CONFLICT DO UPDATE SET")
+	}
 
 	// Build UPDATE SET clause based on updateFields
 	updateSet := make([]string, 0, len(updateFields))

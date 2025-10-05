@@ -939,8 +939,15 @@ const TableCreateMethodTemplate = `
 			{{- end}}
 	)
 	{{ if (hasID) }}
-		// add RETURNING "{{ getPrimaryKey.GetName }}" to query
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT ("+options.ignoreConflictField+") DO NOTHING RETURNING \"{{ getPrimaryKey.GetName }}\"")
+	} else {
 		query = query.Suffix("RETURNING \"{{ getPrimaryKey.GetName }}\"")
+	}
+	{{ else }}
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT ("+options.ignoreConflictField+") DO NOTHING")
+	}
 	{{ end }}
 
 	sqlQuery, args, err := query.ToSql()
@@ -1433,11 +1440,19 @@ const TableUpsertMethodTemplate = `
 
 	// Add ON CONFLICT clause
 	{{- if (hasPrimaryKey) }}
-	query = query.Suffix("ON CONFLICT ({{ getPrimaryKey.GetName }}) DO UPDATE SET")
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT ("+options.ignoreConflictField+") DO UPDATE SET")
+	} else {
+		query = query.Suffix("ON CONFLICT ({{ getPrimaryKey.GetName }}) DO UPDATE SET")
+	}
 	{{- else }}
 	// For tables without primary key, you need to specify conflict target
-	// This is a placeholder - you may need to customize based on your unique constraints
-	query = query.Suffix("ON CONFLICT DO UPDATE SET")
+	if options.ignoreConflictField != "" {
+		query = query.Suffix("ON CONFLICT ("+options.ignoreConflictField+") DO UPDATE SET")
+	} else {
+		// This is a placeholder - you may need to customize based on your unique constraints
+		query = query.Suffix("ON CONFLICT DO UPDATE SET")
+	}
 	{{- end }}
 
 	// Build UPDATE SET clause based on updateFields
