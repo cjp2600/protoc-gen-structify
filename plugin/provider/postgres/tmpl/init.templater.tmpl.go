@@ -793,7 +793,7 @@ func IsPgViolationError(err error) bool {
 // PgPrettyErr returns a pretty postgres error.
 func PgPrettyErr(err error) error {
 	if pgErr, ok := err.(*pq.Error); ok {
-		return fmt.Errorf(pgErr.Detail)
+		return fmt.Errorf("%s", pgErr.Detail)
 	}
 	return err
 }
