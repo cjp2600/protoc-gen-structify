@@ -298,15 +298,6 @@ func (t *deviceStorage) Upsert(ctx context.Context, model *Device, updateFields 
 			model.UserId,
 		)
 
-	// Add ON CONFLICT clause
-	// For tables without primary key, you need to specify conflict target
-	if options.ignoreConflictField != "" {
-		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO UPDATE SET")
-	} else {
-		// This is a placeholder - you may need to customize based on your unique constraints
-		query = query.Suffix("ON CONFLICT DO UPDATE SET")
-	}
-
 	// Build UPDATE SET clause based on updateFields
 	updateSet := make([]string, 0, len(updateFields))
 	for _, field := range updateFields {
@@ -323,9 +314,27 @@ func (t *deviceStorage) Upsert(ctx context.Context, model *Device, updateFields 
 
 	// Note: You can manually add updated_at to updateFields if needed
 
-	if len(updateSet) > 0 {
-		query = query.Suffix(strings.Join(updateSet, ", "))
+	// Build the complete suffix with ON CONFLICT, UPDATE SET, and RETURNING in one string
+	var suffixBuilder strings.Builder
+
+	// Add ON CONFLICT clause
+	// For tables without primary key, you need to specify conflict target
+	if options.ignoreConflictField != "" {
+		suffixBuilder.WriteString("ON CONFLICT (")
+		suffixBuilder.WriteString(options.ignoreConflictField)
+		suffixBuilder.WriteString(") DO UPDATE SET ")
+	} else {
+		// This is a placeholder - you may need to customize based on your unique constraints
+		suffixBuilder.WriteString("ON CONFLICT DO UPDATE SET ")
 	}
+
+	// Add UPDATE SET fields
+	if len(updateSet) > 0 {
+		suffixBuilder.WriteString(strings.Join(updateSet, ", "))
+	}
+
+	// Add the complete suffix once
+	query = query.Suffix(suffixBuilder.String())
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {

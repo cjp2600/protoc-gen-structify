@@ -304,13 +304,6 @@ func (t *prCacheStateStorage) Upsert(ctx context.Context, model *PrCacheState, u
 			model.LastAccessAt,
 		)
 
-	// Add ON CONFLICT clause
-	if options.ignoreConflictField != "" {
-		query = query.Suffix("ON CONFLICT (" + options.ignoreConflictField + ") DO UPDATE SET")
-	} else {
-		query = query.Suffix("ON CONFLICT (customer_id) DO UPDATE SET")
-	}
-
 	// Build UPDATE SET clause based on updateFields
 	updateSet := make([]string, 0, len(updateFields))
 	for _, field := range updateFields {
@@ -324,12 +317,28 @@ func (t *prCacheStateStorage) Upsert(ctx context.Context, model *PrCacheState, u
 
 	// Note: You can manually add updated_at to updateFields if needed
 
-	if len(updateSet) > 0 {
-		query = query.Suffix(strings.Join(updateSet, ", "))
+	// Build the complete suffix with ON CONFLICT, UPDATE SET, and RETURNING in one string
+	var suffixBuilder strings.Builder
+
+	// Add ON CONFLICT clause
+	if options.ignoreConflictField != "" {
+		suffixBuilder.WriteString("ON CONFLICT (")
+		suffixBuilder.WriteString(options.ignoreConflictField)
+		suffixBuilder.WriteString(") DO UPDATE SET ")
+	} else {
+		suffixBuilder.WriteString("ON CONFLICT (customer_id) DO UPDATE SET ")
 	}
 
-	// add RETURNING "customer_id" to query
-	query = query.Suffix("RETURNING \"customer_id\"")
+	// Add UPDATE SET fields
+	if len(updateSet) > 0 {
+		suffixBuilder.WriteString(strings.Join(updateSet, ", "))
+	}
+
+	// Add RETURNING clause
+	suffixBuilder.WriteString(" RETURNING \"customer_id\"")
+
+	// Add the complete suffix once
+	query = query.Suffix(suffixBuilder.String())
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {

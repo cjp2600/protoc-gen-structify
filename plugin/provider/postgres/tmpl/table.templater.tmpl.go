@@ -1438,23 +1438,6 @@ const TableUpsertMethodTemplate = `
 			{{- end}}
 		)
 
-	// Add ON CONFLICT clause
-	{{- if (hasPrimaryKey) }}
-	if options.ignoreConflictField != "" {
-		query = query.Suffix("ON CONFLICT ("+options.ignoreConflictField+") DO UPDATE SET")
-	} else {
-		query = query.Suffix("ON CONFLICT ({{ getPrimaryKey.GetName }}) DO UPDATE SET")
-	}
-	{{- else }}
-	// For tables without primary key, you need to specify conflict target
-	if options.ignoreConflictField != "" {
-		query = query.Suffix("ON CONFLICT ("+options.ignoreConflictField+") DO UPDATE SET")
-	} else {
-		// This is a placeholder - you may need to customize based on your unique constraints
-		query = query.Suffix("ON CONFLICT DO UPDATE SET")
-	}
-	{{- end }}
-
 	// Build UPDATE SET clause based on updateFields
 	updateSet := make([]string, 0, len(updateFields))
 	for _, field := range updateFields {
@@ -1475,14 +1458,42 @@ const TableUpsertMethodTemplate = `
 
 	// Note: You can manually add updated_at to updateFields if needed
 
+	// Build the complete suffix with ON CONFLICT, UPDATE SET, and RETURNING in one string
+	var suffixBuilder strings.Builder
+
+	// Add ON CONFLICT clause
+	{{- if (hasPrimaryKey) }}
+	if options.ignoreConflictField != "" {
+		suffixBuilder.WriteString("ON CONFLICT (")
+		suffixBuilder.WriteString(options.ignoreConflictField)
+		suffixBuilder.WriteString(") DO UPDATE SET ")
+	} else {
+		suffixBuilder.WriteString("ON CONFLICT ({{ getPrimaryKey.GetName }}) DO UPDATE SET ")
+	}
+	{{- else }}
+	// For tables without primary key, you need to specify conflict target
+	if options.ignoreConflictField != "" {
+		suffixBuilder.WriteString("ON CONFLICT (")
+		suffixBuilder.WriteString(options.ignoreConflictField)
+		suffixBuilder.WriteString(") DO UPDATE SET ")
+	} else {
+		// This is a placeholder - you may need to customize based on your unique constraints
+		suffixBuilder.WriteString("ON CONFLICT DO UPDATE SET ")
+	}
+	{{- end }}
+
+	// Add UPDATE SET fields
 	if len(updateSet) > 0 {
-		query = query.Suffix(strings.Join(updateSet, ", "))
+		suffixBuilder.WriteString(strings.Join(updateSet, ", "))
 	}
 
 	{{ if (hasID) }}
-	// add RETURNING "{{ getPrimaryKey.GetName }}" to query
-	query = query.Suffix("RETURNING \"{{ getPrimaryKey.GetName }}\"")
+	// Add RETURNING clause
+	suffixBuilder.WriteString(" RETURNING \"{{ getPrimaryKey.GetName }}\"")
 	{{ end }}
+
+	// Add the complete suffix once
+	query = query.Suffix(suffixBuilder.String())
 
 	sqlQuery, args, err := query.ToSql()
 	if err != nil {
