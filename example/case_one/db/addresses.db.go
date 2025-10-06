@@ -502,6 +502,9 @@ func (t *addressStorage) Upsert(ctx context.Context, model *Address, updateField
 	// Add UPDATE SET fields
 	if len(updateSet) > 0 {
 		suffixBuilder.WriteString(strings.Join(updateSet, ", "))
+	} else {
+		// Default update field to ensure ON CONFLICT is not empty (Postgres requires at least one field)
+		suffixBuilder.WriteString("street = EXCLUDED.street")
 	}
 
 	// Add RETURNING clause
@@ -517,9 +520,30 @@ func (t *addressStorage) Upsert(ctx context.Context, model *Address, updateField
 	t.logQuery(ctx, sqlQuery, args...)
 
 	var id string
-	err = t.DB(ctx, true).QueryRowContext(ctx, sqlQuery, args...).Scan(&id)
+
+	// safer path: use QueryContext instead of QueryRowContext
+	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to upsert Address: %w", err)
+		if strings.Contains(err.Error(), "unnamed prepared statement") {
+			t.logError(ctx, err, "retrying after unnamed prepared statement error")
+			rows, err = t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute upsert query: %w", err)
+		}
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		if scanErr := rows.Scan(&id); scanErr != nil {
+			return nil, fmt.Errorf("failed to scan returning id: %w", scanErr)
+		}
+	} else {
+		return nil, fmt.Errorf("no rows returned on upsert")
+	}
+
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", rowsErr)
 	}
 
 	return &id, nil

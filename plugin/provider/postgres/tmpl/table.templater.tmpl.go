@@ -1485,6 +1485,15 @@ const TableUpsertMethodTemplate = `
 	// Add UPDATE SET fields
 	if len(updateSet) > 0 {
 		suffixBuilder.WriteString(strings.Join(updateSet, ", "))
+	} else {
+		// Default update field to ensure ON CONFLICT is not empty (Postgres requires at least one field)
+		{{- $firstField := false }}
+		{{- range $index, $field := fields }}
+		{{- if and (not ($field | isRelation)) (not ($field | isAutoIncrement)) (not ($field | isDefaultUUID)) (not ($field | isPrimaryKey)) (not $firstField) }}
+		{{- $firstField = true }}
+		suffixBuilder.WriteString("{{ $field | sourceName }} = EXCLUDED.{{ $field | sourceName }}")
+		{{- end }}
+		{{- end }}
 	}
 
 	{{ if (hasID) }}
@@ -1501,11 +1510,39 @@ const TableUpsertMethodTemplate = `
 	}
 	t.logQuery(ctx, sqlQuery, args...)
 
-	{{ if (hasID) }}var id {{IDType}}
-	err = t.DB(ctx, true).QueryRowContext(ctx,sqlQuery, args...).Scan(&id) {{ else }} _, err = t.DB(ctx, true).ExecContext(ctx,sqlQuery, args...) {{ end }}
+	{{ if (hasID) }}
+	var id {{IDType}}
+
+	// safer path: use QueryContext instead of QueryRowContext
+	rows, err := t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
 	if err != nil {
-		{{ if (hasID) }} return nil, fmt.Errorf("failed to upsert {{ structureName }}: %w", err) {{ else }} return fmt.Errorf("failed to upsert {{ structureName }}: %w", err) {{ end }}
+		if strings.Contains(err.Error(), "unnamed prepared statement") {
+			t.logError(ctx, err, "retrying after unnamed prepared statement error")
+			rows, err = t.DB(ctx, true).QueryContext(ctx, sqlQuery, args...)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute upsert query: %w", err)
+		}
 	}
+	defer rows.Close()
+
+	if rows.Next() {
+		if scanErr := rows.Scan(&id); scanErr != nil {
+			return nil, fmt.Errorf("failed to scan returning id: %w", scanErr)
+		}
+	} else {
+		return nil, fmt.Errorf("no rows returned on upsert")
+	}
+
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", rowsErr)
+	}
+	{{ else }}
+	_, err = t.DB(ctx, true).ExecContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return fmt.Errorf("failed to upsert {{ structureName }}: %w", err)
+	}
+	{{ end }}
 
 	{{ if (hasID) }}
 	{{- range $index, $field := fields }}

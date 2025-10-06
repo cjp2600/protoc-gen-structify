@@ -331,6 +331,9 @@ func (t *deviceStorage) Upsert(ctx context.Context, model *Device, updateFields 
 	// Add UPDATE SET fields
 	if len(updateSet) > 0 {
 		suffixBuilder.WriteString(strings.Join(updateSet, ", "))
+	} else {
+		// Default update field to ensure ON CONFLICT is not empty (Postgres requires at least one field)
+		suffixBuilder.WriteString("name = EXCLUDED.name")
 	}
 
 	// Add the complete suffix once
