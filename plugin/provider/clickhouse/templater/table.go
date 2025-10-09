@@ -130,6 +130,7 @@ func (t *tableTemplater) Imports() *importpkg.ImportSet {
 		importpkg.ImportFMT,
 		importpkg.ImportSquirrel,
 		importpkg.ImportClickhouseDriver,
+		importpkg.ImportStrings,
 	)
 
 	tmp := t.BuildTemplate()

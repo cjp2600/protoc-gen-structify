@@ -141,6 +141,65 @@ option (structify.provider) = "sqlite";
 option (structify.provider) = "clickhouse";
 ```
 
+#### ClickHouse Query Settings and PREWHERE
+
+ClickHouse provider supports:
+1. **Query Settings** - fine-tune query performance and behavior
+2. **PREWHERE** - optimize filtering by reading selective columns first
+
+**PREWHERE usage:**
+```go
+// PREWHERE filters data before reading all columns
+results, err := storage.FindMany(ctx,
+    PrewhereBuilder(
+        CustomerIdEq(customerId),
+        OperationDateGTE(startDate),
+        OperationDateLT(endDate),
+    ),
+    SortBuilder(OperationDateOrderBy(true)),
+)
+```
+
+**Settings usage:**
+```go
+// Single setting
+results, err := storage.FindMany(ctx,
+    SettingBuilder(SettingMaxThreads, 4),
+)
+
+// Multiple settings
+settings := map[string]interface{}{
+    SettingOptimizeReadInOrder: 1,
+    SettingMaxThreads:          4,
+    SettingMaxMemoryUsage:      8000000000,
+}
+results, err := storage.FindMany(ctx,
+    SettingsBuilder(settings),
+)
+```
+
+**Combining PREWHERE, WHERE, and SETTINGS:**
+```go
+results, err := storage.FindMany(ctx,
+    PrewhereBuilder(CustomerIdEq(customerId)),    // Highly selective
+    FilterBuilder(StatusEq("completed")),         // Additional filtering
+    SettingsBuilder(map[string]interface{}{
+        SettingOptimizeReadInOrder: 1,
+        SettingMaxThreads:          4,
+    }),
+)
+```
+
+**Available setting constants:**
+- `SettingMaxThreads` - maximum number of threads for query execution
+- `SettingMaxMemoryUsage` - maximum memory usage
+- `SettingMaxExecutionTime` - maximum execution time in seconds
+- `SettingOptimizeReadInOrder` - optimize reading in sort order
+- `SettingForcePrimaryKey` - force use of primary key
+- And many more...
+
+For complete documentation and examples, see [CLICKHOUSE_SETTINGS.md](CLICKHOUSE_SETTINGS.md).
+
 ## Field Options
 
 ### Primary Key

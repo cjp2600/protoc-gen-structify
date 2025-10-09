@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	sq "github.com/Masterminds/squirrel"
+	"strings"
 )
 
 // postStorage is a struct for the "posts" table.
@@ -86,6 +87,92 @@ func (t *postStorage) logError(ctx context.Context, err error, message string) {
 	if t.config.ErrorLogMethod != nil {
 		t.config.ErrorLogMethod(ctx, err, message)
 	}
+}
+
+// applyPrewhere applies ClickHouse PREWHERE conditions to the query.
+// PREWHERE is executed before WHERE and reads only the specified columns,
+// which can significantly improve query performance.
+func (t *postStorage) applyPrewhere(query string, args []interface{}, conditions []FilterApplier) (string, []interface{}) {
+	if len(conditions) == 0 {
+		return query, args
+	}
+
+	// Build PREWHERE conditions using a temporary query builder
+	prewhereQuery := t.queryBuilder.Select("*")
+	for _, condition := range conditions {
+		prewhereQuery = condition.Apply(prewhereQuery)
+	}
+
+	// Extract WHERE clause from the temporary query
+	prewhereSql, prewhereArgs, err := prewhereQuery.ToSql()
+	if err != nil {
+		return query, args
+	}
+
+	// Extract just the WHERE part and convert it to PREWHERE
+	whereIdx := strings.Index(prewhereSql, "WHERE ")
+	if whereIdx == -1 {
+		return query, args
+	}
+
+	prewhereClause := strings.TrimPrefix(prewhereSql[whereIdx:], "WHERE ")
+
+	// Find the position to insert PREWHERE (after FROM and before WHERE/ORDER BY/LIMIT)
+	// Split query to find WHERE position
+	wherePos := strings.Index(query, " WHERE ")
+	orderPos := strings.Index(query, " ORDER BY ")
+	limitPos := strings.Index(query, " LIMIT ")
+
+	insertPos := len(query)
+	if wherePos != -1 {
+		insertPos = wherePos
+	} else if orderPos != -1 {
+		insertPos = orderPos
+	} else if limitPos != -1 {
+		insertPos = limitPos
+	}
+
+	// Insert PREWHERE clause
+	prewhereClauseFormatted := "\nPREWHERE " + prewhereClause
+	newQuery := query[:insertPos] + prewhereClauseFormatted + query[insertPos:]
+
+	// Prepend PREWHERE args to existing args
+	newArgs := append(prewhereArgs, args...)
+
+	return newQuery, newArgs
+}
+
+// applySettings applies ClickHouse SETTINGS to the query.
+func (t *postStorage) applySettings(query string, settings map[string]interface{}) string {
+	if len(settings) == 0 {
+		return query
+	}
+
+	var settingsParts []string
+	for key, value := range settings {
+		switch v := value.(type) {
+		case string:
+			settingsParts = append(settingsParts, fmt.Sprintf("%s = '%s'", key, v))
+		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+			settingsParts = append(settingsParts, fmt.Sprintf("%s = %v", key, v))
+		case float32, float64:
+			settingsParts = append(settingsParts, fmt.Sprintf("%s = %v", key, v))
+		case bool:
+			var boolValue int
+			if v {
+				boolValue = 1
+			}
+			settingsParts = append(settingsParts, fmt.Sprintf("%s = %d", key, boolValue))
+		default:
+			settingsParts = append(settingsParts, fmt.Sprintf("%s = %v", key, v))
+		}
+	}
+
+	if len(settingsParts) > 0 {
+		return query + "\nSETTINGS\n\t" + strings.Join(settingsParts, ",\n\t")
+	}
+
+	return query
 }
 
 // TableName returns the table name.
@@ -506,6 +593,12 @@ func (t *postStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 	// set default options
 	options := &Options{}
 
+	// collect settings from all builders
+	allSettings := make(map[string]interface{})
+
+	// collect PREWHERE conditions
+	var prewhereConditions []FilterApplier
+
 	// apply options from builder
 	for _, builder := range builders {
 		if builder == nil {
@@ -515,7 +608,10 @@ func (t *postStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 		// apply custom table name
 		query = builder.ApplyCustomTableName(query)
 
-		// apply filter options
+		// collect PREWHERE conditions (ClickHouse specific)
+		prewhereConditions = append(prewhereConditions, builder.prewhereOptions...)
+
+		// apply filter options (WHERE)
 		for _, option := range builder.filterOptions {
 			query = option.Apply(query)
 		}
@@ -542,6 +638,11 @@ func (t *postStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 		for _, o := range builder.options {
 			o(options)
 		}
+
+		// collect settings
+		for k, v := range builder.settings {
+			allSettings[k] = v
+		}
 	}
 
 	// execute query
@@ -549,6 +650,17 @@ func (t *postStorage) FindMany(ctx context.Context, builders ...*QueryBuilder) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to build query: %w", err)
 	}
+
+	// apply ClickHouse PREWHERE if present
+	if len(prewhereConditions) > 0 {
+		sqlQuery, args = t.applyPrewhere(sqlQuery, args, prewhereConditions)
+	}
+
+	// apply ClickHouse SETTINGS if present
+	if len(allSettings) > 0 {
+		sqlQuery = t.applySettings(sqlQuery, allSettings)
+	}
+
 	t.logQuery(ctx, sqlQuery, args...)
 
 	rows, err := t.DB().Query(ctx, sqlQuery, args...)
