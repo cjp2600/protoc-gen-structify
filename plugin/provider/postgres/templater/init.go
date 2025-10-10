@@ -98,7 +98,7 @@ func (i *initTemplater) Imports() *importpkg.ImportSet {
 	)
 
 	tmp := i.BuildTemplate()
-	if strings.Contains(tmp, "time.Time") {
+	if strings.Contains(tmp, "time.Time") || strings.Contains(tmp, "time.Now") {
 		is.Add(importpkg.ImportTime)
 	}
 	if strings.Contains(tmp, "strconv.") {

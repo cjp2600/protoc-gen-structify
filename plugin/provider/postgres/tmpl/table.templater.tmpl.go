@@ -1149,7 +1149,7 @@ func (t *{{ storageName | lowerCamelCase }}) DB(ctx context.Context, isWrite boo
 		if tx == nil {
 			t.logError(ctx, fmt.Errorf("transaction is nil"), "failed to get transaction from context")
 			// set default connection
-			return &dbWrapper{db: t.config.DB.DBWrite}
+			return &dbWrapper{db: t.config.DB.DBWrite, config: t.config}
 		}
 
 		return tx
@@ -1157,9 +1157,9 @@ func (t *{{ storageName | lowerCamelCase }}) DB(ctx context.Context, isWrite boo
 
 	// Use the appropriate connection based on the operation type.
 	if isWrite {
-		return &dbWrapper{db: t.config.DB.DBWrite}
+		return &dbWrapper{db: t.config.DB.DBWrite, config: t.config}
 	} else {
-		return &dbWrapper{db: t.config.DB.DBRead}
+		return &dbWrapper{db: t.config.DB.DBRead, config: t.config}
 	}
 }
 

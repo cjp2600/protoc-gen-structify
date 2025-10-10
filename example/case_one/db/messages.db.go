@@ -126,7 +126,7 @@ func (t *messageStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
 		if tx == nil {
 			t.logError(ctx, fmt.Errorf("transaction is nil"), "failed to get transaction from context")
 			// set default connection
-			return &dbWrapper{db: t.config.DB.DBWrite}
+			return &dbWrapper{db: t.config.DB.DBWrite, config: t.config}
 		}
 
 		return tx
@@ -134,9 +134,9 @@ func (t *messageStorage) DB(ctx context.Context, isWrite bool) QueryExecer {
 
 	// Use the appropriate connection based on the operation type.
 	if isWrite {
-		return &dbWrapper{db: t.config.DB.DBWrite}
+		return &dbWrapper{db: t.config.DB.DBWrite, config: t.config}
 	} else {
-		return &dbWrapper{db: t.config.DB.DBRead}
+		return &dbWrapper{db: t.config.DB.DBRead, config: t.config}
 	}
 }
 

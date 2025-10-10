@@ -750,20 +750,61 @@ type QueryExecer interface {
 // dbWrapper wraps *sql.DB to implement QueryExecer interface.
 type dbWrapper struct {
 	db *sql.DB
+	config *Config
+}
+
+// addNonce adds a unique SQL comment (nonce) to prevent prepared statement caching.
+// This is critical for PostgreSQL lib/pq driver to avoid "bind message supplies N parameters, 
+// but prepared statement requires M" errors when using dynamic batch inserts/upserts.
+func (w *dbWrapper) addNonce(query string) string {
+	upperQuery := strings.ToUpper(query)
+	
+	// Check if this is a batch insert/upsert query
+	// These queries often have dynamic parameter counts and need special handling
+	if strings.Contains(upperQuery, "VALUES (") || strings.Contains(upperQuery, "ON CONFLICT") {
+		// Use a distinct marker for batch operations to make them easier to identify in logs
+		nonce := fmt.Sprintf(" /*bulk:%d*/", time.Now().UnixNano())
+		return query + nonce
+	}
+
+	// For all other queries, add a standard nonce
+	nonce := fmt.Sprintf(" /*nonce:%d*/", time.Now().UnixNano())
+	return query + nonce
 }
 
 // QueryContext implements QueryExecer interface.
 func (w *dbWrapper) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	query = w.addNonce(query)
+	
+	// Log the query if logging is enabled
+	if w.config != nil && w.config.QueryLogMethod != nil {
+		w.config.QueryLogMethod(ctx, "sql", query, args...)
+	}
+	
 	return w.db.QueryContext(ctx, query, args...)
 }
 
 // ExecContext implements QueryExecer interface.
 func (w *dbWrapper) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	query = w.addNonce(query)
+	
+	// Log the query if logging is enabled
+	if w.config != nil && w.config.QueryLogMethod != nil {
+		w.config.QueryLogMethod(ctx, "sql", query, args...)
+	}
+	
 	return w.db.ExecContext(ctx, query, args...)
 }
 
 // QueryRowContext implements QueryExecer interface.
 func (w *dbWrapper) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	query = w.addNonce(query)
+	
+	// Log the query if logging is enabled
+	if w.config != nil && w.config.QueryLogMethod != nil {
+		w.config.QueryLogMethod(ctx, "sql", query, args...)
+	}
+	
 	return w.db.QueryRowContext(ctx, query, args...)
 }
 
