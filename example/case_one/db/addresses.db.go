@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	sq "github.com/Masterminds/squirrel"
-	"gopkg.in/guregu/null.v4"
 	"math"
 	"strings"
 	"time"
@@ -646,8 +645,8 @@ type AddressUpdate struct {
 	UserId *string
 	// Use regular pointer types for non-optional fields
 	CreatedAt *time.Time
-	// Use null types for optional fields
-	UpdatedAt null.Time
+	// Use regular pointer types for non-optional fields
+	UpdatedAt *time.Time
 }
 
 // Update updates an existing Address based on non-nil fields.
@@ -681,14 +680,9 @@ func (t *addressStorage) Update(ctx context.Context, id string, updateData *Addr
 	if updateData.CreatedAt != nil {
 		query = query.Set("created_at", *updateData.CreatedAt) // Dereference pointer value
 	}
-	// Handle fields that are optional and can be explicitly set to NULL
-	if updateData.UpdatedAt.Valid {
-		// Handle null.Time specifically
-		if updateData.UpdatedAt.Time.IsZero() {
-			query = query.Set("updated_at", nil) // Explicitly set NULL if time is zero
-		} else {
-			query = query.Set("updated_at", updateData.UpdatedAt.Time)
-		}
+	// Handle fields that are not optional using a nil check
+	if updateData.UpdatedAt != nil {
+		query = query.Set("updated_at", *updateData.UpdatedAt) // Dereference pointer value
 	}
 
 	query = query.Where("id = ?", id)

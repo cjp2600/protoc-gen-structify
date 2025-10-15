@@ -79,6 +79,7 @@ var (
 	ImportDb                = Import{"database/sql", ""}
 	ImportLibPQ             = Import{"github.com/lib/pq", "_"}
 	ImportLibPQWOAlias      = Import{"github.com/lib/pq", ""}
+	ImportPgxConn           = Import{"github.com/jackc/pgx/v5/pgconn", ""}
 	ImportLibSqlite3        = Import{"github.com/mattn/go-sqlite3", "_"}
 	ImportLibSqlite3WOAlias = Import{"github.com/mattn/go-sqlite3", ""}
 	ImportStrings           = Import{"strings", ""}

@@ -135,9 +135,6 @@ func (t *tableTemplater) Imports() *importpkg.ImportSet {
 	if strings.Contains(tmp, "time.Time") {
 		is.Add(importpkg.ImportTime)
 	}
-	if strings.Contains(tmp, "null.") {
-		is.Add(importpkg.ImportNull)
-	}
 	if strings.Contains(tmp, "sql.") {
 		is.Add(importpkg.ImportDb)
 	}
@@ -155,9 +152,6 @@ func (t *tableTemplater) Imports() *importpkg.ImportSet {
 	}
 	if strings.Contains(tmp, "strings.") {
 		is.Add(importpkg.ImportStrings)
-	}
-	if strings.Contains(tmp, "pq.") {
-		is.Add(importpkg.ImportLibPQWOAlias)
 	}
 
 	return is
@@ -229,41 +223,6 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			}
 
 			return ct
-		},
-
-		"fieldTypeToNullType": func(f *descriptorpb.FieldDescriptorProto) string {
-			// Check if the field is a single type and convert to null types if applicable.
-			if t.state.SingleTypes.ExistByName(f.GetName()) {
-				mds := t.state.SingleTypes.GetByName(f.GetName())
-				if mds != nil {
-					fieldType := mds.FieldType
-
-					// Convert basic Go types to their null equivalents.
-					switch fieldType {
-					case "string":
-						return "null.String"
-					case "int", "int32", "int64":
-						return "null.Int"
-					case "float32", "float64":
-						return "null.Float"
-					case "bool":
-						return "null.Bool"
-					case "[]byte":
-						return "null.Bytes"
-					}
-				}
-			}
-
-			// Check if the field is a nested message and convert accordingly.
-			if t.state.NestedMessages.IsJSON(f) {
-				md := t.state.NestedMessages.GetByFieldDescriptor(f)
-				if md != nil {
-					return "NullableJSON[" + helperpkg.TypePrefix(f, md.StructureName) + "]"
-				}
-			}
-
-			// Default conversion using helper package for other types.
-			return helperpkg.ConvertToNullType(f)
 		},
 
 		// comment returns the comment.

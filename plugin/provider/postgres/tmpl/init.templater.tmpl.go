@@ -581,17 +581,49 @@ func (m *{{ $field.FieldType }}) Scan(src interface{}) error {
 		return nil
 	}
 
-	var arr pq.StringArray
-	if err := arr.Scan(src); err != nil {
-		return err
+	// pgx/stdlib provides PostgreSQL array to Go slice conversion
+	// PostgreSQL arrays come as text in format: {elem1,elem2,elem3}
+	var str string
+	switch v := src.(type) {
+	case []byte:
+		str = string(v)
+	case string:
+		str = v
+	default:
+		return fmt.Errorf("unsupported type for array scan: %T", src)
 	}
-	*m = {{ $field.FieldType }}(arr)
+
+	// Parse PostgreSQL array format {elem1,elem2,...}
+	if len(str) < 2 || str[0] != '{' || str[len(str)-1] != '}' {
+		return fmt.Errorf("invalid array format: %s", str)
+	}
+
+	// Handle empty array
+	inner := str[1 : len(str)-1]
+	if inner == "" {
+		*m = {{ $field.FieldType }}([]string{})
+		return nil
+	}
+
+	// Simple split by comma (doesn't handle quoted strings with commas, but works for UUIDs)
+	parts := strings.Split(inner, ",")
+	*m = {{ $field.FieldType }}(parts)
 	return nil
 }
 
 // Value implements the driver.Valuer interface for UUID arrays.
 func (m {{ $field.FieldType }}) Value() (driver.Value, error) {
-	return pq.Array([]string(m)).Value()
+	// pgx/stdlib accepts PostgreSQL text array format: {elem1,elem2,elem3}
+	if m == nil {
+		return nil, nil
+	}
+
+	if len(m) == 0 {
+		return "{}", nil
+	}
+
+	// Build PostgreSQL array format
+	return "{" + strings.Join([]string(m), ",") + "}", nil
 }
 
 // Get returns the value of the field.
@@ -810,8 +842,8 @@ func (w *dbWrapper) QueryRowContext(ctx context.Context, query string, args ...i
 
 // IsPgCheckViolation returns true if the error is a postgres check violation.
 func IsPgUniqueViolation(err error) bool {
-	pgErr, ok := err.(*pq.Error)
-	if !ok {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
 		return false
 	}
 
@@ -820,8 +852,8 @@ func IsPgUniqueViolation(err error) bool {
 
 // IsPgCheckViolation returns true if the error is a postgres check violation.
 func IsPgViolationError(err error) bool {
-	pgErr, ok := err.(*pq.Error)
-	if !ok {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
 		return false
 	}
 	
@@ -833,7 +865,8 @@ func IsPgViolationError(err error) bool {
 
 // PgPrettyErr returns a pretty postgres error.
 func PgPrettyErr(err error) error {
-	if pgErr, ok := err.(*pq.Error); ok {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
 		return fmt.Errorf("%s", pgErr.Detail)
 	}
 	return err
@@ -870,7 +903,7 @@ func Dsn(host string, port int, user, password, dbname, sslmode string, maxOpenC
 
 // Open opens a database connection.
 func Open(dsn string) (*sql.DB, error) {
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}

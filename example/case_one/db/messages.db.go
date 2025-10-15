@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	sq "github.com/Masterminds/squirrel"
-	"gopkg.in/guregu/null.v4"
 	"math"
 	"strings"
 )
@@ -810,8 +809,8 @@ type MessageUpdate struct {
 	FromUserId *string
 	// Use regular pointer types for non-optional fields
 	ToUserId *string
-	// Use null types for optional fields
-	BotId null.String
+	// Use regular pointer types for non-optional fields
+	BotId *string
 }
 
 // Update updates an existing Message based on non-nil fields.
@@ -829,14 +828,9 @@ func (t *messageStorage) Update(ctx context.Context, id string, updateData *Mess
 	if updateData.ToUserId != nil {
 		query = query.Set("to_user_id", *updateData.ToUserId) // Dereference pointer value
 	}
-	// Handle fields that are optional and can be explicitly set to NULL
-	if updateData.BotId.Valid {
-		// Handle null.String specifically
-		if updateData.BotId.String == "" {
-			query = query.Set("bot_id", nil) // Explicitly set NULL for empty string
-		} else {
-			query = query.Set("bot_id", updateData.BotId.ValueOrZero())
-		}
+	// Handle fields that are not optional using a nil check
+	if updateData.BotId != nil {
+		query = query.Set("bot_id", *updateData.BotId) // Dereference pointer value
 	}
 
 	query = query.Where("id = ?", id)

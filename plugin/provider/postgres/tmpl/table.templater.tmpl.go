@@ -630,13 +630,8 @@ type {{ structureName }}Update struct {
 	{{- if not ($field | isRelation) }}
 	{{- if not ($field | isAutoIncrement) }}
 	{{- if not ($field | isPrimary) }}
-	{{- if ($field | isCurrentOptional) }}
-		// Use null types for optional fields
-		{{ $field | fieldName }} {{ $field | fieldTypeToNullType }}
-	{{- else }}
 		// Use regular pointer types for non-optional fields
 		{{ $field | fieldName }} {{- if not ($field | findPointer) }}*{{- end }}{{ $field | fieldType }}
-	{{- end }}
 	{{- end }}
 	{{- end }}
 	{{- end }}
@@ -655,44 +650,6 @@ func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{ID
 	{{- if not ($field | isRelation) }}
 	{{- if not ($field | isAutoIncrement) }}
 	{{- if not ($field | isPrimary) }}
-	{{- if ($field | isCurrentOptional) }}
-		// Handle fields that are optional and can be explicitly set to NULL
-		if updateData.{{ $field | fieldName }}.Valid {
-			{{- if (eq ($field | fieldTypeToNullType) "null.String") }}
-			// Handle null.String specifically
-			if updateData.{{ $field | fieldName }}.String == "" {
-				query = query.Set("{{ $field | sourceName }}", nil) // Explicitly set NULL for empty string
-			} else {
-				query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.ValueOrZero())
-			}
-			{{- else if (eq ($field | fieldTypeToNullType) "null.Int") }}
-			// Handle null.Int specifically
-			query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.ValueOrZero())
-			{{- else if (eq ($field | fieldTypeToNullType) "null.Float") }}
-			// Handle null.Float specifically
-			query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.ValueOrZero())
-			{{- else if (eq ($field | fieldTypeToNullType) "null.Bool") }}
-			// Handle null.Bool specifically
-			query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.ValueOrZero())
-			{{- else if (eq ($field | fieldTypeToNullType) "null.Time") }}
-			// Handle null.Time specifically
-			if updateData.{{ $field | fieldName }}.Time.IsZero() {
-				query = query.Set("{{ $field | sourceName }}", nil) // Explicitly set NULL if time is zero
-			} else {
-				query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.Time)
-			}
-			{{- else if ($field | isJSON) }}
-			if updateData.{{ $field | fieldName }}.Data == nil {
-				query = query.Set("{{ $field | sourceName }}", nil) // Explicitly set NULL
-			} else {
-				query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }}.Data)
-			}
-			{{- else }}
-			// Handle other null types
-			// ... add more specific handling here if needed
-			{{- end }}
-		}
-	{{- else }}
 		// Handle fields that are not optional using a nil check
 		if updateData.{{ $field | fieldName }} != nil {
 			{{- if ($field | isRepeated) }}
@@ -706,7 +663,6 @@ func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{ID
 			query = query.Set("{{ $field | sourceName }}", *updateData.{{ $field | fieldName }}) // Dereference pointer value
 			{{- end }}
 		}
-	{{- end }}
 	{{- end }}
 	{{- end }}
 	{{- end }}

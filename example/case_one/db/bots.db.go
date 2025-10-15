@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	sq "github.com/Masterminds/squirrel"
-	"gopkg.in/guregu/null.v4"
 	"math"
 	"strings"
 	"time"
@@ -697,8 +696,8 @@ type BotUpdate struct {
 	CreatedAt *time.Time
 	// Use regular pointer types for non-optional fields
 	UpdatedAt *time.Time
-	// Use null types for optional fields
-	DeletedAt null.Time
+	// Use regular pointer types for non-optional fields
+	DeletedAt *time.Time
 }
 
 // Update updates an existing Bot based on non-nil fields.
@@ -732,14 +731,9 @@ func (t *botStorage) Update(ctx context.Context, id string, updateData *BotUpdat
 	if updateData.UpdatedAt != nil {
 		query = query.Set("updated_at", *updateData.UpdatedAt) // Dereference pointer value
 	}
-	// Handle fields that are optional and can be explicitly set to NULL
-	if updateData.DeletedAt.Valid {
-		// Handle null.Time specifically
-		if updateData.DeletedAt.Time.IsZero() {
-			query = query.Set("deleted_at", nil) // Explicitly set NULL if time is zero
-		} else {
-			query = query.Set("deleted_at", updateData.DeletedAt.Time)
-		}
+	// Handle fields that are not optional using a nil check
+	if updateData.DeletedAt != nil {
+		query = query.Set("deleted_at", *updateData.DeletedAt) // Dereference pointer value
 	}
 
 	query = query.Where("id = ?", id)

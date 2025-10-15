@@ -122,8 +122,8 @@ func (i *initTemplater) Imports() *importpkg.ImportSet {
 	if strings.Contains(tmp, "strings.") {
 		is.Add(importpkg.ImportStrings)
 	}
-	if strings.Contains(tmp, "pq.") {
-		is.Add(importpkg.ImportLibPQWOAlias)
+	if strings.Contains(tmp, "pgconn.") {
+		is.Add(importpkg.ImportPgxConn)
 	}
 
 	return is

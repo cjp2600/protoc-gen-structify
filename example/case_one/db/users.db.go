@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	sq "github.com/Masterminds/squirrel"
-	"gopkg.in/guregu/null.v4"
 	"math"
 	"strings"
 	"time"
@@ -1125,14 +1124,14 @@ type UserUpdate struct {
 	Age *int32
 	// Use regular pointer types for non-optional fields
 	Email *string
-	// Use null types for optional fields
-	LastName null.String
+	// Use regular pointer types for non-optional fields
+	LastName *string
 	// Use regular pointer types for non-optional fields
 	CreatedAt *time.Time
-	// Use null types for optional fields
-	UpdatedAt null.Time
-	// Use null types for optional fields
-	NotificationSettings NullableJSON[*UserNotificationSetting]
+	// Use regular pointer types for non-optional fields
+	UpdatedAt *time.Time
+	// Use regular pointer types for non-optional fields
+	NotificationSettings *UserNotificationSetting
 	// Use regular pointer types for non-optional fields
 	Phones *UserPhonesRepeated
 	// Use regular pointer types for non-optional fields
@@ -1162,35 +1161,21 @@ func (t *userStorage) Update(ctx context.Context, id string, updateData *UserUpd
 	if updateData.Email != nil {
 		query = query.Set("email", *updateData.Email) // Dereference pointer value
 	}
-	// Handle fields that are optional and can be explicitly set to NULL
-	if updateData.LastName.Valid {
-		// Handle null.String specifically
-		if updateData.LastName.String == "" {
-			query = query.Set("last_name", nil) // Explicitly set NULL for empty string
-		} else {
-			query = query.Set("last_name", updateData.LastName.ValueOrZero())
-		}
+	// Handle fields that are not optional using a nil check
+	if updateData.LastName != nil {
+		query = query.Set("last_name", *updateData.LastName) // Dereference pointer value
 	}
 	// Handle fields that are not optional using a nil check
 	if updateData.CreatedAt != nil {
 		query = query.Set("created_at", *updateData.CreatedAt) // Dereference pointer value
 	}
-	// Handle fields that are optional and can be explicitly set to NULL
-	if updateData.UpdatedAt.Valid {
-		// Handle null.Time specifically
-		if updateData.UpdatedAt.Time.IsZero() {
-			query = query.Set("updated_at", nil) // Explicitly set NULL if time is zero
-		} else {
-			query = query.Set("updated_at", updateData.UpdatedAt.Time)
-		}
+	// Handle fields that are not optional using a nil check
+	if updateData.UpdatedAt != nil {
+		query = query.Set("updated_at", *updateData.UpdatedAt) // Dereference pointer value
 	}
-	// Handle fields that are optional and can be explicitly set to NULL
-	if updateData.NotificationSettings.Valid {
-		if updateData.NotificationSettings.Data == nil {
-			query = query.Set("notification_settings", nil) // Explicitly set NULL
-		} else {
-			query = query.Set("notification_settings", updateData.NotificationSettings.Data)
-		}
+	// Handle fields that are not optional using a nil check
+	if updateData.NotificationSettings != nil {
+		query = query.Set("notification_settings", *updateData.NotificationSettings) // Dereference pointer value
 	}
 	// Handle fields that are not optional using a nil check
 	if updateData.Phones != nil {
