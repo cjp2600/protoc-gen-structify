@@ -330,7 +330,7 @@ func (j SingleTypes) String() string {
 // ExistByName checks if the given name exists in the Messages.
 func (j SingleTypes) ExistByName(name string) bool {
 	for k, _ := range j {
-		if strings.Contains(k, "::"+name) {
+		if strings.HasSuffix(k, "::"+name) {
 			return true
 		}
 	}
@@ -340,7 +340,7 @@ func (j SingleTypes) ExistByName(name string) bool {
 // GetByName returns the SingleType by the given name.
 func (j SingleTypes) GetByName(name string) *SingleType {
 	for k, v := range j {
-		if strings.Contains(k, "::"+name) {
+		if strings.HasSuffix(k, "::"+name) {
 			return &v
 		}
 	}
