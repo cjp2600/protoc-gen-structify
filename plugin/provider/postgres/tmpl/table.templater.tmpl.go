@@ -789,7 +789,12 @@ func (t *{{ storageName | lowerCamelCase }}) BatchCreate(ctx context.Context, mo
 	if options.ignoreConflictField != "" {
 		query = query.Suffix("ON CONFLICT ("+options.ignoreConflictField+") DO NOTHING RETURNING \"{{ getPrimaryKey.GetName }}\"")
 	} else {
+		{{- if (hasCompositePrimaryKey) }}
+		// Composite primary key: using first PK field for RETURNING
 		query = query.Suffix("RETURNING \"{{ getPrimaryKey.GetName }}\"")
+		{{- else }}
+		query = query.Suffix("RETURNING \"{{ getPrimaryKey.GetName }}\"")
+		{{- end }}
 	}
 	{{ else }}
 	if options.ignoreConflictField != "" {
@@ -898,7 +903,12 @@ const TableCreateMethodTemplate = `
 	if options.ignoreConflictField != "" {
 		query = query.Suffix("ON CONFLICT ("+options.ignoreConflictField+") DO NOTHING RETURNING \"{{ getPrimaryKey.GetName }}\"")
 	} else {
+		{{- if (hasCompositePrimaryKey) }}
+		// Composite primary key: using first PK field for RETURNING
 		query = query.Suffix("RETURNING \"{{ getPrimaryKey.GetName }}\"")
+		{{- else }}
+		query = query.Suffix("RETURNING \"{{ getPrimaryKey.GetName }}\"")
+		{{- end }}
 	}
 	{{ else }}
 	if options.ignoreConflictField != "" {
@@ -1132,9 +1142,14 @@ func (t *{{ storageName | lowerCamelCase }}) CreateTable(ctx context.Context) er
 		CREATE TABLE IF NOT EXISTS {{ tableName }} (
 		{{- range $index, $field := fields }}
 		{{- if not ($field | isRelation) }}
-		{{ $field | sourceName }} {{if ($field | isAutoIncrement) }} SERIAL{{else}}{{ $field | postgresType }}{{end}}{{if $field | isPrimaryKey }} PRIMARY KEY{{end}}{{ if and (isNotNull $field) (not (isAutoIncrement $field)) }} NOT NULL{{ end }}{{if ($field | getDefaultValue) }} DEFAULT {{$field | getDefaultValue}}{{end}}{{if not ( $field | isLastField )}},{{end}}
+		{{ $field | sourceName }} {{if ($field | isAutoIncrement) }} SERIAL{{else}}{{ $field | postgresType }}{{end}}{{if and ($field | isPrimaryKey) (not (hasCompositePrimaryKey)) }} PRIMARY KEY{{end}}{{ if and (isNotNull $field) (not (isAutoIncrement $field)) }} NOT NULL{{ end }}{{if ($field | getDefaultValue) }} DEFAULT {{$field | getDefaultValue}}{{end}}{{if not ( $field | isLastField )}},{{end}}
 		{{- end}}
-		{{- end}});
+		{{- end}}
+		{{- if (hasCompositePrimaryKey) }}
+		,
+		PRIMARY KEY ({{ range $index, $pk := getPrimaryKeys }}{{ if $index }}, {{ end }}{{ $pk | sourceName }}{{ end }})
+		{{- end }}
+		);
 		-- Other entities
 		{{- if (comment) }}
 		COMMENT ON TABLE {{ tableName }} IS '{{ comment }}';
@@ -1424,7 +1439,12 @@ const TableUpsertMethodTemplate = `
 		suffixBuilder.WriteString(options.ignoreConflictField)
 		suffixBuilder.WriteString(") DO UPDATE SET ")
 	} else {
+		{{- if (hasCompositePrimaryKey) }}
+		// Composite primary key: {{ range $index, $pk := getPrimaryKeys }}{{ if $index }} + {{ end }}{{ $pk.GetName }}{{ end }}
+		suffixBuilder.WriteString("ON CONFLICT ({{ range $index, $pk := getPrimaryKeys }}{{ if $index }}, {{ end }}{{ $pk.GetName }}{{ end }}) DO UPDATE SET ")
+		{{- else }}
 		suffixBuilder.WriteString("ON CONFLICT ({{ getPrimaryKey.GetName }}) DO UPDATE SET ")
+		{{- end }}
 	}
 	{{- else }}
 	// For tables without primary key, you need to specify conflict target

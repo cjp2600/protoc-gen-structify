@@ -388,6 +388,30 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			return nil
 		},
 
+		"getPrimaryKeys": func() []*descriptorpb.FieldDescriptorProto {
+			var pks []*descriptorpb.FieldDescriptorProto
+			for _, f := range t.message.GetField() {
+				if opts := helperpkg.GetFieldOptions(f); opts != nil {
+					if opts.GetPrimaryKey() {
+						pks = append(pks, f)
+					}
+				}
+			}
+			return pks
+		},
+
+		"hasCompositePrimaryKey": func() bool {
+			count := 0
+			for _, f := range t.message.GetField() {
+				if opts := helperpkg.GetFieldOptions(f); opts != nil {
+					if opts.GetPrimaryKey() {
+						count++
+					}
+				}
+			}
+			return count > 1
+		},
+
 		// isPointer returns true if the field is pointer.
 		"findPointer": func(f *descriptorpb.FieldDescriptorProto) bool {
 			return helperpkg.IsOptional(f)
