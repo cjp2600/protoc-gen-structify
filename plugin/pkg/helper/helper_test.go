@@ -24,6 +24,7 @@ func TestGoTypeToPostgresType(t *testing.T) {
 		{"float32", "REAL"},
 		{"float64", "DOUBLE PRECISION"},
 		{"time.Time", "TIMESTAMP"},
+		{"structpb.Struct", "JSONB"},
 		{"[]byte", "BYTEA"},
 		{"CustomType", "TEXT"},
 		// Array types
@@ -164,6 +165,7 @@ func TestClearPointer(t *testing.T) {
 func TestConvertType(t *testing.T) {
 	// Test cases representing different field types
 	tm := "google.protobuf.Timestamp"
+	sm := "google.protobuf.Struct"
 	tests := []struct {
 		field    *descriptor.FieldDescriptorProto // Input field descriptor
 		expected string                           // Expected converted type
@@ -262,6 +264,13 @@ func TestConvertType(t *testing.T) {
 			},
 			expected: "time.Time",
 		},
+		{
+			field: &descriptor.FieldDescriptorProto{
+				Type:     descriptor.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
+				TypeName: &sm,
+			},
+			expected: "structpb.Struct",
+		},
 	}
 
 	// Iterate through each test case
@@ -274,6 +283,16 @@ func TestConvertType(t *testing.T) {
 			assert.Equal(t, test.expected, result)
 		})
 	}
+}
+
+func TestIsGoogleProtobufTypeHelpers(t *testing.T) {
+	assert.True(t, IsGoogleProtobufType(".google.protobuf.Timestamp"))
+	assert.True(t, IsGoogleProtobufType("google.protobuf.Struct"))
+	assert.False(t, IsGoogleProtobufType(".test.User"))
+
+	assert.True(t, IsGoogleProtobufTypeName(".google.protobuf.Struct", "Struct"))
+	assert.False(t, IsGoogleProtobufTypeName(".google.protobuf.Timestamp", "Struct"))
+	assert.Equal(t, "Timestamp", DetectProtoMessageName(".google.protobuf.Timestamp"))
 }
 
 func TestTypePrefix(t *testing.T) {

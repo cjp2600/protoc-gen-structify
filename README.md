@@ -222,6 +222,19 @@ int64 user_id = 1 [(structify.field).foreign_key = "users.id"];
 string description = 1 [(structify.field).nullable = true];
 ```
 
+### Google Struct (JSONB)
+```protobuf
+import "google/protobuf/struct.proto";
+
+google.protobuf.Struct metadata = 1;
+```
+
+For PostgreSQL provider this field is generated as:
+
+```go
+Metadata structpb.Struct
+```
+
 ## Relation Options
 
 ### One-to-Many

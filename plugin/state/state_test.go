@@ -424,3 +424,14 @@ func TestGetLinkedStructName(t *testing.T) {
 		})
 	}
 }
+
+func TestNestedMessages_CheckIsRelation_GoogleStruct(t *testing.T) {
+	nested := NestedMessages{}
+	field := &descriptor.FieldDescriptorProto{
+		Name:     proto.String("payload"),
+		Type:     descriptor.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
+		TypeName: proto.String(".google.protobuf.Struct"),
+	}
+
+	assert.False(t, nested.CheckIsRelation(field))
+}

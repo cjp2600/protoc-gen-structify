@@ -153,6 +153,9 @@ func (t *tableTemplater) Imports() *importpkg.ImportSet {
 	if strings.Contains(tmp, "strings.") {
 		is.Add(importpkg.ImportStrings)
 	}
+	if strings.Contains(tmp, "structpb.") {
+		is.Add(importpkg.ImportStructPB)
+	}
 
 	return is
 }
@@ -313,9 +316,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
 				return true
 			case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
-				parts := strings.Split(f.GetTypeName(), ".")
-				typName := parts[len(parts)-1]
-				if typName == "Timestamp" && parts[len(parts)-2] == "protobuf" && parts[len(parts)-3] == "google" {
+				if helperpkg.IsGoogleProtobufTypeName(f.GetTypeName(), "Timestamp") {
 					return true
 				}
 			}
@@ -340,9 +341,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
 				return true
 			case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
-				parts := strings.Split(f.GetTypeName(), ".")
-				typName := parts[len(parts)-1]
-				if typName == "Timestamp" && parts[len(parts)-2] == "protobuf" && parts[len(parts)-3] == "google" {
+				if helperpkg.IsGoogleProtobufTypeName(f.GetTypeName(), "Timestamp") {
 					return true
 				}
 			}

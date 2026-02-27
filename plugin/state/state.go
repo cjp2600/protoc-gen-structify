@@ -549,13 +549,8 @@ func (t NestedMessages) CheckIsRelation(f *descriptorpb.FieldDescriptorProto) bo
 
 	// Check if it is a message type
 	if *f.Type == descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
-		// If it is, check if it is a system message type
-		typ := f.GetTypeName()
-		parts := strings.Split(typ, ".")
-		typName := parts[len(parts)-1]
-
-		// Exclude system singleTypes such as google.protobuf.Timestamp
-		if typName == "Timestamp" && parts[len(parts)-2] == "protobuf" && parts[len(parts)-3] == "google" {
+		// Exclude system message types such as google.protobuf.Timestamp and google.protobuf.Struct.
+		if helperpkg.IsGoogleProtobufType(f.GetTypeName()) {
 			return false
 		}
 

@@ -3,6 +3,7 @@ package templater
 import (
 	"fmt"
 	"log"
+	"strings"
 	"text/template"
 
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -101,6 +102,10 @@ func (i *initTemplater) Imports() *importpkg.ImportSet {
 
 	if i.IncludeConnection {
 		is.Add(importpkg.ImportClickhouse)
+	}
+	tmp := i.BuildTemplate()
+	if strings.Contains(tmp, "structpb.") {
+		is.Add(importpkg.ImportStructPB)
 	}
 
 	return is

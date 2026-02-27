@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 import "github.com/cjp2600/protoc-gen-structify/plugin/options/structify.proto";
+import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
 package db;
@@ -149,6 +150,7 @@ message User {
   repeated int32 balls = 12; // json field
   repeated Numr numrs = 13; // json field
   repeated Comment comments = 14; // json field
+  google.protobuf.Struct metadata = 17; // json field (mapped to structpb.Struct / JSONB)
 
   option (structify.opts) = {
     table: "users"

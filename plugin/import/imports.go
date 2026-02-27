@@ -96,6 +96,7 @@ var (
 	ImportJson              = Import{"encoding/json", ""}
 	ImportSQLDriver         = Import{"database/sql/driver", ""}
 	ImportGoogleUUID        = Import{"github.com/google/uuid", ""}
+	ImportStructPB          = Import{"google.golang.org/protobuf/types/known/structpb", ""}
 	ImportClickhouse        = Import{"github.com/ClickHouse/clickhouse-go/v2", ""}
 	ImportClickhouseDriver  = Import{"github.com/ClickHouse/clickhouse-go/v2/lib/driver", ""}
 )

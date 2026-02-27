@@ -125,6 +125,9 @@ func (i *initTemplater) Imports() *importpkg.ImportSet {
 	if strings.Contains(tmp, "pgconn.") {
 		is.Add(importpkg.ImportPgxConn)
 	}
+	if strings.Contains(tmp, "structpb.") {
+		is.Add(importpkg.ImportStructPB)
+	}
 
 	return is
 }

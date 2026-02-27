@@ -286,6 +286,8 @@ func GoTypeToPostgresType(goType string) string {
 		return "DOUBLE PRECISION"
 	case "time.Time":
 		return "TIMESTAMP"
+	case "structpb.Struct":
+		return "JSONB"
 	case "[]byte":
 		return "BYTEA"
 	// TODO: Add cases for other singleTypes as needed
@@ -331,6 +333,29 @@ func ClearPointer(s string) string {
 	return s
 }
 
+// DetectProtoMessageName returns a protobuf message name from a type name.
+func DetectProtoMessageName(typeName string) string {
+	parts := strings.Split(strings.TrimPrefix(typeName, "."), ".")
+	if len(parts) == 0 {
+		return ""
+	}
+	return parts[len(parts)-1]
+}
+
+// IsGoogleProtobufType returns true if typeName belongs to google.protobuf package.
+func IsGoogleProtobufType(typeName string) bool {
+	parts := strings.Split(strings.TrimPrefix(typeName, "."), ".")
+	if len(parts) < 3 {
+		return false
+	}
+	return parts[0] == "google" && parts[1] == "protobuf"
+}
+
+// IsGoogleProtobufTypeName returns true if typeName is google.protobuf.<messageName>.
+func IsGoogleProtobufTypeName(typeName string, messageName string) bool {
+	return IsGoogleProtobufType(typeName) && DetectProtoMessageName(typeName) == messageName
+}
+
 func ConvertTypeSQLite(field *descriptorpb.FieldDescriptorProto) string {
 	converted := ConvertType(field)
 	if strings.Contains(converted, "time.Time") {
@@ -366,10 +391,11 @@ func ConvertToNullType(field *descriptorpb.FieldDescriptorProto) string {
 	case descriptorpb.FieldDescriptorProto_TYPE_GROUP:
 		typ = "error" // Group type is deprecated and not recommended.
 	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
-		parts := strings.Split(typ, ".")
-		typName := parts[len(parts)-1]
-		if typName == "Timestamp" && parts[len(parts)-2] == "protobuf" && parts[len(parts)-3] == "google" {
+		typName := DetectProtoMessageName(typ)
+		if IsGoogleProtobufTypeName(typ, "Timestamp") {
 			typ = "null.Time"
+		} else if IsGoogleProtobufTypeName(typ, "Struct") {
+			typ = "null.String"
 		} else {
 			typ = "null." + UpperCamelCase(typName)
 		}
@@ -423,10 +449,11 @@ func ConvertType(field *descriptorpb.FieldDescriptorProto) string {
 	case descriptorpb.FieldDescriptorProto_TYPE_GROUP:
 		typ = "error" // Group type is deprecated and not recommended.
 	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
-		parts := strings.Split(typ, ".")
-		typName := parts[len(parts)-1]
-		if typName == "Timestamp" && parts[len(parts)-2] == "protobuf" && parts[len(parts)-3] == "google" {
+		typName := DetectProtoMessageName(typ)
+		if IsGoogleProtobufTypeName(typ, "Timestamp") {
 			typ = "time.Time"
+		} else if IsGoogleProtobufTypeName(typ, "Struct") {
+			typ = "structpb.Struct"
 		} else {
 			typ = "*" + UpperCamelCase(typName)
 		}
@@ -495,13 +522,9 @@ func IsOptional(field *descriptorpb.FieldDescriptorProto) bool {
 			descriptorpb.FieldDescriptorProto_TYPE_UINT64:
 			return false
 		case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
-			// Check if the type is a Google Protobuf wrapper message.
-			var typ = field.GetTypeName()
-			parts := strings.Split(typ, ".")
-			if len(parts) > 2 && parts[len(parts)-2] == "protobuf" {
-				if len(parts) > 3 && parts[len(parts)-3] == "google" {
-					return false
-				}
+			// Check if the type is a Google Protobuf message.
+			if IsGoogleProtobufType(field.GetTypeName()) {
+				return false
 			}
 		}
 		return true
