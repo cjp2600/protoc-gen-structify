@@ -1073,7 +1073,15 @@ func New{{ storageName }}(config *Config) ({{ storageName }}, error) {
 		return nil, fmt.Errorf("config.DB.DBRead is nil")
 	}
 	if config.DB.DBWrite == nil {
+		{{ if .UseSQLX }}
+		dbWrite, ok := config.DB.DBRead.(DBWriteConnection)
+		if !ok {
+			return nil, fmt.Errorf("config.DB.DBWrite is nil and config.DB.DBRead does not support Begin()")
+		}
+		config.DB.DBWrite = dbWrite
+		{{ else }}
 		config.DB.DBWrite = config.DB.DBRead
+		{{ end }}
 	}
 
 	return &{{ storageName | lowerCamelCase }}{

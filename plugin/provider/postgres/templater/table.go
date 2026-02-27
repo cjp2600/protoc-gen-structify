@@ -22,6 +22,7 @@ type tableTemplater struct {
 
 	// initMethods bool
 	CRUDSchemas bool
+	UseSQLX     bool
 }
 
 // NewTableTemplater returns a new initTemplater.
@@ -31,6 +32,7 @@ func NewTableTemplater(message *descriptorpb.DescriptorProto, state *statepkg.St
 		message: message,
 
 		CRUDSchemas: state.CRUDSchemas,
+		UseSQLX:     state.UseSQLX,
 	}
 }
 
