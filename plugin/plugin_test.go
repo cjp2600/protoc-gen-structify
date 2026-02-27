@@ -138,6 +138,41 @@ func TestParseCRUDSchemasParam(t *testing.T) {
 	}
 }
 
+func TestParseSQLXParam(t *testing.T) {
+	tests := []struct {
+		name     string
+		param    string
+		expected bool
+	}{
+		{
+			name:     "true value",
+			param:    "true",
+			expected: true,
+		},
+		{
+			name:     "false value",
+			param:    "false",
+			expected: false,
+		},
+		{
+			name:     "empty value",
+			param:    "",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plugin := NewPlugin()
+			plugin.param = map[string]string{
+				"sqlx": tt.param,
+			}
+			result := plugin.parseSQLXParam()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestFileName(t *testing.T) {
 	tests := []struct {
 		name           string

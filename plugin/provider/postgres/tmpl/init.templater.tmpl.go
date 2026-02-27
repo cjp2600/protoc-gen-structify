@@ -356,9 +356,30 @@ type Config struct {
 	ErrorLogMethod    func(ctx context.Context, err error, message string)
 }
 
+{{ if .UseSQLX }}
+// DBReadConnection is a read/write query-capable connection.
+// Supports *sql.DB, *sqlx.DB, and other compatible implementations.
+type DBReadConnection interface {
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+}
+
+// DBWriteConnection is a query-capable connection that can start transactions.
+type DBWriteConnection interface {
+	DBReadConnection
+	Begin() (*sql.Tx, error)
+}
+{{ end }}
+
 type DB struct {
+{{ if .UseSQLX }}
+	DBRead DBReadConnection
+	DBWrite DBWriteConnection
+{{ else }}
 	DBRead *sql.DB
 	DBWrite *sql.DB
+{{ end }}
 }
 
 // {{ storageName }} is the interface for the {{ storageName }}.
@@ -397,7 +418,15 @@ func New{{ storageName }}(config *Config) ({{ storageName }}, error) {
 	}
 
 	if config.DB.DBWrite == nil {
+		{{ if .UseSQLX }}
+		dbWrite, ok := config.DB.DBRead.(DBWriteConnection)
+		if !ok {
+			return nil, fmt.Errorf("db write is required and must support Begin()")
+		}
+		config.DB.DBWrite = dbWrite
+		{{ else }}
 		config.DB.DBWrite = config.DB.DBRead
+		{{ end }}
 	}
 	
 	var storages = {{ storageName | lowerCamelCase }}{
@@ -689,11 +718,19 @@ func TxFromContext(ctx context.Context) (*sql.Tx, bool) {
 
 // TxManager is a transaction manager.
 type TxManager struct {
+{{ if .UseSQLX }}
+	db DBWriteConnection
+{{ else }}
 	db *sql.DB
+{{ end }}
 }
 
 // NewTxManager creates a new transaction manager.
+{{ if .UseSQLX }}
+func NewTxManager(db DBWriteConnection) *TxManager {
+{{ else }}
 func NewTxManager(db *sql.DB) *TxManager {
+{{ end }}
 	return &TxManager{
 		db: db,
 	}
@@ -779,9 +816,13 @@ type QueryExecer interface {
 	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
 }
 
-// dbWrapper wraps *sql.DB to implement QueryExecer interface.
+// dbWrapper wraps DB connections to implement QueryExecer interface.
 type dbWrapper struct {
+{{ if .UseSQLX }}
+	db DBReadConnection
+{{ else }}
 	db *sql.DB
+{{ end }}
 	config *Config
 }
 

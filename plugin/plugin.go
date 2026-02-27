@@ -74,6 +74,7 @@ func (p *Plugin) Run() {
 		// set additional state parameters
 		p.state.IncludeConnection = p.parseIncludeConnectionParam()
 		p.state.CRUDSchemas = p.parseCRUDSchemasParam()
+		p.state.UseSQLX = p.parseSQLXParam()
 	}
 
 	// get provider template builder based on command line parameter
@@ -141,6 +142,10 @@ func (p *Plugin) parseIncludeConnectionParam() bool {
 
 func (p *Plugin) parseCRUDSchemasParam() bool {
 	return p.param["create_crud_table_schemas"] == "true"
+}
+
+func (p *Plugin) parseSQLXParam() bool {
+	return p.param["sqlx"] == "true"
 }
 
 // parsePathType parses the path type from the parameters.

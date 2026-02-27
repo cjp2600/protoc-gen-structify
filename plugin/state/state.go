@@ -25,6 +25,7 @@ type State struct {
 	FileToGenerate    string // FileToGenerate is the file to generate.
 	IncludeConnection bool   // IncludeConnection is the flag to include connection in the generated code.
 	CRUDSchemas       bool
+	UseSQLX           bool // UseSQLX enables sqlx-compatible DB interfaces for generated postgres code.
 
 	Imports        *importpkg.ImportSet // Imports is the set of Imports.
 	Relations      Relations            // Relations is the set of Relations Messages.

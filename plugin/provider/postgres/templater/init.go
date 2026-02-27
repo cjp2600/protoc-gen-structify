@@ -25,6 +25,7 @@ type initTemplater struct {
 
 	// initMethods bool
 	CRUDSchemas bool
+	UseSQLX     bool
 }
 
 // NewInitTemplater returns a new initTemplater.
@@ -34,6 +35,7 @@ func NewInitTemplater(state *statepkg.State) statepkg.Templater {
 
 		IncludeConnection: state.IncludeConnection,
 		CRUDSchemas:       state.CRUDSchemas,
+		UseSQLX:           state.UseSQLX,
 	}
 }
 
