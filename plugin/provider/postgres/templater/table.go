@@ -521,8 +521,8 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 			pd := relation.ParentDescriptor
 			for _, fld := range pd.GetField() {
 				if opts := helperpkg.GetFieldOptions(f); opts != nil {
-					if opts.GetRelation().Field != "" {
-						if opts.GetRelation().Field == fld.GetName() {
+					if relOpts := opts.GetRelation(); relOpts != nil && relOpts.Field != "" {
+						if relOpts.Field == fld.GetName() {
 							return helperpkg.IsOptional(fld)
 						}
 					}
@@ -672,8 +672,8 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 				pd := relation.ParentDescriptor
 
 				if opts := helperpkg.GetFieldOptions(fl); opts != nil {
-					if opts.GetRelation().Field != "" {
-						return helperpkg.UpperCamelCase(opts.GetRelation().Field)
+					if relOpts := opts.GetRelation(); relOpts != nil && relOpts.Field != "" {
+						return helperpkg.UpperCamelCase(relOpts.Field)
 					}
 				}
 

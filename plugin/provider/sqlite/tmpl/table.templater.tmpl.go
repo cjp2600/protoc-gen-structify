@@ -347,7 +347,7 @@ func (t *{{ storageName | lowerCamelCase }}) FindOne(ctx context.Context, builde
 const TableFindManyMethodTemplate = `
 // FindMany finds multiple {{ structureName }} based on the provided options.
 func (t *{{ storageName | lowerCamelCase }}) FindMany(ctx context.Context, builders ...*QueryBuilder) ([]*{{structureName}}, error) {
-	query := t.queryBuilder().Select("*").From(t.TableName())
+	query := t.queryBuilder.Select(t.Columns()...).From(t.TableName())
 
 	for _, builder := range builders {
 		if builder == nil {
@@ -426,10 +426,10 @@ func (t *{{ storageName | lowerCamelCase }}) QueryRows(ctx context.Context, quer
 `
 
 const TableDeleteMethodTemplate = `
-{{ define "delete_method" }}
+{{- if (hasPrimaryKey) }}
 // DeleteBy{{ getPrimaryKey.GetName | camelCase }} - deletes a {{ structureName }} by its {{ getPrimaryKey.GetName }}.
 func (t *{{ storageName | lowerCamelCase }}) DeleteBy{{ getPrimaryKey.GetName | camelCase }}(ctx context.Context, {{getPrimaryKey.GetName}} {{IDType}}, opts ...Option) error {
-    query := t.queryBuilder().Delete(t.TableName()).Where(squirrel.Eq{"{{ getPrimaryKey.GetName }}": {{getPrimaryKey.GetName}}})
+    query := t.queryBuilder.Delete("{{ tableName }}").Where("{{ getPrimaryKey.GetName }} = ?", {{getPrimaryKey.GetName}})
     sqlQuery, args, err := query.ToSql()
     if err != nil {
         return fmt.Errorf("failed to build query: %w", err)
@@ -441,7 +441,7 @@ func (t *{{ storageName | lowerCamelCase }}) DeleteBy{{ getPrimaryKey.GetName | 
     }
     return nil
 }
-{{ end }}
+{{- end }}
 
 // DeleteMany removes entries from the {{ tableName }} table using the provided filters
 func (t *{{ storageName | lowerCamelCase }}) DeleteMany(ctx context.Context, builders ...*QueryBuilder) error {

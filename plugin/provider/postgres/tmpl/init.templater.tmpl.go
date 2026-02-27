@@ -579,7 +579,7 @@ func (m *{{ $field.StructureName }}) Scan(src interface{}) error  {
 		return json.Unmarshal(bytes, m)
 	}
 
-	return fmt.Errorf(fmt.Sprintf("can't convert %T", src))
+	return fmt.Errorf("can't convert %T", src)
 }
 
 // Value implements the driver.Valuer interface for JSON.
@@ -678,7 +678,7 @@ func (m *{{ $field.FieldType }}) Scan(src interface{}) error  {
 		return json.Unmarshal(bytes, m)
 	}
 
-	return fmt.Errorf(fmt.Sprintf("can't convert %T", src))
+	return fmt.Errorf("can't convert %T", src)
 }
 
 // Value implements the driver.Valuer interface for JSON.

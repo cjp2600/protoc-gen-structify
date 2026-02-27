@@ -315,36 +315,14 @@ type {{ storageName }} interface {
 }
 
 // New{{ storageName }} returns a new {{ storageName }}.
-func New{{ storageName }}(config *Config) ({{ storageName }}, error) {
-    if config == nil {
-        return nil, fmt.Errorf("config is required")
-    }
-
-    if config.DB == nil {
-        return nil, fmt.Errorf("db is required")
-    }
-
-    if config.DB.DBRead == nil {
-        return nil, fmt.Errorf("db read is required")
-    }
-
-    if config.DB.DBWrite == nil {
-        return nil, fmt.Errorf("db write is required")
-    }
-
-    storages := &{{ storageName | lowerCamelCase }}Impl{
-        config: config,
-    }
-
-    {{ range $key, $value := .Storages }}
-    {{ $value.Key }}Impl, err := New{{ $value.Value }}(config)
-    if err != nil {
-        return nil, fmt.Errorf("failed to create {{ $value.Value }}: %w", err)
-    }
-    storages.{{ $value.Key }} = {{ $value.Key }}Impl
-    {{ end }}
-
-    return storages, nil
+func New{{ storageName }}(db *sql.DB) {{ storageName }} {
+	return &{{ storageName | lowerCamelCase }}{
+		db: db,
+		tx: NewTxManager(db),
+	{{ range $value := storages }}
+		{{ $value.Key }}: New{{ $value.Value }}(db),
+	{{ end }}
+	}
 }
 
 // TxManager returns the transaction manager.
@@ -431,7 +409,7 @@ func (m *{{ $field.StructureName }}) Scan(src interface{}) error  {
 		return json.Unmarshal(bytes, m)
 	}
 
-	return fmt.Errorf(fmt.Sprintf("can't convert %T", src))
+	return fmt.Errorf("can't convert %T", src)
 }
 
 // Value implements the driver.Valuer interface for JSON.

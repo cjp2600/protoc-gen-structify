@@ -256,7 +256,7 @@ func (m *UserComment) Scan(src interface{}) error {
 		return json.Unmarshal(bytes, m)
 	}
 
-	return fmt.Errorf(fmt.Sprintf("can't convert %T", src))
+	return fmt.Errorf("can't convert %T", src)
 }
 
 // Value implements the driver.Valuer interface for JSON.
@@ -280,7 +280,7 @@ func (m *UserCommentMeta) Scan(src interface{}) error {
 		return json.Unmarshal(bytes, m)
 	}
 
-	return fmt.Errorf(fmt.Sprintf("can't convert %T", src))
+	return fmt.Errorf("can't convert %T", src)
 }
 
 // Value implements the driver.Valuer interface for JSON.
@@ -303,7 +303,7 @@ func (m *UserNotificationSetting) Scan(src interface{}) error {
 		return json.Unmarshal(bytes, m)
 	}
 
-	return fmt.Errorf(fmt.Sprintf("can't convert %T", src))
+	return fmt.Errorf("can't convert %T", src)
 }
 
 // Value implements the driver.Valuer interface for JSON.
@@ -328,7 +328,7 @@ func (m *UserNumr) Scan(src interface{}) error {
 		return json.Unmarshal(bytes, m)
 	}
 
-	return fmt.Errorf(fmt.Sprintf("can't convert %T", src))
+	return fmt.Errorf("can't convert %T", src)
 }
 
 // Value implements the driver.Valuer interface for JSON.
@@ -426,7 +426,7 @@ func (m *UserBallsRepeated) Scan(src interface{}) error {
 		return json.Unmarshal(bytes, m)
 	}
 
-	return fmt.Errorf(fmt.Sprintf("can't convert %T", src))
+	return fmt.Errorf("can't convert %T", src)
 }
 
 // Value implements the driver.Valuer interface for JSON.
@@ -457,7 +457,7 @@ func (m *UserCommentsRepeated) Scan(src interface{}) error {
 		return json.Unmarshal(bytes, m)
 	}
 
-	return fmt.Errorf(fmt.Sprintf("can't convert %T", src))
+	return fmt.Errorf("can't convert %T", src)
 }
 
 // Value implements the driver.Valuer interface for JSON.
@@ -488,7 +488,7 @@ func (m *UserNumrsRepeated) Scan(src interface{}) error {
 		return json.Unmarshal(bytes, m)
 	}
 
-	return fmt.Errorf(fmt.Sprintf("can't convert %T", src))
+	return fmt.Errorf("can't convert %T", src)
 }
 
 // Value implements the driver.Valuer interface for JSON.
@@ -519,7 +519,7 @@ func (m *UserPhonesRepeated) Scan(src interface{}) error {
 		return json.Unmarshal(bytes, m)
 	}
 
-	return fmt.Errorf(fmt.Sprintf("can't convert %T", src))
+	return fmt.Errorf("can't convert %T", src)
 }
 
 // Value implements the driver.Valuer interface for JSON.
