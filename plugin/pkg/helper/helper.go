@@ -146,6 +146,17 @@ func UpperCamelCase(name string) string {
 	return strcase.UpperCamelCase(name)
 }
 
+func StructFieldName(name string) string {
+	fieldName := UpperCamelCase(name)
+
+	switch fieldName {
+	case "Value", "Scan", "Error", "String":
+		return fieldName + "Field"
+	default:
+		return fieldName
+	}
+}
+
 // LowerCamelCase converts a string to a lowerCamelCase string.
 func LowerCamelCase(name string) string {
 	return strcase.LowerCamelCase(name)

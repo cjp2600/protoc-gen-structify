@@ -436,3 +436,19 @@ func TestSliceToString(t *testing.T) {
 		})
 	}
 }
+
+func TestStructFieldName(t *testing.T) {
+	tests := map[string]string{
+		"value":  "ValueField",
+		"scan":   "ScanField",
+		"error":  "ErrorField",
+		"string": "StringField",
+		"id":     "Id",
+	}
+
+	for input, expected := range tests {
+		t.Run(input, func(t *testing.T) {
+			assert.Equal(t, expected, StructFieldName(input))
+		})
+	}
+}

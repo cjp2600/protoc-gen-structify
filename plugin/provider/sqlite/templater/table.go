@@ -422,7 +422,7 @@ func (t *tableTemplater) Funcs() map[string]interface{} {
 
 		// fieldName returns the upper camel case field name.
 		"fieldName": func(f *descriptorpb.FieldDescriptorProto) string {
-			return helperpkg.UpperCamelCase(f.GetName())
+			return helperpkg.StructFieldName(f.GetName())
 		},
 
 		// relationAllowSubDeleting returns true if the relation allows sub deleting.
