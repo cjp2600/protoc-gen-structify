@@ -465,6 +465,8 @@ func ConvertType(field *descriptorpb.FieldDescriptorProto) string {
 			typ = "time.Time"
 		} else if IsGoogleProtobufTypeName(typ, "Struct") {
 			typ = "structpb.Struct"
+		} else if IsGoogleProtobufTypeName(typ, "Value") {
+			typ = "*structpb.Value"
 		} else {
 			typ = "*" + UpperCamelCase(typName)
 		}

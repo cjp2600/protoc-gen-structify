@@ -166,6 +166,7 @@ func TestConvertType(t *testing.T) {
 	// Test cases representing different field types
 	tm := "google.protobuf.Timestamp"
 	sm := "google.protobuf.Struct"
+	vm := "google.protobuf.Value"
 	tests := []struct {
 		field    *descriptor.FieldDescriptorProto // Input field descriptor
 		expected string                           // Expected converted type
@@ -270,6 +271,13 @@ func TestConvertType(t *testing.T) {
 				TypeName: &sm,
 			},
 			expected: "structpb.Struct",
+		},
+		{
+			field: &descriptor.FieldDescriptorProto{
+				Type:     descriptor.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
+				TypeName: &vm,
+			},
+			expected: "*structpb.Value",
 		},
 	}
 
