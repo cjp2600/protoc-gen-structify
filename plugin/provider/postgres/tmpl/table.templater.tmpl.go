@@ -660,7 +660,7 @@ func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{ID
 			}
 			query = query.Set("{{ $field | sourceName }}", {{ $field | fieldName | lowerCamelCase }})
 			{{- else if ($field | isJSON) }}
-			query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }})
+			query = query.Set("{{ $field | sourceName }}", nullValue(updateData.{{ $field | fieldName }}))
 			{{- else }}
 			query = query.Set("{{ $field | sourceName }}", *updateData.{{ $field | fieldName }})
 			{{- end }}

@@ -558,7 +558,11 @@ func (n *NullableJSON[T]) Value() (driver.Value, error) {
 		return nil, nil
 	}
 
-	return json.Marshal(n.Data)
+	b, err := json.Marshal(n.Data)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
 }
 
 // ValueOrZero returns the value if valid, otherwise returns the zero value of type T.
@@ -595,7 +599,11 @@ func (m *{{ $field.StructureName }}) Value() (driver.Value, error) {
 	if m == nil {
 		m = &{{ $field.StructureName }}{}
 	}
-	return json.Marshal(m)
+	b, err := json.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
 }
 {{ end }}
 `
@@ -694,7 +702,11 @@ func (m *{{ $field.FieldType }}) Scan(src interface{}) error  {
 
 // Value implements the driver.Valuer interface for JSON.
 func (m {{ $field.FieldType }}) Value() (driver.Value, error) {
-	return json.Marshal(m)
+	b, err := json.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
 }
 
 // Get returns the value of the field.
