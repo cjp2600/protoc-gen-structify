@@ -46,5 +46,5 @@ func TestInitTemplate_SQLXConnections(t *testing.T) {
 	require.True(t, strings.Contains(out, "DBWrite DBWriteConnection"))
 	require.True(t, strings.Contains(out, "dbWrite, ok := config.DB.DBRead.(DBWriteConnection)"))
 	require.True(t, strings.Contains(out, "func NewTxManager(db DBWriteConnection) *TxManager"))
-	require.True(t, strings.Contains(out, "db DBReadConnection"))
+	require.True(t, strings.Contains(out, "db QueryExecer"))
 }

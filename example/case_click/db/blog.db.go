@@ -711,7 +711,7 @@ func nullValue[T any](v *T) interface{} {
 	if v == nil {
 		return nil
 	}
-	return *v
+	return v
 }
 
 // Apply customTableName to the query.

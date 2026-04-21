@@ -659,8 +659,10 @@ func (t *{{ storageName | lowerCamelCase }}) Update(ctx context.Context, id {{ID
 				return fmt.Errorf("failed to get value of {{ $field | fieldName }}: %w", err)
 			}
 			query = query.Set("{{ $field | sourceName }}", {{ $field | fieldName | lowerCamelCase }})
+			{{- else if ($field | isJSON) }}
+			query = query.Set("{{ $field | sourceName }}", updateData.{{ $field | fieldName }})
 			{{- else }}
-			query = query.Set("{{ $field | sourceName }}", *updateData.{{ $field | fieldName }}) // Dereference pointer value
+			query = query.Set("{{ $field | sourceName }}", *updateData.{{ $field | fieldName }})
 			{{- end }}
 		}
 	{{- end }}
@@ -1126,7 +1128,7 @@ func (t *{{ storageName | lowerCamelCase }}) DB(ctx context.Context, isWrite boo
 			return &dbWrapper{db: t.config.DB.DBWrite, config: t.config}
 		}
 
-		return tx
+		return &dbWrapper{db: tx, config: t.config}
 	}
 
 	// Use the appropriate connection based on the operation type.

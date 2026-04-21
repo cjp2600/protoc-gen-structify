@@ -139,7 +139,7 @@ func nullValue[T any](v *T) interface{} {
 	if v == nil {
 		return nil
 	}
-	return *v
+	return v
 }
 
 // ApplyCustomFilters applies the custom filters to the query.
@@ -534,9 +534,14 @@ func (n *NullableJSON[T]) Scan(value interface{}) error {
 		return nil
 	}
 
-	bytes, ok := value.([]byte)
-	if !ok {
-		return fmt.Errorf("failed to convert value to []byte")
+	var bytes []byte
+	switch v := value.(type) {
+	case []byte:
+		bytes = v
+	case string:
+		bytes = []byte(v)
+	default:
+		return fmt.Errorf("failed to convert %T to []byte", value)
 	}
 
 	if err := json.Unmarshal(bytes, &n.Data); err != nil {
@@ -575,11 +580,14 @@ type {{ $field.StructureName }} struct {
 
 // Scan implements the sql.Scanner interface for JSON.
 func (m *{{ $field.StructureName }}) Scan(src interface{}) error  {
-	if bytes, ok := src.([]byte); ok {
-		return json.Unmarshal(bytes, m)
+	switch v := src.(type) {
+	case []byte:
+		return json.Unmarshal(v, m)
+	case string:
+		return json.Unmarshal([]byte(v), m)
+	default:
+		return fmt.Errorf("can't convert %T", src)
 	}
-
-	return fmt.Errorf("can't convert %T", src)
 }
 
 // Value implements the driver.Valuer interface for JSON.
@@ -674,11 +682,14 @@ func New{{ $field.SourceName | camelCase }}Field (v {{ $field.Descriptor | field
 
 // Scan implements the sql.Scanner interface for JSON.
 func (m *{{ $field.FieldType }}) Scan(src interface{}) error  {
-	if bytes, ok := src.([]byte); ok {
-		return json.Unmarshal(bytes, m)
+	switch v := src.(type) {
+	case []byte:
+		return json.Unmarshal(v, m)
+	case string:
+		return json.Unmarshal([]byte(v), m)
+	default:
+		return fmt.Errorf("can't convert %T", src)
 	}
-
-	return fmt.Errorf("can't convert %T", src)
 }
 
 // Value implements the driver.Valuer interface for JSON.
@@ -818,11 +829,7 @@ type QueryExecer interface {
 
 // dbWrapper wraps DB connections to implement QueryExecer interface.
 type dbWrapper struct {
-{{ if .UseSQLX }}
-	db DBReadConnection
-{{ else }}
-	db *sql.DB
-{{ end }}
+	db QueryExecer
 	config *Config
 }
 
@@ -937,6 +944,7 @@ var (
 	ErrModelIsNil = fmt.Errorf("model is nil")
 )
 
+{{ if not .IncludeConnection }}
 // Dsn returns a connection string for PostgreSQL.
 func Dsn(host string, port int, user, password, dbname, sslmode string, maxOpenConns int) string {
 	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s", host, port, user, password, dbname, sslmode)
@@ -948,12 +956,13 @@ func Open(dsn string) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
-	
+
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
-	
+
 	return db, nil
 }
+{{ end }}
 
 `
